@@ -3,11 +3,87 @@
 {% block head %}
 <style>
     .form-container {
-        max-width: 600px;
+        max-width: 800px;
         margin: 0 auto;
+        padding: 20px;
     }
-    .form-group {
+    
+    .settings-section {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 25px;
         margin: 20px 0;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .settings-section h3 {
+        color: #667eea;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid rgba(102, 126, 234, 0.3);
+    }
+    
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin: 15px 0;
+    }
+    
+    .form-group {
+        margin: 15px 0;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #e0e0e0;
+    }
+    
+    .form-group small {
+        display: block;
+        margin-top: 5px;
+        color: #aaa;
+        font-size: 0.85em;
+    }
+    
+    .input-with-unit {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .input-with-unit input {
+        flex: 1;
+    }
+    
+    .unit-label {
+        color: #aaa;
+        font-size: 0.9em;
+    }
+    
+    .conditional-setting {
+        display: none;
+        animation: fadeIn 0.3s ease;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .btn-create {
+        width: 100%;
+        padding: 15px;
+        font-size: 18px;
+        margin-top: 30px;
+    }
+    
+    @media (max-width: 768px) {
+        .form-row {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 {% endblock %}
@@ -15,63 +91,227 @@
 {% block body %}
 <div class="container">
     <div class="form-container">
-        <h1>Spiel erstellen</h1>
+        <h1 style="text-align: center; margin-bottom: 30px;">🎮 Spiel erstellen</h1>
         
         <form id="gameSettings">
-            <div class="form-group">
-                <label>Gruppenaufteilung:</label>
-                <select name="fixed_groups">
-                    <option value="true">Feste Gruppen (bleiben gleich)</option>
-                    <option value="false">Zufällige Gruppen (jede Runde neu)</option>
-                </select>
+            <!-- Grundeinstellungen -->
+            <div class="settings-section">
+                <h3>💰 Grundeinstellungen</h3>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Startguthaben pro Spieler</label>
+                        <div class="input-with-unit">
+                            <input type="number" name="initial_coins" min="1" max="100" value="10" required>
+                            <span class="unit-label">Coins</span>
+                        </div>
+                        <small>Wie viele Coins erhält jeder Spieler zu Beginn?</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Maximale Einzahlung</label>
+                        <div class="input-with-unit">
+                            <input type="number" name="max_contribution" min="1" max="100" value="10" required>
+                            <span class="unit-label">Coins</span>
+                        </div>
+                        <small>Maximaler Betrag pro Runde</small>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Gruppengröße</label>
+                        <select name="group_size" required>
+                            <option value="3">3 Spieler</option>
+                            <option value="4" selected>4 Spieler</option>
+                            <option value="5">5 Spieler</option>
+                            <option value="6">6 Spieler</option>
+                        </select>
+                        <small>Anzahl Spieler pro Gruppe</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Multiplikator</label>
+                        <div class="input-with-unit">
+                            <input type="number" name="multiplier" min="1" max="10" step="0.1" value="2" required>
+                            <span class="unit-label">×</span>
+                        </div>
+                        <small>Summe wird verdoppelt (× 2), verdreifacht (× 3), ...</small>
+                    </div>
+                </div>
             </div>
             
-            <div class="form-group">
-                <label>Spielende:</label>
-                <select name="end_mode" id="endMode">
-                    <option value="probability">Wahrscheinlichkeit pro Runde</option>
-                    <option value="fixed_rounds">Feste Rundenzahl</option>
-                </select>
+            <!-- Rundeneinstellungen -->
+            <div class="settings-section">
+                <h3>⏱️ Rundeneinstellungen</h3>
+                
+                <div class="form-group">
+                    <label>Rundendauer</label>
+                    <div class="input-with-unit">
+                        <input type="number" name="round_duration" min="10" max="300" value="60" required>
+                        <span class="unit-label">Sekunden</span>
+                    </div>
+                    <small>Zeit pro Runde. Bei Ablauf wird automatisch 0 Coins eingezahlt.</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Gruppenaufteilung</label>
+                    <select name="fixed_groups" required>
+                        <option value="true" selected>Feste Gruppen (bleiben das ganze Spiel gleich)</option>
+                        <option value="false">Zufällige Gruppen (jede Runde neu)</option>
+                    </select>
+                    <small>Sollen Spieler in den gleichen Gruppen bleiben?</small>
+                </div>
             </div>
             
-            <div class="form-group" id="probabilitySetting" style="display: none;">
-                <label>Wahrscheinlichkeit für nächste Runde (0-1):</label>
-                <input type="number" name="continue_probability" min="0" max="1" step="0.1" value="0.5">
+            <!-- Spielende -->
+            <div class="settings-section">
+                <h3>🏁 Spielende</h3>
+                
+                <div class="form-group">
+                    <label>Modus für Spielende</label>
+                    <select name="end_mode" id="endMode" required>
+                        <option value="fixed_rounds" selected>Feste Rundenzahl</option>
+                        <option value="probability">Feste Wahrscheinlichkeit</option>
+                        <option value="probability_range">Zufällige Wahrscheinlichkeit (Bereich)</option>
+                    </select>
+                    <small>Wann soll das Spiel enden?</small>
+                </div>
+                
+                <!-- Feste Rundenzahl -->
+                <div class="form-group conditional-setting" id="fixedRoundsSetting">
+                    <label>Anzahl der Runden</label>
+                    <div class="input-with-unit">
+                        <input type="number" name="max_rounds" min="1" max="50" value="5">
+                        <span class="unit-label">Runden</span>
+                    </div>
+                    <small>Das Spiel endet nach dieser Rundenzahl</small>
+                </div>
+                
+                <!-- Feste Wahrscheinlichkeit -->
+                <div class="form-group conditional-setting" id="probabilitySetting">
+                    <label>Wahrscheinlichkeit für weitere Runde</label>
+                    <div class="input-with-unit">
+                        <input type="number" name="continue_probability" min="0" max="1" step="0.05" value="0.5">
+                        <span class="unit-label">(0 = 0%, 1 = 100%)</span>
+                    </div>
+                    <small>Nach jeder Runde wird gewürfelt, ob es weitergeht</small>
+                </div>
+                
+                <!-- Wahrscheinlichkeitsbereich -->
+                <div class="conditional-setting" id="probabilityRangeSetting">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Minimale Wahrscheinlichkeit</label>
+                            <div class="input-with-unit">
+                                <input type="number" name="min_probability" min="0" max="1" step="0.05" value="0.3">
+                                <span class="unit-label">min</span>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Maximale Wahrscheinlichkeit</label>
+                            <div class="input-with-unit">
+                                <input type="number" name="max_probability" min="0" max="1" step="0.05" value="0.8">
+                                <span class="unit-label">max</span>
+                            </div>
+                        </div>
+                    </div>
+                    <small>Pro Runde wird eine zufällige Wahrscheinlichkeit aus diesem Bereich gezogen</small>
+                </div>
             </div>
             
-            <div class="form-group" id="roundsSetting">
-                <label>Anzahl Runden:</label>
-                <input type="number" name="max_rounds" min="1" max="20" value="5">
-            </div>
-            
-            <button type="button" class="btn" onclick="createGame()">Spiel erstellen</button>
+            <button type="button" class="btn btn-create" onclick="createGame()">
+                🎮 Spiel mit diesen Einstellungen erstellen
+            </button>
         </form>
+        
+        <div style="text-align: center; margin-top: 20px;">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Zurück</a>
+        </div>
     </div>
 </div>
 
 <script>
+    // Zeige/Verstecke Einstellungen je nach Modus
     document.getElementById('endMode').addEventListener('change', function() {
-        const isProbability = this.value === 'probability';
-        document.getElementById('probabilitySetting').style.display = isProbability ? 'block' : 'none';
-        document.getElementById('roundsSetting').style.display = isProbability ? 'none' : 'block';
+        const mode = this.value;
+        
+        // Alle verstecken
+        document.getElementById('fixedRoundsSetting').style.display = 'none';
+        document.getElementById('probabilitySetting').style.display = 'none';
+        document.getElementById('probabilityRangeSetting').style.display = 'none';
+        
+        // Relevante anzeigen
+        if (mode === 'fixed_rounds') {
+            document.getElementById('fixedRoundsSetting').style.display = 'block';
+        } else if (mode === 'probability') {
+            document.getElementById('probabilitySetting').style.display = 'block';
+        } else if (mode === 'probability_range') {
+            document.getElementById('probabilityRangeSetting').style.display = 'block';
+        }
     });
-
+    
+    // Initial anzeigen
+    document.getElementById('endMode').dispatchEvent(new Event('change'));
+    
+    // Validierung: max_contribution nicht größer als initial_coins
+    document.querySelector('[name="initial_coins"]').addEventListener('change', function() {
+        const maxContribution = document.querySelector('[name="max_contribution"]');
+        if (parseInt(maxContribution.value) > parseInt(this.value)) {
+            maxContribution.value = this.value;
+        }
+        maxContribution.max = this.value;
+    });
+    
     function createGame() {
         const formData = new FormData(document.getElementById('gameSettings'));
-        const settings = Object.fromEntries(formData);
+        const settings = {};
+        
+        for (let [key, value] of formData.entries()) {
+            settings[key] = value;
+        }
+        
+        // Validierung
+        if (parseInt(settings.max_contribution) > parseInt(settings.initial_coins)) {
+            createFlashMessage('Max. Einzahlung kann nicht größer als Startguthaben sein', 'error');
+            return;
+        }
+        
+        if (settings.end_mode === 'probability_range') {
+            if (parseFloat(settings.min_probability) > parseFloat(settings.max_probability)) {
+                createFlashMessage('Minimale Wahrscheinlichkeit muss kleiner als maximale sein', 'error');
+                return;
+            }
+        }
+        
+        // Button deaktivieren während Anfrage
+        const btn = document.querySelector('.btn-create');
+        btn.disabled = true;
+        btn.textContent = '⏳ Erstelle Raum...';
         
         fetch('/create_room', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(settings)
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Fehler beim Erstellen');
+            }
+            return response.json();
+        })
         .then(data => {
-            window.location.href = '/game_room';
+            createFlashMessage('Raum erfolgreich erstellt!', 'success');
+            setTimeout(() => {
+                window.location.href = '/game_room';
+            }, 500);
         })
         .catch(error => {
             console.error('Fehler:', error);
             createFlashMessage('Fehler beim Erstellen des Spiels', 'error');
+            btn.disabled = false;
+            btn.textContent = '🎮 Spiel mit diesen Einstellungen erstellen';
         });
     }
 </script>
