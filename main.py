@@ -6,24 +6,25 @@ from flask_socketio import SocketIO, join_room, leave_room, emit
 import random
 import uuid
 from collections import defaultdict
-from threading import Lock  # Lock kann bleiben, wird von monkey.patch_all() gepatcht
+from threading import Lock
 import os
-import time  # wird auch gepatcht
+import time
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
 
+# Verbesserte Socket.IO Konfiguration
 socketio = SocketIO(
     app, 
     cors_allowed_origins="*",
     async_mode='gevent',
-    manage_session=False,  # ← WICHTIG!
+    manage_session=True,  # Session-Management aktivieren
     logger=True,
     engineio_logger=True,
     ping_timeout=60,
     ping_interval=25,
-    allow_upgrades=True,  # ← WICHTIG!
-    transports=['websocket', 'polling']  # ← WICHTIG!
+    allow_upgrades=True,
+    transports=['websocket', 'polling']
 )
 
 # In-Memory Speicher
@@ -32,6 +33,75 @@ players = {}
 game_state = {}
 lock = Lock()
 round_timers = {}
+
+class RoundTimer:
+    """Verbesserte Timer-Klasse basierend auf der alten Implementierung"""
+    def __init__(self, socketio, room_id, duration=60):
+        self.socketio = socketio
+        self.room_id = room_id
+        self.duration = duration
+        self.time_left = duration
+        self.is_running = False
+        self.lock = Lock()
+        self.start_time = None
+        self.greenlet = None
+
+    def start(self):
+        with self.lock:
+            if self.is_running:
+                return
+            self.is_running = True
+            self.start_time = time.time()
+            self.time_left = self.duration
+            self.greenlet = spawn(self._run_timer)
+
+    def _run_timer(self):
+        """Timer-Loop mit genauer Zeitberechnung"""
+        start_time = time.time()
+        while self.is_running:
+            with self.lock:
+                if not self.is_running:
+                    break
+                    
+                elapsed = time.time() - start_time
+                self.time_left = max(0, self.duration - int(elapsed))
+                
+                try:
+                    self.socketio.emit('time_update', 
+                                    {'time_left': self.time_left}, 
+                                    room=self.room_id)
+                except Exception as e:
+                    print(f"Fehler beim Senden des Timer-Updates: {e}")
+                
+                if self.time_left <= 0:
+                    try:
+                        self.socketio.emit('round_time_up', room=self.room_id)
+                    except Exception as e:
+                        print(f"Fehler beim Timeout: {e}")
+                    self.is_running = False
+                    break
+            
+            # Exakt 1 Sekunde warten
+            next_update = start_time + (self.duration - self.time_left + 1)
+            sleep_time = max(0, next_update - time.time())
+            sleep(sleep_time)
+
+    def stop(self):
+        with self.lock:
+            self.is_running = False
+            if self.greenlet:
+                try:
+                    self.greenlet.kill()
+                except:
+                    pass
+                self.greenlet = None
+
+    def get_time_left(self):
+        with self.lock:
+            if not self.is_running or not self.start_time:
+                return 0
+            elapsed = time.time() - self.start_time
+            return max(0, self.duration - int(elapsed))
 
 class GameManager:
     @staticmethod
@@ -48,7 +118,6 @@ class GameManager:
                 'min_players': settings.get('group_size', 4)
             }
         print(f"✅ Raum {room_id} erstellt durch {leader_id}")
-        print(f"   Settings: {settings}")
         return room_id
     
     @staticmethod
@@ -103,9 +172,8 @@ class GameManager:
                 }
                 
                 print(f"✅ Spiel gestartet in Raum {room_id}!")
-                print(f"   Gruppen: {len(room['groups'])} Gruppen à {group_size}")
                 
-                # Timer starten
+                # Timer mit neuer Klasse starten
                 GameManager._start_round_timer(room_id)
                 return True
         return False
@@ -127,36 +195,21 @@ class GameManager:
     
     @staticmethod
     def _start_round_timer(room_id):
-        """Server-seitiger Timer für Runden mit gevent"""
+        """Verbesserter Timer mit RoundTimer Klasse"""
         if room_id not in rooms:
             return
             
         room = rooms[room_id]
         round_duration = room['settings'].get('round_duration', 60)
         
-        def timer_callback():
-            with lock:
-                if room_id in rooms and room_id in game_state:
-                    room = rooms[room_id]
-                    game_data = game_state[room_id]
-                    
-                    # Für Spieler die nicht eingezahlt haben: 0 setzen
-                    for player in room['players']:
-                        if player['id'] not in game_data['contributions']:
-                            game_data['contributions'][player['id']] = 0
-                    
-                    print(f"⏰ Timer abgelaufen für Raum {room_id}")
-                    socketio.emit('round_time_up', room=room_id)
-                    
-                    # Ergebnisse berechnen mit gevent spawn statt Thread
-                    spawn(GameManager._process_round_end, room_id)
+        # Alten Timer stoppen falls vorhanden
+        if room_id in round_timers:
+            round_timers[room_id].stop()
         
-        def timer_greenlet():
-            sleep(round_duration)  # gevent.sleep statt time.sleep!
-            timer_callback()
-        
-        greenlet = spawn(timer_greenlet)
-        round_timers[room_id] = greenlet
+        # Neuen Timer erstellen und starten
+        timer = RoundTimer(socketio, room_id, round_duration)
+        round_timers[room_id] = timer
+        timer.start()
         
         print(f"⏰ Timer gestartet für Raum {room_id}: {round_duration}s")
     
@@ -171,7 +224,6 @@ class GameManager:
                 if not player:
                     return False
                 
-                # Validierung
                 max_contribution = min(
                     player['coins'],
                     room['settings'].get('max_contribution', 10)
@@ -188,11 +240,13 @@ class GameManager:
                 
                 # Prüfe ob alle eingezahlt haben
                 if len(game_data['contributions']) == len(room['players']):
-                    # Timer abbrechen
+                    # Timer stoppen
                     if room_id in round_timers:
-                        round_timers[room_id].cancel()
+                        round_timers[room_id].stop()
                     
                     print(f"✅ Alle Spieler haben eingezahlt in Raum {room_id}")
+                    # Sofort Ergebnisse berechnen
+                    spawn(GameManager._process_round_end, room_id)
                 
                 return True
         return False
@@ -200,7 +254,7 @@ class GameManager:
     @staticmethod
     def _process_round_end(room_id):
         """Verarbeitet das Ende einer Runde"""
-        time.sleep(0.5)  # Kurze Verzögerung für bessere UX
+        sleep(0.5)  # Kurze Verzögerung für bessere UX
         
         with lock:
             if room_id not in rooms or room_id not in game_state:
@@ -240,12 +294,10 @@ class GameManager:
                 player = players[player_id]
                 contribution = contributions.get(player_id, 0)
                 
-                # Berechne neues Guthaben
                 remaining = player['coins'] - contribution
                 new_balance = remaining + payout_per_player
                 profit = new_balance - player['coins']
                 
-                # Aktualisiere Spieler
                 player['coins'] = new_balance
                 player['balance_history'].append(new_balance)
                 
@@ -268,7 +320,6 @@ class GameManager:
     
     @staticmethod
     def start_next_round(room_id):
-        """Startet die nächste Runde oder beendet das Spiel"""
         with lock:
             if room_id not in rooms:
                 return False
@@ -278,7 +329,6 @@ class GameManager:
             if GameManager._should_continue_game(room):
                 room['current_round'] += 1
                 
-                # Neue Gruppen bei dynamischer Gruppierung
                 if not room['settings'].get('fixed_groups', True):
                     room['groups'] = GameManager._create_groups(
                         room['players'], 
@@ -291,7 +341,6 @@ class GameManager:
                 
                 print(f"▶️ Runde {room['current_round']} startet in Raum {room_id}")
                 
-                # Neuer Timer
                 GameManager._start_round_timer(room_id)
                 return True
             else:
@@ -312,7 +361,7 @@ class GameManager:
         elif end_mode == 'probability':
             continue_prob = settings.get('continue_probability', 0.5)
             return random.random() < continue_prob
-        else:  # probability_range
+        else:
             min_prob = settings.get('min_probability', 0.3)
             max_prob = settings.get('max_probability', 0.8)
             prob = random.uniform(min_prob, max_prob)
@@ -332,7 +381,6 @@ class GameManager:
     
     @staticmethod
     def get_player_group(room_id, player_id):
-        """Gibt die Gruppe eines Spielers zurück"""
         if room_id not in rooms:
             return None
             
@@ -345,7 +393,7 @@ class GameManager:
                 }
         return None
 
-# Routes
+# Routes (bleiben gleich)
 @app.route('/')
 def index():
     session.clear()
@@ -455,7 +503,6 @@ def evaluation():
     room = rooms[room_id]
     player_data = players.get(session['player_id'])
     
-    # Berechne Statistiken
     initial_coins = room['settings'].get('initial_coins', 10)
     total_rounds = room.get('current_round', 1)
     
@@ -469,10 +516,11 @@ def evaluation():
 def available_rooms():
     return jsonify(GameManager.get_available_rooms())
 
-# SocketIO Events
+# Verbesserte SocketIO Events
 @socketio.on('connect')
 def handle_connect():
     print(f"🔌 Client verbunden: {request.sid}")
+    emit('connection_success', {'message': 'Verbunden'})
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -487,10 +535,16 @@ def handle_join_room(data):
         join_room(room_id)
         print(f"👥 {player_id} → Socket-Room {room_id}")
         
-        if player_id in players:
-            emit('player_joined', {
-                'player_id': player_id,
-                'player_name': players[player_id]['name']
+        # Raum-Update an alle senden
+        if room_id in rooms:
+            room = rooms[room_id]
+            emit('room_update', {
+                'players': [{
+                    'id': p['id'],
+                    'name': p['name'],
+                    'ready': p['ready']
+                } for p in room['players']],
+                'ready_count': len(room['ready_players'])
             }, room=room_id)
 
 @socketio.on('set_ready')
@@ -501,12 +555,10 @@ def handle_set_ready(data):
     print(f"✋ Ready-Event: room={room_id}, player={player_id}")
     
     if not room_id or room_id not in rooms:
-        print(f"❌ Raum {room_id} nicht gefunden")
         emit('error', {'message': 'Raum nicht gefunden'})
         return
         
     if not player_id or player_id not in players:
-        print(f"❌ Spieler {player_id} nicht gefunden")
         emit('error', {'message': 'Spieler nicht gefunden'})
         return
     
@@ -519,13 +571,15 @@ def handle_set_ready(data):
     
     print(f"✅ {player['name']} ist bereit")
     
+    # Aktualisierten Raumstatus an alle senden
     emit('player_ready', {
         'player_id': player_id,
-        'player_name': player['name']
-    }, room=room_id, include_self=True)
+        'player_name': player['name'],
+        'ready_count': len(room['ready_players']),
+        'total_players': len(room['players'])
+    }, room=room_id)
     
-    # Status-Update
-    room = rooms[room_id]
+    # Start-Button Status prüfen
     ready_count = len(room['ready_players'])
     total_players = len(room['players'])
     group_size = room['settings'].get('group_size', 4)
@@ -571,7 +625,8 @@ def handle_submit_contribution(data):
     if GameManager.submit_contribution(room_id, player_id, amount):
         emit('contribution_submitted', {
             'player_id': player_id,
-            'player_name': players[player_id]['name']
+            'player_name': players[player_id]['name'],
+            'amount': amount
         }, room=room_id)
     else:
         emit('contribution_failed', {
@@ -605,6 +660,5 @@ if __name__ == '__main__':
         host='0.0.0.0', 
         port=port, 
         debug=debug_mode,
-        use_reloader=False,
-        log_output=True  # Mehr Logging
+        use_reloader=False
     )
