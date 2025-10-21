@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="de">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+		<meta name="google" content="notranslate">
+
+		<!-- CSS -->
+		<link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+
+		<!-- Favicon -->
+		<link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    
+		<!-- Browser-Farbthema -->
+		<meta name="theme-color" content="#1a1a2e">
+		
+		<!-- Titel -->
+		<title>Öffentliches-Gut-Spiel</title>
+
+		{% block head %}{% endblock %}
+	</head>
+	<body>
+		<!-- Flash-Message Container -->
+		<div id="flash-container">
+			{% with messages = get_flashed_messages(with_categories=true) %}
+				{% if messages %}
+					{% for category, message in messages %}
+						<div class="{% if category == 'error' %}error-message{% elif category == 'success' %}success-message{% else %}info-message{% endif %}">
+							{{ message }}
+							<div class="custom-progress-bar"></div>
+						</div>
+					{% endfor %}
+				{% endif %}
+			{% endwith %}
+		</div>
+		
+		{% block body %}{% endblock %}
+
+		<!-- Socket.io Script -->
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+		
+		<script>
+			// Globale Flash-Message Funktion
+			function createFlashMessage(text, type = 'info') {
+				const flashContainer = document.getElementById('flash-container');
+				if (!flashContainer) return;
+				
+				const messages = flashContainer.querySelectorAll('.error-message, .success-message, .info-message');
+				messages.forEach(msg => msg.remove());
+				
+				const messageDiv = document.createElement('div');
+				
+				if (type === 'error') {
+					messageDiv.className = 'error-message';
+				} else if (type === 'success') {
+					messageDiv.className = 'success-message';
+				} else {
+					messageDiv.className = 'info-message';
+				}
+				
+				messageDiv.textContent = text;
+				
+				const progressBar = document.createElement('div');
+				progressBar.className = 'custom-progress-bar';
+				messageDiv.appendChild(progressBar);
+				
+				flashContainer.appendChild(messageDiv);
+				
+				setTimeout(() => {
+					messageDiv.style.animation = 'fadeOut 0.5s forwards';
+					setTimeout(() => {
+						if (flashContainer.contains(messageDiv)) {
+							flashContainer.removeChild(messageDiv);
+						}
+					}, 500);
+				}, 5000);
+			}
+		</script>
+
+		{% block scripts %}{% endblock %}
+	</body>
+</html>

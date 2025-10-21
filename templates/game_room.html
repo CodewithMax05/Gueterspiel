@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block head %}
+<style>
+    .player-list { margin: 20px 0; }
+    .player-item { 
+        padding: 15px; 
+        border: 1px solid #34495e; 
+        margin: 10px 0; 
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+    }
+    .player-item.ready { 
+        background: rgba(40, 167, 69, 0.2); 
+        border-color: #28a745;
+    }
+    .room-info {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 20px;
+        border-radius: 8px;
+        margin: 20px 0;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container">
+    <h1>Spielraum: {{ room.id }}</h1>
+    
+    <div class="room-info">
+        <p><strong>Raum-Code:</strong> {{ room.id }}</p>
+        <p><strong>Status:</strong> {{ room.status }}</p>
+    </div>
+    
+    <div class="player-list">
+        <h3>Spieler ({{ room.players|length }}/8):</h3>
+        <div id="playersContainer">
+            {% for player in room.players %}
+            <div class="player-item {% if player.ready %}ready{% endif %}" id="player-{{ player.id }}">
+                {{ player.name }} {% if player.ready %}✅ Bereit{% else %}❌ Nicht bereit{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    {% if not player.ready %}
+    <button class="btn" id="readyBtn">Bereit</button>
+    {% endif %}
+    
+    {% if is_leader %}
+    <button class="btn btn-success" id="startBtn" disabled>Spiel starten</button>
+    {% endif %}
+</div>
+
+<script>
+    const socket = io();
+    const roomId = "{{ room.id }}";
+    
+    socket.emit('join_room', {room_id: roomId});
+    
+    socket.on('player_joined', (data) => {
+        location.reload();
+    });
+    
+    socket.on('player_ready', (data) => {
+        const playerElement = document.getElementById(`player-${data.player_id}`);
+        if (playerElement) {
+            playerElement.classList.add('ready');
+            playerElement.innerHTML = playerElement.innerHTML.replace('❌ Nicht bereit', '✅ Bereit');
+        }
+    });
+    
+    socket.on('all_players_ready', () => {
+        document.getElementById('startBtn').disabled = false;
+    });
+    
+    socket.on('game_started', () => {
+        window.location.href = '/game';
+    });
+    
+    // Event Listener für Buttons
+    document.addEventListener('DOMContentLoaded', function() {
+        const readyBtn = document.getElementById('readyBtn');
+        const startBtn = document.getElementById('startBtn');
+        
+        if (readyBtn) {
+            readyBtn.addEventListener('click', function() {
+                socket.emit('set_ready', {});
+                this.disabled = true;
+            });
+        }
+        
+        if (startBtn) {
+            startBtn.addEventListener('click', function() {
+                socket.emit('start_game');
+            });
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block head %}
+<style>
+    .form-container {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    .form-group {
+        margin: 20px 0;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container">
+    <div class="form-container">
+        <h1>Spiel erstellen</h1>
+        
+        <form id="gameSettings">
+            <div class="form-group">
+                <label>Gruppenaufteilung:</label>
+                <select name="fixed_groups">
+                    <option value="true">Feste Gruppen (bleiben gleich)</option>
+                    <option value="false">Zufällige Gruppen (jede Runde neu)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Spielende:</label>
+                <select name="end_mode" id="endMode">
+                    <option value="probability">Wahrscheinlichkeit pro Runde</option>
+                    <option value="fixed_rounds">Feste Rundenzahl</option>
+                </select>
+            </div>
+            
+            <div class="form-group" id="probabilitySetting" style="display: none;">
+                <label>Wahrscheinlichkeit für nächste Runde (0-1):</label>
+                <input type="number" name="continue_probability" min="0" max="1" step="0.1" value="0.5">
+            </div>
+            
+            <div class="form-group" id="roundsSetting">
+                <label>Anzahl Runden:</label>
+                <input type="number" name="max_rounds" min="1" max="20" value="5">
+            </div>
+            
+            <button type="button" class="btn" onclick="createGame()">Spiel erstellen</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.getElementById('endMode').addEventListener('change', function() {
+        const isProbability = this.value === 'probability';
+        document.getElementById('probabilitySetting').style.display = isProbability ? 'block' : 'none';
+        document.getElementById('roundsSetting').style.display = isProbability ? 'none' : 'block';
+    });
+
+    function createGame() {
+        const formData = new FormData(document.getElementById('gameSettings'));
+        const settings = Object.fromEntries(formData);
+        
+        fetch('/create_room', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(settings)
+        })
+        .then(response => response.json())
+        .then(data => {
+            window.location.href = '/game_room';
+        })
+        .catch(error => {
+            console.error('Fehler:', error);
+            createFlashMessage('Fehler beim Erstellen des Spiels', 'error');
+        });
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block head %}
+<style>
+    .room-list { margin: 20px 0; }
+    .room-item { 
+        padding: 15px; 
+        border: 1px solid #34495e; 
+        margin: 10px 0; 
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .room-info { flex-grow: 1; }
+    .join-btn { 
+        padding: 8px 16px; 
+        background: #28a745; 
+        color: white; 
+        border: none; 
+        border-radius: 5px; 
+        cursor: pointer; 
+    }
+    .direct-join { 
+        margin-top: 30px; 
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container">
+    <h1>Verfügbare Spiele</h1>
+    
+    <div class="room-list" id="roomList">
+        <p>Lade verfügbare Räume...</p>
+    </div>
+
+    <div class="direct-join">
+        <h3>Direkt beitreten:</h3>
+        <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <input type="text" id="roomCode" placeholder="Raum-Code eingeben" style="flex-grow: 1;">
+            <button class="btn" onclick="joinByCode()">Beitreten</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function loadRooms() {
+        fetch('/api/available_rooms')
+            .then(response => response.json())
+            .then(rooms => {
+                const roomList = document.getElementById('roomList');
+                
+                if (rooms.length === 0) {
+                    roomList.innerHTML = '<p>Keine verfügbaren Räume gefunden.</p>';
+                    return;
+                }
+                
+                roomList.innerHTML = '';
+                rooms.forEach(room => {
+                    const roomItem = document.createElement('div');
+                    roomItem.className = 'room-item';
+                    roomItem.innerHTML = `
+                        <div class="room-info">
+                            <strong>Raum: ${room.id}</strong><br>
+                            Spieler: ${room.players}/${room.max_players}<br>
+                            Erstellt von: ${room.leader}
+                        </div>
+                        <button class="join-btn" onclick="joinRoom('${room.id}')">Beitreten</button>
+                    `;
+                    roomList.appendChild(roomItem);
+                });
+            })
+            .catch(error => {
+                console.error('Fehler beim Laden der Räume:', error);
+                document.getElementById('roomList').innerHTML = '<p>Fehler beim Laden der Räume.</p>';
+            });
+    }
+    
+    function joinRoom(roomId) {
+        window.location.href = `/join_room/${roomId}`;
+    }
+    
+    function joinByCode() {
+        const code = document.getElementById('roomCode').value.trim();
+        if (code) {
+            joinRoom(code);
+        } else {
+            createFlashMessage('Bitte gib einen Raum-Code ein', 'error');
+        }
+    }
+    
+    // Räume alle 5 Sekunden aktualisieren
+    document.addEventListener('DOMContentLoaded', function() {
+        loadRooms();
+        setInterval(loadRooms, 5000);
+    });
+</script>
+{% endblock %}

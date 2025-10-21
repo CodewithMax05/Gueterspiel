@@ -1,0 +1,159 @@
+/* Grundlegendes Styling */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #ffffff;
+    min-height: 100vh;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Flash Messages */
+#flash-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    max-width: 400px;
+}
+
+.error-message, .success-message, .info-message {
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+    animation: slideIn 0.3s ease;
+}
+
+.error-message {
+    background: #dc3545;
+    border-left: 4px solid #c82333;
+}
+
+.success-message {
+    background: #28a745;
+    border-left: 4px solid #218838;
+}
+
+.info-message {
+    background: #17a2b8;
+    border-left: 4px solid #138496;
+}
+
+.custom-progress-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.5);
+    animation: progressBar 5s linear forwards;
+}
+
+@keyframes progressBar {
+    from { width: 100%; }
+    to { width: 0%; }
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+/* Buttons */
+.btn {
+    display: inline-block;
+    padding: 12px 24px;
+    background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    text-decoration: none;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+}
+
+.btn-secondary {
+    background: linear-gradient(45deg, #6c757d 0%, #495057 100%);
+}
+
+.btn-success {
+    background: linear-gradient(45deg, #28a745 0%, #20c997 100%);
+}
+
+.btn-danger {
+    background: linear-gradient(45deg, #dc3545 0%, #c82333 100%);
+}
+
+/* Formulare */
+.form-group {
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+input, select {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #34495e;
+    border-radius: 8px;
+    background: #2c3e50;
+    color: white;
+    font-size: 16px;
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+/* Karten */
+.card {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 16px 0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    
+    #flash-container {
+        right: 10px;
+        left: 10px;
+        max-width: none;
+    }
+}

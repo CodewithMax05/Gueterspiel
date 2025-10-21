@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block head %}
+<style>
+    .balance { 
+        font-size: 24px; 
+        font-weight: bold; 
+        margin: 20px 0; 
+        text-align: center;
+    }
+    .contribution-options { 
+        display: flex; 
+        flex-wrap: wrap; 
+        gap: 10px; 
+        margin: 20px 0; 
+        justify-content: center;
+    }
+    .coin-option { 
+        padding: 15px; 
+        border: 2px solid #007bff; 
+        border-radius: 5px; 
+        cursor: pointer; 
+        text-align: center; 
+        min-width: 80px;
+        transition: all 0.3s ease;
+    }
+    .coin-option:hover { 
+        background: #007bff; 
+        color: white;
+    }
+    .coin-option.selected { 
+        background: #007bff; 
+        color: white; 
+        transform: scale(1.05);
+    }
+    .timer { 
+        font-size: 20px; 
+        margin: 20px 0;
+        text-align: center;
+    }
+    .game-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    .loading-spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #007bff;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 10px auto;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<!-- Daten für JavaScript in HTML-Attributen speichern -->
+<div id="game-data" 
+     data-player-coins="{{ player.coins }}" 
+     data-player-id="{{ player.id }}"
+     data-room-id="{{ room.id }}"
+     data-current-round="{{ current_round }}"
+     style="display: none;">
+</div>
+
+<div class="game-container">
+    <h1 style="text-align: center;">Runde <span id="currentRound">{{ current_round }}</span></h1>
+    
+    <div class="balance">
+        Aktuelles Guthaben: <span id="currentBalance">{{ player.coins }}</span> Coins
+    </div>
+    
+    <div class="timer">
+        Verbleibende Zeit: <span id="timer">60</span> Sekunden
+    </div>
+    
+    <div class="card">
+        <h3 style="text-align: center;">Wie viel möchtest du in das öffentliche Gut einzahlen?</h3>
+        <div class="contribution-options" id="coinOptions">
+            <!-- Options werden per JavaScript generiert -->
+        </div>
+    </div>
+    
+    <div style="text-align: center; margin: 20px 0;">
+        <button class="btn" id="submitBtn" disabled>Beitrag einreichen</button>
+    </div>
+    
+    <div id="waitingMessage" style="display: none; text-align: center; margin-top: 20px;">
+        <p>Warte auf andere Spieler...</p>
+        <div class="loading-spinner"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Daten aus HTML-Attributen lesen
+    const gameData = document.getElementById('game-data');
+    const playerData = {
+        coins: parseInt(gameData.dataset.playerCoins),
+        id: gameData.dataset.playerId
+    };
+    
+    const roomId = gameData.dataset.roomId;
+    const currentRound = parseInt(gameData.dataset.currentRound);
+    
+    let selectedAmount = null;
+    let timeLeft = 60;
+    let timerInterval;
+    let socket;
+
+    // Coin-Optionen generieren
+    function generateCoinOptions() {
+        const coinOptions = document.getElementById('coinOptions');
+        coinOptions.innerHTML = '';
+        
+        for (let i = 0; i <= playerData.coins; i++) {
+            const option = document.createElement('div');
+            option.className = 'coin-option';
+            option.textContent = i + ' Coins';
+            option.addEventListener('click', () => selectAmount(i));
+            coinOptions.appendChild(option);
+        }
+    }
+
+    function selectAmount(amount) {
+        selectedAmount = amount;
+        
+        // Alle Optionen zurücksetzen
+        document.querySelectorAll('.coin-option').forEach(opt => {
+            opt.classList.remove('selected');
+        });
+        
+        // Ausgewählte Option markieren
+        event.target.classList.add('selected');
+        document.getElementById('submitBtn').disabled = false;
+    }
+    
+    function submitContribution() {
+        if (selectedAmount !== null) {
+            socket.emit('submit_contribution', {amount: selectedAmount});
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('waitingMessage').style.display = 'block';
+        }
+    }
+    
+    function startTimer() {
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            document.getElementById('timer').textContent = timeLeft;
+            
+            if (timeLeft <= 10) {
+                document.getElementById('timer').style.color = '#dc3545';
+            }
+            
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                // Automatisch 0 Coins einzahlen wenn Zeit abgelaufen
+                if (selectedAmount === null) {
+                    socket.emit('submit_contribution', {amount: 0});
+                }
+            }
+        }, 1000);
+    }
+
+    // Socket.IO Initialisierung
+    function initializeSocket() {
+        socket = io();
+        
+        socket.emit('join_room', {room_id: roomId});
+        
+        socket.on('contribution_submitted', (data) => {
+            if (data.player_id !== playerData.id) {
+                createFlashMessage('Ein Spieler hat seinen Beitrag eingereicht', 'info');
+            }
+        });
+        
+        socket.on('round_results', (results) => {
+            window.location.href = '/evaluation';
+        });
+        
+        socket.on('game_finished', () => {
+            createFlashMessage('Spiel beendet!', 'success');
+            setTimeout(() => {
+                window.location.href = '/evaluation';
+            }, 2000);
+        });
+    }
+
+    // Initialisierung wenn Seite geladen ist
+    document.addEventListener('DOMContentLoaded', function() {
+        generateCoinOptions();
+        startTimer();
+        initializeSocket();
+        
+        // Event Listener für Submit Button
+        document.getElementById('submitBtn').addEventListener('click', submitContribution);
+    });
+</script>
+{% endblock %}
