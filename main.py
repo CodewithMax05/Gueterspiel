@@ -12,7 +12,7 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
 socketio = SocketIO(
     app, 
     cors_allowed_origins="*",
-    async_mode='threading',  # Immer threading für Kompatibilität
+    async_mode='threading',
     logger=True,
     engineio_logger=True
 )
@@ -32,8 +32,9 @@ class GameManager:
                 'leader': leader_id,
                 'players': [],
                 'settings': settings,
-                'status': 'waiting',  # waiting, playing, finished
-                'ready_players': set()
+                'status': 'waiting',
+                'ready_players': set(),
+                'min_players': 4  # Mindestanzahl für Spielstart
             }
         return room_id
     
@@ -57,7 +58,15 @@ class GameManager:
     def start_game(room_id):
         with lock:
             room = rooms[room_id]
-            if room['status'] == 'waiting' and len(room['players']) >= 4:
+            # Prüfe ob genug Spieler bereit sind (mindestens 4 und durch 4 teilbar)
+            ready_count = len(room['ready_players'])
+            total_players = len(room['players'])
+            
+            if (room['status'] == 'waiting' and 
+                ready_count >= room['min_players'] and 
+                ready_count % 4 == 0 and 
+                total_players % 4 == 0):
+                
                 room['status'] = 'playing'
                 room['current_round'] = 1
                 room['groups'] = GameManager._create_groups(room['players'], room['settings'])
@@ -171,11 +180,10 @@ class GameManager:
         """Gibt eine Liste von verfügbaren Räumen zurück"""
         available_rooms = []
         for room_id, room in rooms.items():
-            if room['status'] == 'waiting' and len(room['players']) < 8:
+            if room['status'] == 'waiting':
                 available_rooms.append({
                     'id': room_id,
                     'players': len(room['players']),
-                    'max_players': 8,
                     'leader': players[room['leader']]['name'] if room['leader'] in players else 'Unbekannt'
                 })
         return available_rooms
@@ -296,17 +304,42 @@ def handle_set_ready(data):
         
         emit('player_ready', {'player_id': player_id}, room=room_id)
         
-        # Prüfe ob alle ready sind
+        # Prüfe ob genug Spieler bereit sind für Spielstart
         room = rooms[room_id]
-        if len(room['ready_players']) == len(room['players']):
-            emit('all_players_ready', room=room_id)
+        ready_count = len(room['ready_players'])
+        total_players = len(room['players'])
+        
+        # Berechne ob Spiel gestartet werden kann
+        can_start = (ready_count >= room['min_players'] and 
+                    ready_count % 4 == 0 and 
+                    total_players % 4 == 0)
+        
+        # Sende Update an alle Clients im Raum
+        emit('start_button_update', {'can_start': can_start}, room=room_id)
 
 @socketio.on('start_game')
 def handle_start_game():
     room_id = session.get('room_id')
     if room_id in rooms and rooms[room_id]['leader'] == session['player_id']:
-        if GameManager.start_game(room_id):
-            emit('game_started', room=room_id)
+        room = rooms[room_id]
+        ready_count = len(room['ready_players'])
+        total_players = len(room['players'])
+        
+        # Überprüfe erneut die Voraussetzungen
+        if (ready_count >= room['min_players'] and 
+            ready_count % 4 == 0 and 
+            total_players % 4 == 0):
+            
+            if GameManager.start_game(room_id):
+                emit('game_started', room=room_id)
+            else:
+                emit('start_failed', {
+                    'message': 'Spiel konnte nicht gestartet werden.'
+                })
+        else:
+            emit('start_failed', {
+                'message': 'Spiel kann nicht gestartet werden. Es müssen mindestens 4 Spieler bereit sein und die Anzahl muss durch 4 teilbar sein.'
+            })
 
 @socketio.on('submit_contribution')
 def handle_submit_contribution(data):

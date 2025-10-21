@@ -20,63 +20,169 @@
         border-radius: 8px;
         margin: 20px 0;
     }
+    .requirements {
+        background: rgba(255, 193, 7, 0.2);
+        padding: 15px;
+        border-radius: 8px;
+        margin: 15px 0;
+        border-left: 4px solid #ffc107;
+    }
 </style>
 {% endblock %}
 
 {% block body %}
+<!-- Daten für JavaScript -->
+<div id="room-data" 
+     data-room-id="{{ room.id }}"
+     data-is-leader="{{ 'true' if is_leader else 'false' }}"
+     data-ready-count="{{ room.ready_players|length }}"
+     data-total-players="{{ room.players|length }}"
+     data-player-id="{{ player.id }}"
+     data-player-ready="{{ 'true' if player.ready else 'false' }}"
+     style="display: none;">
+</div>
+
 <div class="container">
     <h1>Spielraum: {{ room.id }}</h1>
     
     <div class="room-info">
         <p><strong>Raum-Code:</strong> {{ room.id }}</p>
         <p><strong>Status:</strong> {{ room.status }}</p>
+        <p><strong>Spieler im Raum:</strong> {{ room.players|length }}</p>
+        <p><strong>Bereite Spieler:</strong> <span id="readyCount">{{ room.ready_players|length }}</span></p>
     </div>
+
+    {% if is_leader %}
+    <div class="requirements">
+        <h4>Voraussetzungen für Spielstart:</h4>
+        <ul>
+            <li id="reqMinPlayers">✓ Mindestens 4 Spieler bereit</li>
+            <li id="reqDivisible">✓ Anzahl der Spieler muss durch 4 teilbar sein</li>
+        </ul>
+    </div>
+    {% endif %}
     
     <div class="player-list">
-        <h3>Spieler ({{ room.players|length }}/8):</h3>
+        <h3>Spieler ({{ room.players|length }}):</h3>
         <div id="playersContainer">
             {% for player in room.players %}
             <div class="player-item {% if player.ready %}ready{% endif %}" id="player-{{ player.id }}">
-                {{ player.name }} {% if player.ready %}✅ Bereit{% else %}❌ Nicht bereit{% endif %}
+                {{ player.name }} 
+                {% if player.ready %}
+                <span style="color: #28a745;">✅ Bereit</span>
+                {% else %}
+                <span style="color: #dc3545;">❌ Nicht bereit</span>
+                {% endif %}
+                {% if player.id == room.leader %}
+                <span style="color: #ffc107;">👑 (Leader)</span>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
     </div>
     
+    <!-- Button für ALLE Spieler, die noch nicht bereit sind -->
     {% if not player.ready %}
     <button class="btn" id="readyBtn">Bereit</button>
     {% endif %}
     
     {% if is_leader %}
     <button class="btn btn-success" id="startBtn" disabled>Spiel starten</button>
+    <div id="startError" style="color: #dc3545; margin-top: 10px; display: none;"></div>
     {% endif %}
 </div>
 
 <script>
+    // Daten aus HTML-Attributen lesen
+    const roomData = document.getElementById('room-data');
+    const roomId = roomData.dataset.roomId;
+    const isLeader = roomData.dataset.isLeader === 'true';
+    const playerId = roomData.dataset.playerId;
+    const playerReady = roomData.dataset.playerReady === 'true';
+    let readyCount = parseInt(roomData.dataset.readyCount);
+    const totalPlayers = parseInt(roomData.dataset.totalPlayers);
+
     const socket = io();
-    const roomId = "{{ room.id }}";
     
     socket.emit('join_room', {room_id: roomId});
     
     socket.on('player_joined', (data) => {
-        location.reload();
+        // Nur neu laden wenn ein anderer Spieler beigetreten ist
+        if (data.player_id !== playerId) {
+            location.reload();
+        }
     });
     
     socket.on('player_ready', (data) => {
+        console.log('Player ready received:', data);
+        
         const playerElement = document.getElementById(`player-${data.player_id}`);
         if (playerElement) {
             playerElement.classList.add('ready');
             playerElement.innerHTML = playerElement.innerHTML.replace('❌ Nicht bereit', '✅ Bereit');
         }
+        
+        // Aktualisiere Bereit-Zähler
+        readyCount++;
+        document.getElementById('readyCount').textContent = readyCount;
+        
+        // Aktualisiere Requirements für Leader
+        if (isLeader) {
+            updateStartButton();
+        }
+        
+        // Wenn der aktuelle Spieler bereit ist, verstecke den Button
+        if (data.player_id === playerId) {
+            const readyBtn = document.getElementById('readyBtn');
+            if (readyBtn) {
+                readyBtn.style.display = 'none';
+            }
+        }
     });
     
-    socket.on('all_players_ready', () => {
-        document.getElementById('startBtn').disabled = false;
+    socket.on('start_button_update', (data) => {
+        console.log('Start button update:', data);
+        if (isLeader) {
+            document.getElementById('startBtn').disabled = !data.can_start;
+            updateRequirements(data.can_start);
+        }
+    });
+    
+    socket.on('start_failed', (data) => {
+        console.log('Start failed:', data);
+        if (isLeader) {
+            document.getElementById('startError').style.display = 'block';
+            document.getElementById('startError').textContent = data.message;
+        }
     });
     
     socket.on('game_started', () => {
+        console.log('Game started, redirecting...');
         window.location.href = '/game';
     });
+    
+    function updateStartButton() {
+        const canStart = readyCount >= 4 && readyCount % 4 === 0 && totalPlayers % 4 === 0;
+        document.getElementById('startBtn').disabled = !canStart;
+        updateRequirements(canStart);
+    }
+    
+    function updateRequirements(canStart) {
+        const reqMinPlayers = document.getElementById('reqMinPlayers');
+        const reqDivisible = document.getElementById('reqDivisible');
+        
+        if (canStart) {
+            reqMinPlayers.style.color = '#28a745';
+            reqDivisible.style.color = '#28a745';
+            reqMinPlayers.innerHTML = '✓ Mindestens 4 Spieler bereit';
+            reqDivisible.innerHTML = '✓ Anzahl der Spieler muss durch 4 teilbar sein';
+        } else {
+            reqMinPlayers.style.color = '#dc3545';
+            reqDivisible.style.color = '#dc3545';
+            reqMinPlayers.innerHTML = '✗ Mindestens 4 Spieler bereit';
+            reqDivisible.innerHTML = '✗ Anzahl der Spieler muss durch 4 teilbar sein';
+        }
+    }
     
     // Event Listener für Buttons
     document.addEventListener('DOMContentLoaded', function() {
@@ -85,15 +191,28 @@
         
         if (readyBtn) {
             readyBtn.addEventListener('click', function() {
+                console.log('Sending set_ready event');
                 socket.emit('set_ready', {});
                 this.disabled = true;
+                this.textContent = 'Wird gesendet...';
             });
         }
         
         if (startBtn) {
             startBtn.addEventListener('click', function() {
+                console.log('Sending start_game event');
                 socket.emit('start_game');
             });
+        }
+        
+        // Initialisiere Requirements für Leader
+        if (isLeader) {
+            updateStartButton();
+        }
+        
+        // Verstecke den Ready-Button wenn der Spieler bereits bereit ist
+        if (playerReady && readyBtn) {
+            readyBtn.style.display = 'none';
         }
     });
 </script>
