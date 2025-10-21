@@ -13,9 +13,11 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
 socketio = SocketIO(
     app, 
     cors_allowed_origins="*",
-    async_mode='threading',
+    async_mode='gevent',  # Statt 'threading'
     logger=True,
-    engineio_logger=True
+    engineio_logger=True,
+    ping_timeout=60,
+    ping_interval=25
 )
 
 # In-Memory Speicher
@@ -596,5 +598,6 @@ if __name__ == '__main__':
         host='0.0.0.0', 
         port=port, 
         debug=debug_mode,
-        use_reloader=False
+        use_reloader=False,
+        log_output=True  # Mehr Logging
     )
