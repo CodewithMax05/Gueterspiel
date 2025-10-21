@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: oeffentliches-gut-spiel
+    env: python
+    plan: free
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: gunicorn --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 main:app
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
