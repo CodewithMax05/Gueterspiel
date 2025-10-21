@@ -107,22 +107,10 @@
     const socket = io();
 
     // Raum sofort betreten wenn Seite geladen ist
+    socket.emit('join_room', { room_id: roomId });
+
     socket.on('connect', () => {
-        console.log('Mit Server verbunden, SID:', socket.id);
-        socket.emit('join_room', { room_id: roomId });
-    });
-
-    // optional: falls reconnect nötig
-    socket.on('reconnect', () => {
-        socket.emit('join_room', { room_id: roomId });
-    });
-
-    socket.on('disconnect', (reason) => {
-        console.log('Verbindung getrennt:', reason);
-    });
-
-    socket.on('connect_error', (error) => {
-        console.error('Verbindungsfehler:', error);
+        console.log('Mit Server verbunden');
     });
 
     socket.on('player_joined', (data) => {
@@ -224,8 +212,8 @@
         
         if (readyBtn && !playerReady) {
             readyBtn.addEventListener('click', function() {
-                console.log('Sende set_ready event', { room_id: roomId, player_id: playerId });
-                socket.emit('set_ready', { room_id: roomId, player_id: playerId });
+                console.log('Sende set_ready event');
+                socket.emit('set_ready', {});
                 this.disabled = true;
                 this.textContent = 'Wird gesendet...';
             });
