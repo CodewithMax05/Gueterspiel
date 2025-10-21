@@ -93,7 +93,7 @@
 </div>
 
 <script>
-    // Daten aus HTML-Attributen lesen
+    // Daten für JavaScript
     const roomData = document.getElementById('room-data');
     const roomId = roomData.dataset.roomId;
     const isLeader = roomData.dataset.isLeader === 'true';
@@ -102,24 +102,47 @@
     let readyCount = parseInt(roomData.dataset.readyCount);
     const totalPlayers = parseInt(roomData.dataset.totalPlayers);
 
+    console.log('Initialisierung:', { roomId, isLeader, playerId, playerReady, readyCount, totalPlayers });
+
     const socket = io();
-    
-    socket.emit('join_room', {room_id: roomId});
-    
+
+    // Raum sofort betreten wenn Seite geladen ist
+    socket.on('connect', () => {
+        console.log('Mit Server verbunden, SID:', socket.id);
+        socket.emit('join_room', { room_id: roomId });
+    });
+
+    // optional: falls reconnect nötig
+    socket.on('reconnect', () => {
+        socket.emit('join_room', { room_id: roomId });
+    });
+
+    socket.on('disconnect', (reason) => {
+        console.log('Verbindung getrennt:', reason);
+    });
+
+    socket.on('connect_error', (error) => {
+        console.error('Verbindungsfehler:', error);
+    });
+
     socket.on('player_joined', (data) => {
-        // Nur neu laden wenn ein anderer Spieler beigetreten ist
+        console.log('Spieler beigetreten:', data);
+        // Seite neu laden um aktuelle Spielerliste anzuzeigen
         if (data.player_id !== playerId) {
-            location.reload();
+            setTimeout(() => location.reload(), 1000);
         }
     });
-    
+
     socket.on('player_ready', (data) => {
-        console.log('Player ready received:', data);
+        console.log('Spieler bereit:', data);
         
         const playerElement = document.getElementById(`player-${data.player_id}`);
         if (playerElement) {
             playerElement.classList.add('ready');
-            playerElement.innerHTML = playerElement.innerHTML.replace('❌ Nicht bereit', '✅ Bereit');
+            const readySpan = playerElement.querySelector('span') || playerElement;
+            if (readySpan.innerHTML.includes('Nicht bereit')) {
+                readySpan.innerHTML = readySpan.innerHTML.replace('❌ Nicht bereit', '✅ Bereit');
+            }
         }
         
         // Aktualisiere Bereit-Zähler
@@ -139,7 +162,7 @@
             }
         }
     });
-    
+
     socket.on('start_button_update', (data) => {
         console.log('Start button update:', data);
         if (isLeader) {
@@ -147,29 +170,39 @@
             updateRequirements(data.can_start);
         }
     });
-    
+
     socket.on('start_failed', (data) => {
-        console.log('Start failed:', data);
+        console.log('Start fehlgeschlagen:', data);
         if (isLeader) {
-            document.getElementById('startError').style.display = 'block';
-            document.getElementById('startError').textContent = data.message;
+            const errorDiv = document.getElementById('startError');
+            errorDiv.style.display = 'block';
+            errorDiv.textContent = data.message;
+            // Nach 5 Sekunden ausblenden
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
         }
     });
-    
+
     socket.on('game_started', () => {
-        console.log('Game started, redirecting...');
+        console.log('Spiel gestartet, weiterleiten...');
         window.location.href = '/game';
     });
-    
+
     function updateStartButton() {
         const canStart = readyCount >= 4 && readyCount % 4 === 0 && totalPlayers % 4 === 0;
-        document.getElementById('startBtn').disabled = !canStart;
+        const startBtn = document.getElementById('startBtn');
+        if (startBtn) {
+            startBtn.disabled = !canStart;
+        }
         updateRequirements(canStart);
     }
-    
+
     function updateRequirements(canStart) {
         const reqMinPlayers = document.getElementById('reqMinPlayers');
         const reqDivisible = document.getElementById('reqDivisible');
+        
+        if (!reqMinPlayers || !reqDivisible) return;
         
         if (canStart) {
             reqMinPlayers.style.color = '#28a745';
@@ -179,29 +212,31 @@
         } else {
             reqMinPlayers.style.color = '#dc3545';
             reqDivisible.style.color = '#dc3545';
-            reqMinPlayers.innerHTML = '✗ Mindestens 4 Spieler bereit';
-            reqDivisible.innerHTML = '✗ Anzahl der Spieler muss durch 4 teilbar sein';
+            reqMinPlayers.innerHTML = `✗ Mindestens 4 Spieler bereit (aktuell: ${readyCount})`;
+            reqDivisible.innerHTML = `✗ Anzahl der Spieler muss durch 4 teilbar sein (aktuell: ${readyCount}/${totalPlayers})`;
         }
     }
-    
+
     // Event Listener für Buttons
     document.addEventListener('DOMContentLoaded', function() {
         const readyBtn = document.getElementById('readyBtn');
         const startBtn = document.getElementById('startBtn');
         
-        if (readyBtn) {
+        if (readyBtn && !playerReady) {
             readyBtn.addEventListener('click', function() {
-                console.log('Sending set_ready event');
-                socket.emit('set_ready', {});
+                console.log('Sende set_ready event', { room_id: roomId, player_id: playerId });
+                socket.emit('set_ready', { room_id: roomId, player_id: playerId });
                 this.disabled = true;
                 this.textContent = 'Wird gesendet...';
             });
         }
         
-        if (startBtn) {
+        if (startBtn && isLeader) {
             startBtn.addEventListener('click', function() {
-                console.log('Sending start_game event');
+                console.log('Sende start_game event');
                 socket.emit('start_game');
+                this.disabled = true;
+                this.textContent = 'Starte Spiel...';
             });
         }
         

@@ -29,13 +29,15 @@ class GameManager:
         room_id = str(uuid.uuid4())[:8]
         with lock:
             rooms[room_id] = {
+                'id': room_id,  # WICHTIG: Raum-ID hinzufügen
                 'leader': leader_id,
                 'players': [],
                 'settings': settings,
                 'status': 'waiting',
                 'ready_players': set(),
-                'min_players': 4  # Mindestanzahl für Spielstart
+                'min_players': 4
             }
+        print(f"Raum erstellt: {room_id} durch Spieler {leader_id}")
         return room_id
     
     @staticmethod
@@ -51,16 +53,22 @@ class GameManager:
                 }
                 players[player_id] = player_data
                 rooms[room_id]['players'].append(player_data)
+                print(f"Spieler {player_name} ({player_id}) hat Raum {room_id} betreten")
                 return True
+        print(f"FEHLER: Raum {room_id} nicht gefunden für Spieler {player_name}")
         return False
     
     @staticmethod
     def start_game(room_id):
         with lock:
+            if room_id not in rooms:
+                return False
+                
             room = rooms[room_id]
-            # Prüfe ob genug Spieler bereit sind (mindestens 4 und durch 4 teilbar)
             ready_count = len(room['ready_players'])
             total_players = len(room['players'])
+            
+            print(f"Versuche Spiel zu starten: {ready_count} bereit von {total_players} Spielern")
             
             if (room['status'] == 'waiting' and 
                 ready_count >= room['min_players'] and 
@@ -75,6 +83,7 @@ class GameManager:
                     'contributions': {},
                     'group_results': {}
                 }
+                print(f"Spiel in Raum {room_id} gestartet!")
                 return True
         return False
     
@@ -227,6 +236,7 @@ def create_room():
 def join_room_route(room_id):
     if GameManager.join_room(room_id, session['player_id'], session['player_name']):
         session['room_id'] = room_id
+        print(f"Spieler {session['player_id']} hat Raum {room_id} über HTTP betreten")
         return redirect(url_for('game_room'))
     else:
         return "Raum nicht gefunden", 404
@@ -290,56 +300,104 @@ def handle_disconnect():
 @socketio.on('join_room')
 def handle_join_room(data):
     room_id = data.get('room_id')
-    join_room(room_id)
-    emit('player_joined', {'player_id': session['player_id']}, room=room_id)
+    player_id = session.get('player_id')
+    
+    if room_id and player_id:
+        join_room(room_id)
+        print(f"Spieler {player_id} hat Socket-Room {room_id} betreten")
+        emit('player_joined', {
+            'player_id': player_id,
+            'player_name': players.get(player_id, {}).get('name', 'Unbekannt')
+        }, room=room_id)
 
 @socketio.on('set_ready')
 def handle_set_ready(data):
-    room_id = session.get('room_id')
-    player_id = session.get('player_id')
+    print(f"set_ready empfangen: {data}")
     
-    if room_id in rooms and player_id in players:
-        rooms[room_id]['ready_players'].add(player_id)
-        players[player_id]['ready'] = True
-        
-        emit('player_ready', {'player_id': player_id}, room=room_id)
-        
-        # Prüfe ob genug Spieler bereit sind für Spielstart
-        room = rooms[room_id]
-        ready_count = len(room['ready_players'])
-        total_players = len(room['players'])
-        
-        # Berechne ob Spiel gestartet werden kann
-        can_start = (ready_count >= room['min_players'] and 
-                    ready_count % 4 == 0 and 
-                    total_players % 4 == 0)
-        
-        # Sende Update an alle Clients im Raum
-        emit('start_button_update', {'can_start': can_start}, room=room_id)
+    # Verwende Daten aus dem Event-Payload mit Fallback auf Session
+    room_id = data.get('room_id') or session.get('room_id')
+    player_id = data.get('player_id') or session.get('player_id')
+
+    if not room_id or not player_id:
+        print(f"set_ready: fehlende Daten (room_id={room_id}, player_id={player_id})")
+        emit('start_failed', {'message': 'Session oder Raum nicht gefunden (set_ready)'})
+        return
+
+    with lock:
+        if room_id in rooms and player_id in players:
+            rooms[room_id]['ready_players'].add(player_id)
+            players[player_id]['ready'] = True
+            print(f"Spieler {player_id} als bereit markiert in Raum {room_id}")
+        else:
+            print(f"set_ready: Raum oder Spieler unbekannt: {room_id}, {player_id}")
+            emit('start_failed', {'message': 'Raum oder Spieler nicht gefunden (set_ready)'})
+            return
+
+    print(f"Spieler {player_id} ist jetzt bereit in Raum {room_id}")
+    emit('player_ready', {
+        'player_id': player_id,
+        'player_name': players[player_id]['name']
+    }, room=room_id)
+
+    # Prüfe Startbedingungen
+    room = rooms[room_id]
+    ready_count = len(room['ready_players'])
+    total_players = len(room['players'])
+
+    can_start = (ready_count >= room['min_players'] and 
+                 ready_count % 4 == 0 and 
+                 total_players % 4 == 0)
+
+    print(f"Startbedingungen: {ready_count}/{total_players} Spieler bereit, kann starten: {can_start}")
+    emit('start_button_update', {
+        'can_start': can_start,
+        'ready_count': ready_count,
+        'total_players': total_players
+    }, room=room_id)
 
 @socketio.on('start_game')
 def handle_start_game():
     room_id = session.get('room_id')
-    if room_id in rooms and rooms[room_id]['leader'] == session['player_id']:
-        room = rooms[room_id]
-        ready_count = len(room['ready_players'])
-        total_players = len(room['players'])
+    player_id = session.get('player_id')
+    
+    print(f"Start_game erhalten von {player_id} für Raum {room_id}")
+    
+    if not room_id or room_id not in rooms:
+        emit('start_failed', {'message': 'Raum nicht gefunden'})
+        return
         
-        # Überprüfe erneut die Voraussetzungen
-        if (ready_count >= room['min_players'] and 
-            ready_count % 4 == 0 and 
-            total_players % 4 == 0):
-            
-            if GameManager.start_game(room_id):
-                emit('game_started', room=room_id)
-            else:
-                emit('start_failed', {
-                    'message': 'Spiel konnte nicht gestartet werden.'
-                })
+    room = rooms[room_id]
+    
+    # Überprüfe ob der Spieler der Leader ist
+    if player_id != room['leader']:
+        emit('start_failed', {'message': 'Nur der Leader kann das Spiel starten'})
+        return
+    
+    ready_count = len(room['ready_players'])
+    total_players = len(room['players'])
+    
+    print(f"Startversuch: {ready_count} von {total_players} Spielern bereit")
+    
+    # Überprüfe die Voraussetzungen
+    if (ready_count >= room['min_players'] and 
+        ready_count % 4 == 0 and 
+        total_players % 4 == 0):
+        
+        if GameManager.start_game(room_id):
+            emit('game_started', {'room_id': room_id}, room=room_id)
+            print(f"Spiel erfolgreich gestartet für Raum {room_id}")
         else:
             emit('start_failed', {
-                'message': 'Spiel kann nicht gestartet werden. Es müssen mindestens 4 Spieler bereit sein und die Anzahl muss durch 4 teilbar sein.'
+                'message': 'Spiel konnte nicht gestartet werden.'
             })
+    else:
+        error_msg = (
+            f'Spiel kann nicht gestartet werden. '
+            f'Es müssen mindestens 4 Spieler bereit sein '
+            f'und die Anzahl muss durch 4 teilbar sein. '
+            f'Aktuell: {ready_count}/{total_players} Spieler bereit.'
+        )
+        emit('start_failed', {'message': error_msg})
 
 @socketio.on('submit_contribution')
 def handle_submit_contribution(data):
