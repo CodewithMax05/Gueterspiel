@@ -9,11 +9,10 @@ import os
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
 
-# WebSocket-Konfiguration für Render
 socketio = SocketIO(
     app, 
     cors_allowed_origins="*",
-    async_mode='gevent',
+    async_mode='threading',  # Immer threading für Kompatibilität
     logger=True,
     engineio_logger=True
 )
@@ -328,7 +327,19 @@ def handle_submit_contribution(data):
             if rooms[room_id]['status'] == 'finished':
                 emit('game_finished', room=room_id)
 
-# Wichtig für Gunicorn
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=False)
+    debug_mode = os.environ.get('FLASK_ENV') != 'production'
+    
+    if debug_mode:
+        print("🔧 Starting in DEVELOPMENT mode")
+    else:
+        print("🚀 Starting in PRODUCTION mode")
+    
+    socketio.run(
+        app, 
+        host='0.0.0.0', 
+        port=port, 
+        debug=debug_mode,
+        use_reloader=False
+    )
