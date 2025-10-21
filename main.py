@@ -33,6 +33,7 @@ players = {}
 game_state = {}
 lock = Lock()
 round_timers = {}
+sid_to_player = {}
 
 class RoundTimer:
     """Verbesserte Timer-Klasse basierend auf der alten Implementierung"""
@@ -524,35 +525,85 @@ def handle_connect():
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    print(f"🔌 Client getrennt: {request.sid}")
+    sid = request.sid
+    player_id = sid_to_player.pop(sid, None)
+    print(f"🔌 Client getrennt: {sid} (player_id={player_id})")
+
+    if not player_id:
+        return
+
+    # Finde den Raum des Spielers (falls vorhanden) und entferne ihn aus der Spielerliste / ready-set
+    affected_room = None
+    for room_id, room in rooms.items():
+        # room['players'] enthält player-dicts
+        for p in list(room['players']):
+            if p['id'] == player_id:
+                room['players'].remove(p)
+                affected_room = room_id
+                break
+        if affected_room:
+            room['ready_players'].discard(player_id)
+            break
+
+    # Spieler-Daten entfernen (falls gewollt)
+    players.pop(player_id, None)
+
+    if affected_room:
+        room = rooms[affected_room]
+        emit('room_update', {
+            'players': [{
+                'id': p['id'],
+                'name': p['name'],
+                'ready': p['ready']
+            } for p in room['players']],
+            'ready_count': len(room['ready_players']),
+            'total_players': len(room['players']),
+            'group_size': room['settings'].get('group_size', 4)
+        }, room=affected_room)
 
 @socketio.on('join_room')
 def handle_join_room(data):
     room_id = data.get('room_id')
-    
-    print(f"👥 join_room Event: room_id={room_id}, sid={request.sid}")
-    
-    if not room_id:
-        print(f"❌ Kein room_id in join_room Event")
-        emit('error', {'message': 'Keine room_id'})
+    player_id = data.get('player_id') or session.get('player_id')
+
+    print(f"👥 join_room Event: room_id={room_id}, player_id={player_id}, sid={request.sid}")
+
+    if not player_id:
+        emit('error', {'message': 'Keine player_id übergeben'})
         return
-    
-    if room_id not in rooms:
+
+    if not room_id or room_id not in rooms:
         print(f"❌ Raum {room_id} nicht gefunden")
         emit('error', {'message': 'Raum nicht gefunden'})
         return
-    
+
     # Dem Socket-Room beitreten
     join_room(room_id)
-    print(f"✅ Socket {request.sid} → Room {room_id}")
-    
+    sid_to_player[request.sid] = player_id
+    print(f"✅ Socket {request.sid} → Room {room_id} (player {player_id})")
+
+    # Falls der Spieler nicht in players existiert (z.B. Seite neu geladen), versuchen wir einen minimalen Eintrag
+    if player_id not in players:
+        initial_coins = rooms[room_id]['settings'].get('initial_coins', 10)
+        players[player_id] = {
+            'id': player_id,
+            'name': f"Spieler_{player_id[:8]}",
+            'ready': False,
+            'coins': initial_coins,
+            'balance_history': [initial_coins],
+            'contribution_history': []
+        }
+        rooms[room_id]['players'].append(players[player_id])
+        print(f"ℹ️ Spieler {player_id} neu angelegt und dem Raum hinzugefügt")
+
     # Bestätigung zurücksenden
     emit('room_joined', {
         'room_id': room_id,
-        'message': 'Erfolgreich beigetreten'
+        'message': 'Erfolgreich beigetreten',
+        'player_id': player_id
     })
-    
-    # Raum-Update an alle senden
+
+    # Raum-Update an alle senden (inkl. group_size für Client-UI)
     room = rooms[room_id]
     emit('room_update', {
         'players': [{
@@ -561,13 +612,13 @@ def handle_join_room(data):
             'ready': p['ready']
         } for p in room['players']],
         'ready_count': len(room['ready_players']),
-        'total_players': len(room['players'])
+        'total_players': len(room['players']),
+        'group_size': room['settings'].get('group_size', 4)
     }, room=room_id)
+
 
 @socketio.on('set_ready')
 def handle_set_ready(data):
-    # Achtung: Session funktioniert nicht zuverlässig mit SocketIO
-    # Wir müssen player_id und room_id vom Client empfangen
     room_id = data.get('room_id')
     player_id = data.get('player_id')
     
@@ -612,7 +663,8 @@ def handle_set_ready(data):
     emit('start_button_update', {
         'can_start': can_start,
         'ready_count': ready_count,
-        'total_players': total_players
+        'total_players': total_players,
+        'group_size': room['settings'].get('group_size', 4)
     }, room=room_id)
 
 @socketio.on('start_game')

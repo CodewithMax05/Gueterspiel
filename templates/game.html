@@ -320,7 +320,7 @@
     
     socket.on('connect', () => {
         console.log('✅ Verbunden mit Server:', socket.id);
-        socket.emit('join_room', { room_id: roomId });
+        socket.emit('join_room', { room_id: roomId, player_id: playerId });
         startTimer();
     });
     
