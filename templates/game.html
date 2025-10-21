@@ -309,7 +309,8 @@
         playerCoins,
         maxContribution,
         roundDuration,
-        totalPlayers
+        totalPlayers,
+        roomId
     });
     
     // Socket
@@ -318,7 +319,7 @@
     // === SOCKET EVENTS ===
     
     socket.on('connect', () => {
-        console.log('✅ Verbunden mit Server');
+        console.log('✅ Verbunden mit Server:', socket.id);
         socket.emit('join_room', { room_id: roomId });
         startTimer();
     });
@@ -418,7 +419,11 @@
         console.log('📤 Sende Beitrag:', selectedAmount);
         
         hasSubmitted = true;
-        socket.emit('submit_contribution', { amount: selectedAmount });
+        socket.emit('submit_contribution', { 
+            room_id: roomId,
+            player_id: playerId,
+            amount: selectedAmount 
+        });
         
         // UI deaktivieren
         disableContributionForm();

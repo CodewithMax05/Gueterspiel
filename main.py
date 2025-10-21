@@ -18,13 +18,13 @@ socketio = SocketIO(
     app, 
     cors_allowed_origins="*",
     async_mode='gevent',
-    manage_session=True,  # Session-Management aktivieren
+    manage_session=False,  # Session-Management deaktivieren für bessere Kompatibilität
     logger=True,
     engineio_logger=True,
     ping_timeout=60,
     ping_interval=25,
     allow_upgrades=True,
-    transports=['websocket', 'polling']
+    transports=['polling', 'websocket']  # Polling zuerst für bessere Kompatibilität
 )
 
 # In-Memory Speicher
@@ -393,7 +393,7 @@ class GameManager:
                 }
         return None
 
-# Routes (bleiben gleich)
+# Routes
 @app.route('/')
 def index():
     session.clear()
@@ -520,7 +520,7 @@ def available_rooms():
 @socketio.on('connect')
 def handle_connect():
     print(f"🔌 Client verbunden: {request.sid}")
-    emit('connection_success', {'message': 'Verbunden'})
+    emit('connection_success', {'message': 'Verbunden', 'sid': request.sid})
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -529,36 +529,57 @@ def handle_disconnect():
 @socketio.on('join_room')
 def handle_join_room(data):
     room_id = data.get('room_id')
-    player_id = session.get('player_id')
     
-    if room_id and player_id:
-        join_room(room_id)
-        print(f"👥 {player_id} → Socket-Room {room_id}")
-        
-        # Raum-Update an alle senden
-        if room_id in rooms:
-            room = rooms[room_id]
-            emit('room_update', {
-                'players': [{
-                    'id': p['id'],
-                    'name': p['name'],
-                    'ready': p['ready']
-                } for p in room['players']],
-                'ready_count': len(room['ready_players'])
-            }, room=room_id)
+    print(f"👥 join_room Event: room_id={room_id}, sid={request.sid}")
+    
+    if not room_id:
+        print(f"❌ Kein room_id in join_room Event")
+        emit('error', {'message': 'Keine room_id'})
+        return
+    
+    if room_id not in rooms:
+        print(f"❌ Raum {room_id} nicht gefunden")
+        emit('error', {'message': 'Raum nicht gefunden'})
+        return
+    
+    # Dem Socket-Room beitreten
+    join_room(room_id)
+    print(f"✅ Socket {request.sid} → Room {room_id}")
+    
+    # Bestätigung zurücksenden
+    emit('room_joined', {
+        'room_id': room_id,
+        'message': 'Erfolgreich beigetreten'
+    })
+    
+    # Raum-Update an alle senden
+    room = rooms[room_id]
+    emit('room_update', {
+        'players': [{
+            'id': p['id'],
+            'name': p['name'],
+            'ready': p['ready']
+        } for p in room['players']],
+        'ready_count': len(room['ready_players']),
+        'total_players': len(room['players'])
+    }, room=room_id)
 
 @socketio.on('set_ready')
 def handle_set_ready(data):
-    room_id = session.get('room_id')
-    player_id = session.get('player_id')
+    # Achtung: Session funktioniert nicht zuverlässig mit SocketIO
+    # Wir müssen player_id und room_id vom Client empfangen
+    room_id = data.get('room_id')
+    player_id = data.get('player_id')
     
-    print(f"✋ Ready-Event: room={room_id}, player={player_id}")
+    print(f"✋ Ready-Event: room={room_id}, player={player_id}, sid={request.sid}")
     
     if not room_id or room_id not in rooms:
+        print(f"❌ Raum {room_id} nicht gefunden")
         emit('error', {'message': 'Raum nicht gefunden'})
         return
         
     if not player_id or player_id not in players:
+        print(f"❌ Spieler {player_id} nicht gefunden")
         emit('error', {'message': 'Spieler nicht gefunden'})
         return
     
@@ -595,9 +616,9 @@ def handle_set_ready(data):
     }, room=room_id)
 
 @socketio.on('start_game')
-def handle_start_game():
-    room_id = session.get('room_id')
-    player_id = session.get('player_id')
+def handle_start_game(data):
+    room_id = data.get('room_id')
+    player_id = data.get('player_id')
     
     print(f"🎮 Start-Event von {player_id} für Raum {room_id}")
     
@@ -618,8 +639,8 @@ def handle_start_game():
 
 @socketio.on('submit_contribution')
 def handle_submit_contribution(data):
-    room_id = session.get('room_id')
-    player_id = session.get('player_id')
+    room_id = data.get('room_id')
+    player_id = data.get('player_id')
     amount = int(data.get('amount', 0))
     
     if GameManager.submit_contribution(room_id, player_id, amount):
@@ -634,8 +655,8 @@ def handle_submit_contribution(data):
         })
 
 @socketio.on('continue_to_next_round')
-def handle_continue_next_round():
-    room_id = session.get('room_id')
+def handle_continue_next_round(data):
+    room_id = data.get('room_id')
     
     if GameManager.start_next_round(room_id):
         emit('next_round_started', {
