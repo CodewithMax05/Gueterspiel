@@ -1,11 +1,14 @@
+from gevent import monkey, spawn, sleep
+monkey.patch_all()
+
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_socketio import SocketIO, join_room, leave_room, emit
 import random
 import uuid
 from collections import defaultdict
-from threading import Lock, Thread, Timer
+from threading import Lock  # Lock kann bleiben, wird von monkey.patch_all() gepatcht
 import os
-import time
+import time  # wird auch gepatcht
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
@@ -13,11 +16,14 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
 socketio = SocketIO(
     app, 
     cors_allowed_origins="*",
-    async_mode='gevent',  # Statt 'threading'
+    async_mode='gevent',
+    manage_session=False,  # ← WICHTIG!
     logger=True,
     engineio_logger=True,
     ping_timeout=60,
-    ping_interval=25
+    ping_interval=25,
+    allow_upgrades=True,  # ← WICHTIG!
+    transports=['websocket', 'polling']  # ← WICHTIG!
 )
 
 # In-Memory Speicher
@@ -121,7 +127,7 @@ class GameManager:
     
     @staticmethod
     def _start_round_timer(room_id):
-        """Server-seitiger Timer für Runden"""
+        """Server-seitiger Timer für Runden mit gevent"""
         if room_id not in rooms:
             return
             
@@ -139,16 +145,18 @@ class GameManager:
                         if player['id'] not in game_data['contributions']:
                             game_data['contributions'][player['id']] = 0
                     
-                    # Runde beenden
                     print(f"⏰ Timer abgelaufen für Raum {room_id}")
                     socketio.emit('round_time_up', room=room_id)
                     
-                    # Ergebnisse berechnen
-                    Thread(target=GameManager._process_round_end, args=(room_id,)).start()
+                    # Ergebnisse berechnen mit gevent spawn statt Thread
+                    spawn(GameManager._process_round_end, room_id)
         
-        timer = Timer(round_duration, timer_callback)
-        timer.start()
-        round_timers[room_id] = timer
+        def timer_greenlet():
+            sleep(round_duration)  # gevent.sleep statt time.sleep!
+            timer_callback()
+        
+        greenlet = spawn(timer_greenlet)
+        round_timers[room_id] = greenlet
         
         print(f"⏰ Timer gestartet für Raum {room_id}: {round_duration}s")
     
@@ -185,7 +193,6 @@ class GameManager:
                         round_timers[room_id].cancel()
                     
                     print(f"✅ Alle Spieler haben eingezahlt in Raum {room_id}")
-                    Thread(target=GameManager._process_round_end, args=(room_id,)).start()
                 
                 return True
         return False
