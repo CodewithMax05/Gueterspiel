@@ -2,135 +2,400 @@
 
 {% block head %}
 <style>
-    .balance { 
-        font-size: 24px; 
-        font-weight: bold; 
-        margin: 20px 0; 
-        text-align: center;
-    }
-    .contribution-options { 
-        display: flex; 
-        flex-wrap: wrap; 
-        gap: 10px; 
-        margin: 20px 0; 
-        justify-content: center;
-    }
-    .coin-option { 
-        padding: 15px; 
-        border: 2px solid #007bff; 
-        border-radius: 5px; 
-        cursor: pointer; 
-        text-align: center; 
-        min-width: 80px;
-        transition: all 0.3s ease;
-    }
-    .coin-option:hover { 
-        background: #007bff; 
-        color: white;
-    }
-    .coin-option.selected { 
-        background: #007bff; 
-        color: white; 
-        transform: scale(1.05);
-    }
-    .timer { 
-        font-size: 20px; 
-        margin: 20px 0;
-        text-align: center;
-    }
     .game-container {
-        max-width: 800px;
+        max-width: 900px;
         margin: 0 auto;
         padding: 20px;
     }
-    .loading-spinner {
-        border: 4px solid #f3f3f3;
-        border-top: 4px solid #007bff;
+    
+    .round-header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+    
+    .round-number {
+        font-size: 36px;
+        font-weight: bold;
+        color: #667eea;
+    }
+    
+    .balance-display {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        padding: 20px;
+        text-align: center;
+        margin: 20px 0;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+    }
+    
+    .balance-amount {
+        font-size: 48px;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+    
+    .timer-display {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 20px;
+        text-align: center;
+        margin: 20px 0;
+        border: 2px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .timer-time {
+        font-size: 48px;
+        font-weight: bold;
+        color: #28a745;
+    }
+    
+    .timer-time.warning {
+        color: #ffc107;
+    }
+    
+    .timer-time.danger {
+        color: #dc3545;
+        animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.8; transform: scale(1.05); }
+    }
+    
+    .group-info {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 20px;
+        margin: 20px 0;
+        border-left: 4px solid #667eea;
+    }
+    
+    .group-members {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 10px;
+    }
+    
+    .member-badge {
+        background: rgba(102, 126, 234, 0.2);
+        padding: 8px 15px;
+        border-radius: 20px;
+        font-size: 14px;
+        border: 1px solid #667eea;
+    }
+    
+    .member-badge.you {
+        background: rgba(102, 126, 234, 0.4);
+        font-weight: bold;
+        border: 2px solid #667eea;
+    }
+    
+    .contribution-section {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 25px;
+        margin: 20px 0;
+    }
+    
+    .contribution-options {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+        gap: 10px;
+        margin: 20px 0;
+    }
+    
+    .coin-option {
+        padding: 15px;
+        border: 2px solid #667eea;
+        border-radius: 8px;
+        cursor: pointer;
+        text-align: center;
+        background: rgba(102, 126, 234, 0.1);
+        transition: all 0.3s ease;
+        font-weight: 600;
+    }
+    
+    .coin-option:hover {
+        background: rgba(102, 126, 234, 0.3);
+        transform: translateY(-2px);
+    }
+    
+    .coin-option.selected {
+        background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        transform: scale(1.05);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.5);
+    }
+    
+    .coin-option.disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+    
+    .submit-button {
+        width: 100%;
+        padding: 20px;
+        font-size: 20px;
+        margin-top: 20px;
+    }
+    
+    .waiting-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.8);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+    
+    .waiting-content {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        padding: 40px;
+        border-radius: 12px;
+        text-align: center;
+        max-width: 400px;
+    }
+    
+    .spinner {
+        border: 4px solid rgba(255, 255, 255, 0.1);
+        border-top: 4px solid #667eea;
         border-radius: 50%;
-        width: 40px;
-        height: 40px;
+        width: 60px;
+        height: 60px;
         animation: spin 1s linear infinite;
-        margin: 10px auto;
+        margin: 20px auto;
     }
     
     @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
+    
+    .submitted-count {
+        background: rgba(40, 167, 69, 0.2);
+        padding: 10px 20px;
+        border-radius: 8px;
+        margin: 15px 0;
+        border: 1px solid #28a745;
+    }
+    
+    @media (max-width: 768px) {
+        .balance-amount {
+            font-size: 36px;
+        }
+        
+        .timer-time {
+            font-size: 36px;
+        }
+        
+        .contribution-options {
+            grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+        }
+    }
 </style>
 {% endblock %}
 
 {% block body %}
-<!-- Daten für JavaScript in HTML-Attributen speichern -->
+<!-- Daten für JavaScript -->
 <div id="game-data" 
      data-player-coins="{{ player.coins }}" 
      data-player-id="{{ player.id }}"
+     data-player-name="{{ player.name }}"
      data-room-id="{{ room.id }}"
      data-current-round="{{ current_round }}"
+     data-round-duration="{{ room.settings.round_duration }}"
+     data-max-contribution="{{ room.settings.max_contribution }}"
+     data-total-players="{{ room.players|length }}"
      style="display: none;">
 </div>
 
 <div class="game-container">
-    <h1 style="text-align: center;">Runde <span id="currentRound">{{ current_round }}</span></h1>
-    
-    <div class="balance">
-        Aktuelles Guthaben: <span id="currentBalance">{{ player.coins }}</span> Coins
+    <!-- Runden-Header -->
+    <div class="round-header">
+        <div class="round-number">Runde <span id="currentRound">{{ current_round }}</span></div>
     </div>
     
-    <div class="timer">
-        Verbleibende Zeit: <span id="timer">60</span> Sekunden
+    <!-- Guthaben -->
+    <div class="balance-display">
+        <div style="font-size: 18px; opacity: 0.9;">Dein Guthaben</div>
+        <div class="balance-amount" id="currentBalance">{{ "%.1f"|format(player.coins) }}</div>
+        <div style="font-size: 14px; opacity: 0.8;">Coins</div>
     </div>
     
-    <div class="card">
-        <h3 style="text-align: center;">Wie viel möchtest du in das öffentliche Gut einzahlen?</h3>
-        <div class="contribution-options" id="coinOptions">
-            <!-- Options werden per JavaScript generiert -->
+    <!-- Timer -->
+    <div class="timer-display">
+        <div style="font-size: 18px; margin-bottom: 10px;">⏱️ Verbleibende Zeit</div>
+        <div class="timer-time" id="timer">--</div>
+        <div style="font-size: 14px; margin-top: 5px; opacity: 0.7;">Sekunden</div>
+    </div>
+    
+    <!-- Gruppeninformation -->
+    {% if player_group %}
+    <div class="group-info">
+        <h3>👥 Deine Gruppe {{ player_group.group_number }}</h3>
+        <div class="group-members">
+            {% for member in player_group.members %}
+            <div class="member-badge {% if member == player.name %}you{% endif %}">
+                {{ member }}{% if member == player.name %} (Du){% endif %}
+            </div>
+            {% endfor %}
         </div>
     </div>
+    {% endif %}
     
-    <div style="text-align: center; margin: 20px 0;">
-        <button class="btn" id="submitBtn" disabled>Beitrag einreichen</button>
-    </div>
-    
-    <div id="waitingMessage" style="display: none; text-align: center; margin-top: 20px;">
-        <p>Warte auf andere Spieler...</p>
-        <div class="loading-spinner"></div>
+    <!-- Einzahlungsbereich -->
+    <div class="contribution-section">
+        <h3 style="text-align: center; margin-bottom: 20px;">
+            💰 Wie viel möchtest du einzahlen?
+        </h3>
+        
+        <div class="contribution-options" id="coinOptions">
+            <!-- Wird per JavaScript generiert -->
+        </div>
+        
+        <button class="btn submit-button" id="submitBtn" disabled>
+            Beitrag einreichen
+        </button>
+        
+        <div style="text-align: center; margin-top: 15px; color: #aaa; font-size: 14px;">
+            Wähle einen Betrag zwischen 0 und <span id="maxAmount">{{ room.settings.max_contribution }}</span> Coins
+        </div>
     </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
+<!-- Warte-Overlay -->
+<div class="waiting-overlay" id="waitingOverlay">
+    <div class="waiting-content">
+        <h2>⏳ Warte auf andere Spieler</h2>
+        <div class="spinner"></div>
+        <p>Du hast deinen Beitrag eingereicht</p>
+        <div class="submitted-count" id="submittedCount">
+            <span id="submittedNumber">0</span> von <span id="totalPlayers">{{ room.players|length }}</span> Spielern haben eingereicht
+        </div>
+    </div>
+</div>
+
 <script>
-    // Daten aus HTML-Attributen lesen
+    // Daten laden
     const gameData = document.getElementById('game-data');
-    const playerData = {
-        coins: parseInt(gameData.dataset.playerCoins),
-        id: gameData.dataset.playerId
-    };
-    
+    const playerCoins = parseFloat(gameData.dataset.playerCoins);
+    const playerId = gameData.dataset.playerId;
+    const playerName = gameData.dataset.playerName;
     const roomId = gameData.dataset.roomId;
     const currentRound = parseInt(gameData.dataset.currentRound);
+    const roundDuration = parseInt(gameData.dataset.roundDuration);
+    const maxContribution = Math.min(
+        playerCoins, 
+        parseInt(gameData.dataset.maxContribution)
+    );
+    const totalPlayers = parseInt(gameData.dataset.totalPlayers);
     
     let selectedAmount = null;
-    let timeLeft = 60;
-    let timerInterval;
-    let socket;
-
-    // Coin-Optionen generieren
-    function generateCoinOptions() {
-        const coinOptions = document.getElementById('coinOptions');
-        coinOptions.innerHTML = '';
+    let timeLeft = roundDuration;
+    let timerInterval = null;
+    let hasSubmitted = false;
+    let submittedPlayers = 0;
+    
+    console.log('🎮 Spiel initialisiert:', {
+        playerId,
+        playerCoins,
+        maxContribution,
+        roundDuration,
+        totalPlayers
+    });
+    
+    // Socket
+    const socket = io();
+    
+    // === SOCKET EVENTS ===
+    
+    socket.on('connect', () => {
+        console.log('✅ Verbunden mit Server');
+        socket.emit('join_room', { room_id: roomId });
+        startTimer();
+    });
+    
+    socket.on('disconnect', () => {
+        console.log('❌ Verbindung getrennt');
+        clearInterval(timerInterval);
+    });
+    
+    socket.on('contribution_submitted', (data) => {
+        console.log('💰 Beitrag eingereicht:', data);
         
-        for (let i = 0; i <= playerData.coins; i++) {
+        if (data.player_id === playerId) {
+            // Eigener Beitrag
+            document.getElementById('waitingOverlay').style.display = 'flex';
+        } else {
+            // Anderer Spieler
+            submittedPlayers++;
+            updateSubmittedCount();
+            createFlashMessage(`${data.player_name} hat eingereicht`, 'info');
+        }
+    });
+    
+    socket.on('round_time_up', () => {
+        console.log('⏰ Zeit abgelaufen!');
+        clearInterval(timerInterval);
+        
+        if (!hasSubmitted) {
+            createFlashMessage('Zeit abgelaufen! Automatisch 0 Coins eingezahlt', 'warning');
+            hasSubmitted = true;
+            document.getElementById('waitingOverlay').style.display = 'flex';
+        }
+    });
+    
+    socket.on('show_round_results', (data) => {
+        console.log('📊 Rundenergebnisse erhalten');
+        clearInterval(timerInterval);
+        createFlashMessage('Runde beendet! Zeige Ergebnisse...', 'success');
+        setTimeout(() => {
+            window.location.href = '/round_results';
+        }, 1000);
+    });
+    
+    socket.on('contribution_failed', (data) => {
+        console.error('❌ Beitrag fehlgeschlagen:', data);
+        createFlashMessage(data.message, 'error');
+        hasSubmitted = false;
+        document.getElementById('waitingOverlay').style.display = 'none';
+        enableContributionForm();
+    });
+    
+    // === FUNKTIONEN ===
+    
+    function generateCoinOptions() {
+        const container = document.getElementById('coinOptions');
+        container.innerHTML = '';
+        
+        for (let i = 0; i <= maxContribution; i++) {
             const option = document.createElement('div');
             option.className = 'coin-option';
-            option.textContent = i + ' Coins';
-            option.addEventListener('click', () => selectAmount(i));
-            coinOptions.appendChild(option);
+            option.textContent = i;
+            option.dataset.amount = i;
+            
+            if (i > playerCoins) {
+                option.classList.add('disabled');
+                option.title = 'Nicht genug Guthaben';
+            } else {
+                option.addEventListener('click', () => selectAmount(i, option));
+            }
+            
+            container.appendChild(option);
         }
     }
-
-    function selectAmount(amount) {
+    
+    function selectAmount(amount, element) {
+        if (hasSubmitted) return;
+        
         selectedAmount = amount;
         
         // Alle Optionen zurücksetzen
@@ -139,69 +404,93 @@
         });
         
         // Ausgewählte Option markieren
-        event.target.classList.add('selected');
+        element.classList.add('selected');
+        
+        // Submit-Button aktivieren
         document.getElementById('submitBtn').disabled = false;
+        
+        console.log('💵 Betrag ausgewählt:', amount);
     }
     
     function submitContribution() {
-        if (selectedAmount !== null) {
-            socket.emit('submit_contribution', {amount: selectedAmount});
-            document.getElementById('submitBtn').disabled = true;
-            document.getElementById('waitingMessage').style.display = 'block';
-        }
+        if (selectedAmount === null || hasSubmitted) return;
+        
+        console.log('📤 Sende Beitrag:', selectedAmount);
+        
+        hasSubmitted = true;
+        socket.emit('submit_contribution', { amount: selectedAmount });
+        
+        // UI deaktivieren
+        disableContributionForm();
+        
+        // Eigenen Zähler erhöhen
+        submittedPlayers++;
+        updateSubmittedCount();
+    }
+    
+    function disableContributionForm() {
+        document.querySelectorAll('.coin-option').forEach(opt => {
+            opt.style.pointerEvents = 'none';
+            opt.style.opacity = '0.5';
+        });
+        document.getElementById('submitBtn').disabled = true;
+    }
+    
+    function enableContributionForm() {
+        document.querySelectorAll('.coin-option:not(.disabled)').forEach(opt => {
+            opt.style.pointerEvents = 'auto';
+            opt.style.opacity = '1';
+        });
+        document.getElementById('submitBtn').disabled = selectedAmount === null;
+    }
+    
+    function updateSubmittedCount() {
+        document.getElementById('submittedNumber').textContent = submittedPlayers;
     }
     
     function startTimer() {
+        const timerElement = document.getElementById('timer');
+        timerElement.textContent = timeLeft;
+        
         timerInterval = setInterval(() => {
             timeLeft--;
-            document.getElementById('timer').textContent = timeLeft;
+            timerElement.textContent = timeLeft;
             
+            // Farbe ändern je nach verbleibender Zeit
+            timerElement.className = 'timer-time';
             if (timeLeft <= 10) {
-                document.getElementById('timer').style.color = '#dc3545';
+                timerElement.classList.add('danger');
+            } else if (timeLeft <= 30) {
+                timerElement.classList.add('warning');
             }
             
+            // Zeit abgelaufen
             if (timeLeft <= 0) {
                 clearInterval(timerInterval);
-                // Automatisch 0 Coins einzahlen wenn Zeit abgelaufen
-                if (selectedAmount === null) {
-                    socket.emit('submit_contribution', {amount: 0});
+                
+                // Automatisch 0 einzahlen wenn noch nichts eingereicht
+                if (!hasSubmitted) {
+                    selectedAmount = 0;
+                    submitContribution();
                 }
             }
         }, 1000);
     }
-
-    // Socket.IO Initialisierung
-    function initializeSocket() {
-        socket = io();
-        
-        socket.emit('join_room', {room_id: roomId});
-        
-        socket.on('contribution_submitted', (data) => {
-            if (data.player_id !== playerData.id) {
-                createFlashMessage('Ein Spieler hat seinen Beitrag eingereicht', 'info');
-            }
-        });
-        
-        socket.on('round_results', (results) => {
-            window.location.href = '/evaluation';
-        });
-        
-        socket.on('game_finished', () => {
-            createFlashMessage('Spiel beendet!', 'success');
-            setTimeout(() => {
-                window.location.href = '/evaluation';
-            }, 2000);
-        });
-    }
-
-    // Initialisierung wenn Seite geladen ist
+    
+    // === INITIALISIERUNG ===
+    
     document.addEventListener('DOMContentLoaded', function() {
+        // Coin-Optionen generieren
         generateCoinOptions();
-        startTimer();
-        initializeSocket();
         
-        // Event Listener für Submit Button
+        // Submit-Button Handler
         document.getElementById('submitBtn').addEventListener('click', submitContribution);
+        
+        // Spieler-Zähler initialisieren
+        document.getElementById('totalPlayers').textContent = totalPlayers;
+        updateSubmittedCount();
+        
+        console.log('✅ UI initialisiert');
     });
 </script>
 {% endblock %}

@@ -27,6 +27,23 @@
         margin: 15px 0;
         border-left: 4px solid #ffc107;
     }
+    .connection-status {
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        padding: 10px 15px;
+        border-radius: 8px;
+        font-size: 14px;
+        z-index: 999;
+    }
+    .connection-status.connected {
+        background: rgba(40, 167, 69, 0.3);
+        border: 1px solid #28a745;
+    }
+    .connection-status.disconnected {
+        background: rgba(220, 53, 69, 0.3);
+        border: 1px solid #dc3545;
+    }
 </style>
 {% endblock %}
 
@@ -37,9 +54,15 @@
      data-is-leader="{{ 'true' if is_leader else 'false' }}"
      data-ready-count="{{ room.ready_players|length }}"
      data-total-players="{{ room.players|length }}"
+     data-group-size="{{ room.settings.group_size }}"
      data-player-id="{{ player.id }}"
      data-player-ready="{{ 'true' if player.ready else 'false' }}"
      style="display: none;">
+</div>
+
+<!-- Verbindungsstatus -->
+<div id="connectionStatus" class="connection-status disconnected">
+    🔴 Verbinde...
 </div>
 
 <div class="container">
@@ -56,8 +79,8 @@
     <div class="requirements">
         <h4>Voraussetzungen für Spielstart:</h4>
         <ul>
-            <li id="reqMinPlayers">✓ Mindestens 4 Spieler bereit</li>
-            <li id="reqDivisible">✓ Anzahl der Spieler muss durch 4 teilbar sein</li>
+            <li id="reqMinPlayers">Prüfe...</li>
+            <li id="reqDivisible">Prüfe...</li>
         </ul>
     </div>
     {% endif %}
@@ -65,15 +88,17 @@
     <div class="player-list">
         <h3>Spieler ({{ room.players|length }}):</h3>
         <div id="playersContainer">
-            {% for player in room.players %}
-            <div class="player-item {% if player.ready %}ready{% endif %}" id="player-{{ player.id }}">
-                {{ player.name }} 
-                {% if player.ready %}
-                <span style="color: #28a745;">✅ Bereit</span>
-                {% else %}
-                <span style="color: #dc3545;">❌ Nicht bereit</span>
-                {% endif %}
-                {% if player.id == room.leader %}
+            {% for p in room.players %}
+            <div class="player-item {% if p.ready %}ready{% endif %}" id="player-{{ p.id }}">
+                <span class="player-name">{{ p.name }}</span>
+                <span class="player-status">
+                    {% if p.ready %}
+                    <span style="color: #28a745;">✅ Bereit</span>
+                    {% else %}
+                    <span style="color: #dc3545;">❌ Nicht bereit</span>
+                    {% endif %}
+                </span>
+                {% if p.id == room.leader %}
                 <span style="color: #ffc107;">👑 (Leader)</span>
                 {% endif %}
             </div>
@@ -83,7 +108,9 @@
     
     <!-- Button für ALLE Spieler, die noch nicht bereit sind -->
     {% if not player.ready %}
-    <button class="btn" id="readyBtn">Bereit</button>
+    <button class="btn" id="readyBtn" disabled title="Warte auf Verbindung...">
+        ⏳ Verbinde...
+    </button>
     {% endif %}
     
     {% if is_leader %}
@@ -93,56 +120,119 @@
 </div>
 
 <script>
-    // Daten für JavaScript
+    // Daten aus HTML lesen
     const roomData = document.getElementById('room-data');
     const roomId = roomData.dataset.roomId;
     const isLeader = roomData.dataset.isLeader === 'true';
     const playerId = roomData.dataset.playerId;
     const playerReady = roomData.dataset.playerReady === 'true';
+    const groupSize = parseInt(roomData.dataset.groupSize) || 4;
     let readyCount = parseInt(roomData.dataset.readyCount);
     const totalPlayers = parseInt(roomData.dataset.totalPlayers);
 
-    console.log('Initialisierung:', { roomId, isLeader, playerId, playerReady, readyCount, totalPlayers });
+    console.log('🎮 Initialisierung:', { 
+        roomId, 
+        isLeader, 
+        playerId, 
+        playerReady, 
+        readyCount, 
+        totalPlayers,
+        groupSize 
+    });
 
+    // Socket initialisieren
     const socket = io();
+    let isConnected = false;
+    let roomJoined = false;
 
-    // Raum sofort betreten wenn Seite geladen ist
-    socket.emit('join_room', { room_id: roomId });
+    // Verbindungsstatus UI
+    function updateConnectionStatus(connected) {
+        const statusDiv = document.getElementById('connectionStatus');
+        if (connected) {
+            statusDiv.textContent = '🟢 Verbunden';
+            statusDiv.className = 'connection-status connected';
+            // Status nach 3 Sekunden ausblenden
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 3000);
+        } else {
+            statusDiv.textContent = '🔴 Verbinde...';
+            statusDiv.className = 'connection-status disconnected';
+            statusDiv.style.display = 'block';
+        }
+    }
 
+    // === SOCKET EVENTS ===
+    
     socket.on('connect', () => {
-        console.log('Mit Server verbunden');
+        console.log('✅ Socket verbunden:', socket.id);
+        isConnected = true;
+        updateConnectionStatus(true);
+        
+        // JETZT erst dem Raum beitreten
+        console.log('📡 Sende join_room für:', roomId);
+        socket.emit('join_room', { room_id: roomId });
+        roomJoined = true;
+        
+        // Ready Button aktivieren wenn Spieler noch nicht bereit ist
+        const readyBtn = document.getElementById('readyBtn');
+        if (readyBtn && !playerReady) {
+            readyBtn.disabled = false;
+            readyBtn.textContent = '✋ Bereit';
+            readyBtn.title = 'Klicke um bereit zu sein';
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log('❌ Socket getrennt');
+        isConnected = false;
+        roomJoined = false;
+        updateConnectionStatus(false);
+    });
+
+    socket.on('error', (error) => {
+        console.error('❌ Socket-Fehler:', error);
+        createFlashMessage('Verbindungsfehler: ' + error.message, 'error');
     });
 
     socket.on('player_joined', (data) => {
-        console.log('Spieler beigetreten:', data);
-        // Seite neu laden um aktuelle Spielerliste anzuzeigen
+        console.log('👤 Spieler beigetreten:', data);
         if (data.player_id !== playerId) {
+            createFlashMessage(`${data.player_name} ist beigetreten`, 'info');
             setTimeout(() => location.reload(), 1000);
         }
     });
 
     socket.on('player_ready', (data) => {
-        console.log('Spieler bereit:', data);
+        console.log('✅ Spieler bereit:', data);
         
+        // Update Player in Liste
         const playerElement = document.getElementById(`player-${data.player_id}`);
         if (playerElement) {
             playerElement.classList.add('ready');
-            const readySpan = playerElement.querySelector('span') || playerElement;
-            if (readySpan.innerHTML.includes('Nicht bereit')) {
-                readySpan.innerHTML = readySpan.innerHTML.replace('❌ Nicht bereit', '✅ Bereit');
+            const statusSpan = playerElement.querySelector('.player-status');
+            if (statusSpan) {
+                statusSpan.innerHTML = '<span style="color: #28a745;">✅ Bereit</span>';
             }
         }
         
-        // Aktualisiere Bereit-Zähler
+        // Update Counter
         readyCount++;
         document.getElementById('readyCount').textContent = readyCount;
         
-        // Aktualisiere Requirements für Leader
+        // Flash-Nachricht
+        if (data.player_id === playerId) {
+            createFlashMessage('Du bist jetzt bereit!', 'success');
+        } else {
+            createFlashMessage(`${data.player_name} ist bereit!`, 'info');
+        }
+        
+        // Leader: Update Start-Button
         if (isLeader) {
             updateStartButton();
         }
         
-        // Wenn der aktuelle Spieler bereit ist, verstecke den Button
+        // Eigener Ready-Button verstecken
         if (data.player_id === playerId) {
             const readyBtn = document.getElementById('readyBtn');
             if (readyBtn) {
@@ -152,79 +242,131 @@
     });
 
     socket.on('start_button_update', (data) => {
-        console.log('Start button update:', data);
+        console.log('🎮 Start-Button Update:', data);
         if (isLeader) {
-            document.getElementById('startBtn').disabled = !data.can_start;
-            updateRequirements(data.can_start);
+            const startBtn = document.getElementById('startBtn');
+            if (startBtn) {
+                startBtn.disabled = !data.can_start;
+            }
+            updateRequirements(data.can_start, data.ready_count, data.total_players);
         }
     });
 
     socket.on('start_failed', (data) => {
-        console.log('Start fehlgeschlagen:', data);
+        console.log('❌ Start fehlgeschlagen:', data);
+        createFlashMessage(data.message, 'error');
+        
         if (isLeader) {
             const errorDiv = document.getElementById('startError');
-            errorDiv.style.display = 'block';
-            errorDiv.textContent = data.message;
-            // Nach 5 Sekunden ausblenden
-            setTimeout(() => {
-                errorDiv.style.display = 'none';
-            }, 5000);
+            if (errorDiv) {
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = data.message;
+                setTimeout(() => {
+                    errorDiv.style.display = 'none';
+                }, 5000);
+            }
+            
+            // Start-Button wieder aktivieren
+            const startBtn = document.getElementById('startBtn');
+            if (startBtn) {
+                startBtn.disabled = false;
+                startBtn.textContent = 'Spiel starten';
+            }
         }
     });
 
     socket.on('game_started', () => {
-        console.log('Spiel gestartet, weiterleiten...');
-        window.location.href = '/game';
+        console.log('🚀 Spiel gestartet!');
+        createFlashMessage('Spiel startet jetzt!', 'success');
+        setTimeout(() => {
+            window.location.href = '/game';
+        }, 500);
     });
 
+    // === FUNKTIONEN ===
+
     function updateStartButton() {
-        const canStart = readyCount >= 4 && readyCount % 4 === 0 && totalPlayers % 4 === 0;
+        const canStart = readyCount >= groupSize && 
+                        readyCount % groupSize === 0 && 
+                        totalPlayers % groupSize === 0;
+        
         const startBtn = document.getElementById('startBtn');
         if (startBtn) {
             startBtn.disabled = !canStart;
         }
-        updateRequirements(canStart);
+        updateRequirements(canStart, readyCount, totalPlayers);
     }
 
-    function updateRequirements(canStart) {
+    function updateRequirements(canStart, ready, total) {
         const reqMinPlayers = document.getElementById('reqMinPlayers');
         const reqDivisible = document.getElementById('reqDivisible');
         
         if (!reqMinPlayers || !reqDivisible) return;
         
-        if (canStart) {
-            reqMinPlayers.style.color = '#28a745';
-            reqDivisible.style.color = '#28a745';
-            reqMinPlayers.innerHTML = '✓ Mindestens 4 Spieler bereit';
-            reqDivisible.innerHTML = '✓ Anzahl der Spieler muss durch 4 teilbar sein';
-        } else {
-            reqMinPlayers.style.color = '#dc3545';
-            reqDivisible.style.color = '#dc3545';
-            reqMinPlayers.innerHTML = `✗ Mindestens 4 Spieler bereit (aktuell: ${readyCount})`;
-            reqDivisible.innerHTML = `✗ Anzahl der Spieler muss durch 4 teilbar sein (aktuell: ${readyCount}/${totalPlayers})`;
-        }
+        const minMet = ready >= groupSize;
+        const divisibleMet = ready % groupSize === 0 && total % groupSize === 0;
+        
+        reqMinPlayers.style.color = minMet ? '#28a745' : '#dc3545';
+        reqMinPlayers.innerHTML = minMet 
+            ? `✓ Mindestens ${groupSize} Spieler bereit` 
+            : `✗ Mindestens ${groupSize} Spieler bereit (aktuell: ${ready})`;
+        
+        reqDivisible.style.color = divisibleMet ? '#28a745' : '#dc3545';
+        reqDivisible.innerHTML = divisibleMet 
+            ? `✓ Anzahl durch ${groupSize} teilbar` 
+            : `✗ Anzahl durch ${groupSize} teilbar (aktuell: ${ready}/${total})`;
     }
 
-    // Event Listener für Buttons
+    // === EVENT HANDLERS ===
+
     document.addEventListener('DOMContentLoaded', function() {
         const readyBtn = document.getElementById('readyBtn');
         const startBtn = document.getElementById('startBtn');
         
+        // Ready-Button Handler
         if (readyBtn && !playerReady) {
             readyBtn.addEventListener('click', function() {
-                console.log('Sende set_ready event');
-                socket.emit('set_ready', {});
+                if (!isConnected) {
+                    createFlashMessage('Keine Verbindung zum Server', 'error');
+                    return;
+                }
+                
+                if (!roomJoined) {
+                    createFlashMessage('Raum noch nicht beigetreten', 'error');
+                    return;
+                }
+                
+                console.log('📤 Sende set_ready Event');
                 this.disabled = true;
-                this.textContent = 'Wird gesendet...';
+                this.textContent = '⏳ Sende...';
+                
+                socket.emit('set_ready', {});
+                
+                // Timeout falls keine Antwort kommt
+                setTimeout(() => {
+                    if (this.disabled && this.textContent === '⏳ Sende...') {
+                        console.error('⚠️ Keine Antwort auf set_ready erhalten');
+                        this.disabled = false;
+                        this.textContent = '✋ Bereit';
+                        createFlashMessage('Keine Antwort vom Server. Versuche es erneut.', 'error');
+                    }
+                }, 5000);
             });
         }
         
+        // Start-Button Handler (nur Leader)
         if (startBtn && isLeader) {
             startBtn.addEventListener('click', function() {
-                console.log('Sende start_game event');
-                socket.emit('start_game');
+                if (!isConnected) {
+                    createFlashMessage('Keine Verbindung zum Server', 'error');
+                    return;
+                }
+                
+                console.log('🎮 Sende start_game Event');
                 this.disabled = true;
-                this.textContent = 'Starte Spiel...';
+                this.textContent = '🚀 Starte...';
+                
+                socket.emit('start_game');
             });
         }
         
@@ -233,7 +375,7 @@
             updateStartButton();
         }
         
-        // Verstecke den Ready-Button wenn der Spieler bereits bereit ist
+        // Verstecke Ready-Button wenn bereits bereit
         if (playerReady && readyBtn) {
             readyBtn.style.display = 'none';
         }
