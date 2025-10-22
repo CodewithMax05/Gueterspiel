@@ -16,15 +16,16 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
 # Verbesserte Socket.IO Konfiguration
 socketio = SocketIO(
     app, 
-    cors_allowed_origins="*",
     async_mode='gevent',
-    manage_session=False,  # Session-Management deaktivieren für bessere Kompatibilität
+    manage_session=True,  # WICHTIG: Session-Management aktivieren
     logger=True,
     engineio_logger=True,
     ping_timeout=60,
     ping_interval=25,
+    max_http_buffer_size=1e8,
     allow_upgrades=True,
-    transports=['polling', 'websocket']  # Polling zuerst für bessere Kompatibilität
+    transports=['websocket', 'polling'],  # WebSocket zuerst
+    cors_allowed_origins="*"
 )
 
 # In-Memory Speicher
@@ -521,7 +522,18 @@ def available_rooms():
 @socketio.on('connect')
 def handle_connect():
     print(f"🔌 Client verbunden: {request.sid}")
-    emit('connection_success', {'message': 'Verbunden', 'sid': request.sid})
+    # Session-Informationen verfügbar durch manage_session=True
+    player_id = session.get('player_id')
+    if player_id:
+        sid_to_player[request.sid] = player_id
+        print(f"✅ Session player_id {player_id} für SID {request.sid}")
+    
+    emit('connection_success', {
+        'message': 'Verbunden', 
+        'sid': request.sid,
+        'player_id': player_id,
+        'timestamp': time.time()
+    })
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -532,10 +544,9 @@ def handle_disconnect():
     if not player_id:
         return
 
-    # Finde den Raum des Spielers (falls vorhanden) und entferne ihn aus der Spielerliste / ready-set
+    # Finde und bereinige den Raum des Spielers
     affected_room = None
     for room_id, room in rooms.items():
-        # room['players'] enthält player-dicts
         for p in list(room['players']):
             if p['id'] == player_id:
                 room['players'].remove(p)
@@ -545,7 +556,6 @@ def handle_disconnect():
             room['ready_players'].discard(player_id)
             break
 
-    # Spieler-Daten entfernen (falls gewollt)
     players.pop(player_id, None)
 
     if affected_room:
@@ -564,12 +574,13 @@ def handle_disconnect():
 @socketio.on('join_room')
 def handle_join_room(data):
     room_id = data.get('room_id')
-    player_id = data.get('player_id') or session.get('player_id')
-
+    # WICHTIG: player_id aus Session nehmen, nicht aus data
+    player_id = session.get('player_id')
+    
     print(f"👥 join_room Event: room_id={room_id}, player_id={player_id}, sid={request.sid}")
 
     if not player_id:
-        emit('error', {'message': 'Keine player_id übergeben'})
+        emit('error', {'message': 'Keine player_id in Session'})
         return
 
     if not room_id or room_id not in rooms:
@@ -582,20 +593,6 @@ def handle_join_room(data):
     sid_to_player[request.sid] = player_id
     print(f"✅ Socket {request.sid} → Room {room_id} (player {player_id})")
 
-    # Falls der Spieler nicht in players existiert (z.B. Seite neu geladen), versuchen wir einen minimalen Eintrag
-    if player_id not in players:
-        initial_coins = rooms[room_id]['settings'].get('initial_coins', 10)
-        players[player_id] = {
-            'id': player_id,
-            'name': f"Spieler_{player_id[:8]}",
-            'ready': False,
-            'coins': initial_coins,
-            'balance_history': [initial_coins],
-            'contribution_history': []
-        }
-        rooms[room_id]['players'].append(players[player_id])
-        print(f"ℹ️ Spieler {player_id} neu angelegt und dem Raum hinzugefügt")
-
     # Bestätigung zurücksenden
     emit('room_joined', {
         'room_id': room_id,
@@ -603,7 +600,7 @@ def handle_join_room(data):
         'player_id': player_id
     })
 
-    # Raum-Update an alle senden (inkl. group_size für Client-UI)
+    # Raum-Update an alle senden
     room = rooms[room_id]
     emit('room_update', {
         'players': [{
@@ -616,11 +613,10 @@ def handle_join_room(data):
         'group_size': room['settings'].get('group_size', 4)
     }, room=room_id)
 
-
 @socketio.on('set_ready')
 def handle_set_ready(data):
     room_id = data.get('room_id')
-    player_id = data.get('player_id')
+    player_id = session.get('player_id')
     
     print(f"✋ Ready-Event: room={room_id}, player={player_id}, sid={request.sid}")
     

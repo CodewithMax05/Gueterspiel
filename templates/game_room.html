@@ -141,9 +141,13 @@
 
     // Socket initialisieren (transport order + reconnect defaults)
     const socket = io({
-        transports: ['websocket', 'polling'],
-        reconnectionAttempts: 5
+        transports: ['websocket', 'polling'],  // WebSocket zuerst
+        reconnectionAttempts: 5,
+        timeout: 10000,
+        forceNew: false,  // WICHTIG: false für Session-Sharing
+        autoConnect: true
     });
+    
     let isConnected = false;
 
     // Verbindungsstatus UI
@@ -166,11 +170,11 @@
         isConnected = true;
         updateConnectionStatus(true);
 
-        // Dem Raum beitreten, jetzt inkl. player_id
-        console.log('📡 Sende join_room für:', roomId, playerId);
-        socket.emit('join_room', { room_id: roomId, player_id: playerId });
+        // Dem Raum beitreten - player_id wird automatisch aus Session übermittelt
+        console.log('📡 Sende join_room für:', roomId);
+        socket.emit('join_room', { room_id: roomId });
 
-        // Ready Button aktivieren wenn Spieler noch nicht bereit ist
+        // Ready Button aktivieren
         const readyBtn = document.getElementById('readyBtn');
         if (readyBtn && !playerReady) {
             readyBtn.disabled = false;
@@ -178,9 +182,46 @@
         }
     });
 
+    // Connection Success Event hinzufügen
+    socket.on('connection_success', (data) => {
+        console.log('✅ Server bestätigt Verbindung:', data);
+        updateConnectionStatus(true);
+        
+        // Player-ID aus Session bestätigt
+        if (data.player_id && data.player_id === playerId) {
+            console.log('✅ Session-Sync erfolgreich');
+        }
+    });
+
     socket.on('room_joined', (data) => {
         console.log('📥 room_joined', data);
         // optional: bestätigung anzeigen
+    });
+
+    socket.on('reconnect_attempt', (attempt) => {
+        console.log(`🔄 Wiederherstellungsversuch: ${attempt}`);
+        updateConnectionStatus(false);
+    });
+
+    socket.on('reconnect', (attempt) => {
+        console.log('✅ Verbindung wiederhergestellt');
+        updateConnectionStatus(true);
+        
+        // Erneut dem Raum beitreten nach Reconnect
+        socket.emit('join_room', { room_id: roomId, player_id: playerId });
+    });
+
+    socket.on('connect_error', (error) => {
+        console.error('❌ Verbindungsfehler:', error);
+        updateConnectionStatus(false);
+        createFlashMessage('Verbindungsfehler: ' + error.message, 'error');
+        
+        // Ready Button deaktivieren
+        const readyBtn = document.getElementById('readyBtn');
+        if (readyBtn) {
+            readyBtn.disabled = true;
+            readyBtn.textContent = '❌ Verbindungsfehler';
+        }
     });
 
     socket.on('disconnect', () => {
@@ -310,9 +351,29 @@
                     createFlashMessage('Keine Verbindung zum Server', 'error');
                     return;
                 }
+                
+                if (playerReady) {
+                    createFlashMessage('Du bist bereits bereit!', 'info');
+                    return;
+                }
+                
                 this.disabled = true;
                 this.textContent = '⏳ Sende...';
-                socket.emit('set_ready', { room_id: roomId, player_id: playerId });
+                
+                console.log('📤 Sende set_ready für:', playerId);
+                socket.emit('set_ready', { 
+                    room_id: roomId 
+                    // player_id wird automatisch aus Session mitgesendet
+                });
+                
+                // Timeout für den Fall, dass keine Antwort kommt
+                setTimeout(() => {
+                    if (!playerReady && readyBtn.disabled) {
+                        readyBtn.disabled = false;
+                        readyBtn.textContent = '✋ Bereit';
+                        createFlashMessage('Timeout - Bitte erneut versuchen', 'error');
+                    }
+                }, 5000);
             });
         }
 

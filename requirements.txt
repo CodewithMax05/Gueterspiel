@@ -1,6 +1,7 @@
 Flask==3.1.1
 Flask-SocketIO==5.3.6
 python-socketio==5.10.0
+python-engineio==4.12.3
 gunicorn==23.0.0
 gevent==23.9.1
 gevent-websocket==0.10.1
