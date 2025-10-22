@@ -3,41 +3,48 @@ monkey.patch_all()
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_socketio import SocketIO, join_room, leave_room, emit
+from models import db, Room, Player, GameState, PlayerSession
 import random
 import uuid
 from collections import defaultdict
 from threading import Lock
 import os
 import time
+from datetime import datetime, timezone, timedelta
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
 
-# Verbesserte Socket.IO Konfiguration
+# Datenbank-Konfiguration
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///public_goods.db')
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db.init_app(app)
+
+# Socket.IO Konfiguration
 socketio = SocketIO(
     app, 
     async_mode='gevent',
-    manage_session=True,  # WICHTIG: Session-Management aktivieren
+    manage_session=True,
     logger=True,
     engineio_logger=True,
     ping_timeout=60,
     ping_interval=25,
     max_http_buffer_size=1e8,
     allow_upgrades=True,
-    transports=['websocket', 'polling'],  # WebSocket zuerst
+    transports=['websocket', 'polling'],
     cors_allowed_origins="*"
 )
 
-# In-Memory Speicher
-rooms = {}
-players = {}
-game_state = {}
-lock = Lock()
+# In-Memory Timer
 round_timers = {}
 sid_to_player = {}
+lock = Lock()
 
 class RoundTimer:
-    """Verbesserte Timer-Klasse basierend auf der alten Implementierung"""
     def __init__(self, socketio, room_id, duration=60):
         self.socketio = socketio
         self.room_id = room_id
@@ -58,7 +65,6 @@ class RoundTimer:
             self.greenlet = spawn(self._run_timer)
 
     def _run_timer(self):
-        """Timer-Loop mit genauer Zeitberechnung"""
         start_time = time.time()
         while self.is_running:
             with self.lock:
@@ -83,7 +89,6 @@ class RoundTimer:
                     self.is_running = False
                     break
             
-            # Exakt 1 Sekunde warten
             next_update = start_time + (self.duration - self.time_left + 1)
             sleep_time = max(0, next_update - time.time())
             sleep(sleep_time)
@@ -109,101 +114,156 @@ class GameManager:
     @staticmethod
     def create_room(leader_id, leader_name, settings):
         room_id = str(uuid.uuid4())[:8]
-        with lock:
-            rooms[room_id] = {
-                'id': room_id,
-                'leader': leader_id,
-                'players': [],
-                'settings': settings,
-                'status': 'waiting',
-                'ready_players': set(),
-                'min_players': settings.get('group_size', 4),
-                'leader_name': leader_name
-            }
-            
+        
+        room = Room(
+            id=room_id,
+            leader_id=leader_id,
+            leader_name=leader_name,
+            settings=settings,
+            status='waiting'
+        )
+        
+        db.session.add(room)
+        db.session.commit()
+        
         print(f"✅ Raum {room_id} erstellt durch {leader_name} ({leader_id})")
         return room_id
     
     @staticmethod
-    def join_room(room_id, player_id, player_name):
-        with lock:
-            if room_id in rooms:
-                room = rooms[room_id]
-                initial_coins = room['settings'].get('initial_coins', 10)
-                
-                player_data = {
-                    'id': player_id,
-                    'name': player_name,
-                    'ready': False,
-                    'coins': initial_coins,
-                    'balance_history': [initial_coins],
-                    'contribution_history': []
-                }
-                players[player_id] = player_data
-                room['players'].append(player_data)
-                print(f"✅ {player_name} ({player_id}) → Raum {room_id}")
-                return True
-        print(f"❌ Raum {room_id} nicht gefunden")
-        return False
+    def join_room(room_id, player_id, player_name, is_leader=False):
+        room = Room.query.get(room_id)
+        if not room:
+            print(f"❌ Raum {room_id} nicht gefunden")
+            return False
+        
+        # Prüfen ob Spieler bereits existiert
+        player = Player.query.filter_by(id=player_id, room_id=room_id).first()
+        if not player:
+            initial_coins = room.settings.get('initial_coins', 10)
+            player = Player(
+                id=player_id,
+                name=player_name,
+                room_id=room_id,
+                coins=initial_coins,
+                balance_history=[initial_coins],
+                is_leader=is_leader
+            )
+            db.session.add(player)
+        else:
+            player.name = player_name
+            player.is_leader = is_leader
+        
+        db.session.commit()
+        print(f"✅ {player_name} ({player_id}) → Raum {room_id}")
+        return True
     
     @staticmethod
-    def can_start_game(room_id):
-        """Prüft ob Spiel gestartet werden kann"""
-        if room_id not in rooms:
-            return False, "Raum nicht gefunden"
-            
-        room = rooms[room_id]
-        ready_count = len(room['ready_players'])
-        total_players = len(room['players'])
-        group_size = room['settings'].get('group_size', 4)
-        
-        if room['status'] != 'waiting':
-            return False, "Spiel läuft bereits"
-        
-        if ready_count < group_size:
-            return False, f"Mindestens {group_size} Spieler müssen bereit sein"
-        
-        if ready_count % group_size != 0:
-            return False, f"Anzahl bereiter Spieler muss durch {group_size} teilbar sein"
-        
-        if total_players % group_size != 0:
-            return False, f"Gesamtanzahl Spieler muss durch {group_size} teilbar sein"
-        
-        return True, "Spiel kann gestartet werden"
+    def get_room_players(room_id):
+        # Zeige nur Nicht-Leader-Spieler an
+        players = Player.query.filter_by(room_id=room_id, is_leader=False).all()
+        return [{
+            'id': p.id,
+            'name': p.name,
+            'ready': p.ready,
+            'coins': p.coins,
+            'is_leader': p.is_leader
+        } for p in players]
     
+    @staticmethod
+    def get_ready_players_count(room_id):
+        # Zähle nur Nicht-Leader-Spieler
+        return Player.query.filter_by(room_id=room_id, ready=True, is_leader=False).count()
+        
     @staticmethod
     def start_game(room_id):
-        with lock:
-            if room_id not in rooms:
+        from sqlalchemy.exc import SQLAlchemyError
+        
+        try:
+            room = Room.query.get(room_id)
+            if not room:
                 return False
                 
-            room = rooms[room_id]
-            
-            # ✅ Verbesserte Validierung
             can_start, message = GameManager.can_start_game(room_id)
             if not can_start:
                 print(f"❌ Spielstart fehlgeschlagen: {message}")
                 return False
             
-            # ✅ Restliche Start-Logik
-            room['status'] = 'playing'
-            room['current_round'] = 1
-            room['groups'] = GameManager._create_groups(room['players'], room['settings'])
+            # Verwende Transaktion
+            db.session.begin_nested()
             
-            game_state[room_id] = {
-                'round': 1,
-                'contributions': {},
-                'group_results': {},
-                'round_start_time': time.time()
-            }
+            players = Player.query.filter_by(room_id=room_id, is_leader=False).all()
+            
+            # Raum aktualisieren
+            room.status = 'playing'
+            room.current_round = 1
+            
+            # Gruppen erstellen (ohne Leader)
+            groups = GameManager._create_groups(players, room.settings)
+            
+            # GameState erstellen
+            game_state = GameState(
+                room_id=room_id,
+                round=1,
+                contributions={},
+                group_results=[],
+                round_start_time=time.time(),
+                groups=groups
+            )
+            
+            db.session.add(game_state)
+            db.session.commit()
             
             print(f"✅ Spiel gestartet in Raum {room_id}!")
             GameManager._start_round_timer(room_id)
             return True
+            
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            print(f"❌ Datenbankfehler beim Spielstart: {e}")
+            return False
+    
+    @staticmethod
+    def start_game(room_id):
+        room = Room.query.get(room_id)
+        if not room:
+            return False
+            
+        can_start, message = GameManager.can_start_game(room_id)
+        if not can_start:
+            print(f"❌ Spielstart fehlgeschlagen: {message}")
+            return False
+        
+        players = Player.query.filter_by(room_id=room_id).all()
+        
+        # Raum aktualisieren
+        room.status = 'playing'
+        room.current_round = 1
+        
+        # Gruppen erstellen
+        groups = GameManager._create_groups(players, room.settings)
+        
+        # GameState erstellen
+        game_state = GameState(
+            room_id=room_id,
+            round=1,
+            contributions={},
+            group_results=[],
+            round_start_time=time.time(),
+            groups=groups
+        )
+        
+        db.session.add(game_state)
+        db.session.commit()
+        
+        print(f"✅ Spiel gestartet in Raum {room_id}!")
+        GameManager._start_round_timer(room_id)
+        return True
     
     @staticmethod
     def _create_groups(players_list, settings):
-        player_ids = [p['id'] for p in players_list]
+        # Filtere Leader aus den Spielergruppen
+        non_leader_players = [p for p in players_list if not p.is_leader]
+        player_ids = [p.id for p in non_leader_players]
         random.shuffle(player_ids)
         
         group_size = settings.get('group_size', 4)
@@ -218,18 +278,15 @@ class GameManager:
     
     @staticmethod
     def _start_round_timer(room_id):
-        """Verbesserter Timer mit RoundTimer Klasse"""
-        if room_id not in rooms:
+        room = Room.query.get(room_id)
+        if not room:
             return
             
-        room = rooms[room_id]
-        round_duration = room['settings'].get('round_duration', 60)
+        round_duration = room.settings.get('round_duration', 60)
         
-        # Alten Timer stoppen falls vorhanden
         if room_id in round_timers:
             round_timers[room_id].stop()
         
-        # Neuen Timer erstellen und starten
         timer = RoundTimer(socketio, room_id, round_duration)
         round_timers[room_id] = timer
         timer.start()
@@ -238,54 +295,53 @@ class GameManager:
     
     @staticmethod
     def submit_contribution(room_id, player_id, amount):
-        with lock:
-            if room_id in game_state and room_id in rooms:
-                game_data = game_state[room_id]
-                room = rooms[room_id]
-                player = players.get(player_id)
-                
-                if not player:
-                    return False
-                
-                max_contribution = min(
-                    player['coins'],
-                    room['settings'].get('max_contribution', 10)
-                )
-                
-                if amount < 0 or amount > max_contribution:
-                    print(f"❌ Ungültiger Beitrag: {amount} (max: {max_contribution})")
-                    return False
-                
-                game_data['contributions'][player_id] = amount
-                player['contribution_history'].append(amount)
-                
-                print(f"💰 {player['name']} zahlt {amount} ein")
-                
-                # Prüfe ob alle eingezahlt haben
-                if len(game_data['contributions']) == len(room['players']):
-                    # Timer stoppen
-                    if room_id in round_timers:
-                        round_timers[room_id].stop()
-                    
-                    print(f"✅ Alle Spieler haben eingezahlt in Raum {room_id}")
-                    # Sofort Ergebnisse berechnen
-                    spawn(GameManager._process_round_end, room_id)
-                
-                return True
-        return False
+        room = Room.query.get(room_id)
+        game_state = GameState.query.filter_by(room_id=room_id, round=room.current_round).first()
+        player = Player.query.filter_by(id=player_id, room_id=room_id).first()
+        
+        if not room or not game_state or not player:
+            return False
+        
+        max_contribution = min(
+            player.coins,
+            room.settings.get('max_contribution', 10)
+        )
+        
+        if amount < 0 or amount > max_contribution:
+            print(f"❌ Ungültiger Beitrag: {amount} (max: {max_contribution})")
+            return False
+        
+        contributions = game_state.contributions or {}
+        contributions[player_id] = amount
+        game_state.contributions = contributions
+        
+        player.contribution_history.append(amount)
+        
+        db.session.commit()
+        
+        print(f"💰 {player.name} zahlt {amount} ein")
+        
+        total_players = Player.query.filter_by(room_id=room_id).count()
+        if len(contributions) == total_players:
+            if room_id in round_timers:
+                round_timers[room_id].stop()
+            
+            print(f"✅ Alle Spieler haben eingezahlt in Raum {room_id}")
+            spawn(GameManager._process_round_end, room_id)
+        
+        return True
     
     @staticmethod
     def _process_round_end(room_id):
-        """Verarbeitet das Ende einer Runde"""
-        sleep(0.5)  # Kurze Verzögerung für bessere UX
+        sleep(0.5)
         
         with lock:
-            if room_id not in rooms or room_id not in game_state:
+            room = Room.query.get(room_id)
+            if not room:
                 return
                 
             results = GameManager.calculate_round_results(room_id)
-            
-        # Sende Ergebnisse an alle Clients
+        
         socketio.emit('show_round_results', {
             'results': results,
             'room_id': room_id
@@ -293,15 +349,15 @@ class GameManager:
     
     @staticmethod
     def calculate_round_results(room_id):
-        room = rooms[room_id]
-        game_data = game_state[room_id]
-        contributions = game_data['contributions']
+        room = Room.query.get(room_id)
+        game_state = GameState.query.filter_by(room_id=room_id, round=room.current_round).first()
+        players = {p.id: p for p in Player.query.filter_by(room_id=room_id).all()}
         
-        multiplier = room['settings'].get('multiplier', 2)
+        multiplier = room.settings.get('multiplier', 2)
         results = []
         
-        for group_idx, group in enumerate(room['groups']):
-            total_contribution = sum(contributions.get(pid, 0) for pid in group)
+        for group_idx, group in enumerate(game_state.groups):
+            total_contribution = sum(game_state.contributions.get(pid, 0) for pid in group)
             total_pool = total_contribution * multiplier
             payout_per_player = total_pool / len(group)
             
@@ -315,18 +371,18 @@ class GameManager:
             
             for player_id in group:
                 player = players[player_id]
-                contribution = contributions.get(player_id, 0)
+                contribution = game_state.contributions.get(player_id, 0)
                 
-                remaining = player['coins'] - contribution
+                remaining = player.coins - contribution
                 new_balance = remaining + payout_per_player
-                profit = new_balance - player['coins']
+                profit = new_balance - player.coins
                 
-                player['coins'] = new_balance
-                player['balance_history'].append(new_balance)
+                player.coins = new_balance
+                player.balance_history.append(new_balance)
                 
                 group_result['players'].append({
                     'id': player_id,
-                    'name': player['name'],
+                    'name': player.name,
                     'contribution': contribution,
                     'payout': payout_per_player,
                     'new_balance': new_balance,
@@ -335,46 +391,52 @@ class GameManager:
             
             results.append(group_result)
         
-        game_data['group_results'] = results
-        game_data['contributions'] = {}
+        game_state.group_results = results
+        game_state.contributions = {}
+        db.session.commit()
         
         print(f"📊 Rundenergebnisse berechnet für Raum {room_id}")
         return results
     
     @staticmethod
     def start_next_round(room_id):
-        with lock:
-            if room_id not in rooms:
-                return False
-                
-            room = rooms[room_id]
+        room = Room.query.get(room_id)
+        if not room:
+            return False
             
-            if GameManager._should_continue_game(room):
-                room['current_round'] += 1
-                
-                if not room['settings'].get('fixed_groups', True):
-                    room['groups'] = GameManager._create_groups(
-                        room['players'], 
-                        room['settings']
-                    )
-                    print(f"🔄 Neue Gruppen erstellt für Runde {room['current_round']}")
-                
-                game_state[room_id]['round'] = room['current_round']
-                game_state[room_id]['round_start_time'] = time.time()
-                
-                print(f"▶️ Runde {room['current_round']} startet in Raum {room_id}")
-                
-                GameManager._start_round_timer(room_id)
-                return True
-            else:
-                room['status'] = 'finished'
-                print(f"🏁 Spiel beendet in Raum {room_id}")
-                return False
+        if GameManager._should_continue_game(room):
+            room.current_round += 1
+            
+            if not room.settings.get('fixed_groups', True):
+                players = Player.query.filter_by(room_id=room_id).all()
+                room.groups = GameManager._create_groups(players, room.settings)
+                print(f"🔄 Neue Gruppen erstellt für Runde {room.current_round}")
+            
+            new_game_state = GameState(
+                room_id=room_id,
+                round=room.current_round,
+                contributions={},
+                group_results=[],
+                round_start_time=time.time(),
+                groups=room.groups
+            )
+            
+            db.session.add(new_game_state)
+            db.session.commit()
+            
+            print(f"▶️ Runde {room.current_round} startet in Raum {room_id}")
+            GameManager._start_round_timer(room_id)
+            return True
+        else:
+            room.status = 'finished'
+            db.session.commit()
+            print(f"🏁 Spiel beendet in Raum {room_id}")
+            return False
     
     @staticmethod
     def _should_continue_game(room):
-        settings = room['settings']
-        current_round = room['current_round']
+        settings = room.settings
+        current_round = room.current_round
         
         end_mode = settings.get('end_mode', 'fixed_rounds')
         
@@ -392,29 +454,76 @@ class GameManager:
     
     @staticmethod
     def get_available_rooms():
+        rooms = Room.query.filter_by(status='waiting').all()
         available = []
-        for room_id, room in rooms.items():
-            if room['status'] == 'waiting':
-                available.append({
-                    'id': room_id,
-                    'players': len(room['players']),
-                    'leader': room.get('leader_name', 'Unbekannt')
-                })
+        
+        for room in rooms:
+            player_count = Player.query.filter_by(room_id=room.id).count()
+            available.append({
+                'id': room.id,
+                'players': player_count,
+                'leader': room.leader_name
+            })
+        
         return available
     
     @staticmethod
     def get_player_group(room_id, player_id):
-        if room_id not in rooms:
+        room = Room.query.get(room_id)
+        if not room:
             return None
             
-        room = rooms[room_id]
-        for idx, group in enumerate(room['groups']):
+        game_state = GameState.query.filter_by(room_id=room_id, round=room.current_round).first()
+        if not game_state or not game_state.groups:
+            return None
+            
+        for idx, group in enumerate(game_state.groups):
             if player_id in group:
+                players = Player.query.filter(Player.id.in_(group)).all()
                 return {
                     'group_number': idx + 1,
-                    'members': [players[pid]['name'] for pid in group if pid in players]
+                    'members': [p.name for p in players]
                 }
         return None
+
+    @staticmethod
+    def set_player_ready(room_id, player_id):
+        player = Player.query.filter_by(id=player_id, room_id=room_id).first()
+        if player:
+            player.ready = True
+            db.session.commit()
+            return True
+        return False
+
+    @staticmethod
+    def cleanup_room(room_id):
+        """Räumt einen Raum komplett auf"""
+        try:
+            # Lösche alle abhängigen Daten
+            Player.query.filter_by(room_id=room_id).delete()
+            GameState.query.filter_by(room_id=room_id).delete()
+            PlayerSession.query.filter_by(room_id=room_id).delete()
+            Room.query.filter_by(id=room_id).delete()
+            
+            db.session.commit()
+            
+            # Timer stoppen
+            if room_id in round_timers:
+                round_timers[room_id].stop()
+                del round_timers[room_id]
+                
+            print(f"🗑️ Raum {room_id} komplett aufgeräumt")
+            return True
+        except Exception as e:
+            print(f"❌ Fehler beim Aufräumen von Raum {room_id}: {e}")
+            db.session.rollback()
+            return False
+
+# Datenbank initialisieren
+def initialize_database():
+    with app.app_context():
+        db.create_all()
+        print("✅ Datenbank initialisiert")
 
 # Routes
 @app.route('/')
@@ -425,7 +534,7 @@ def index():
 @app.route('/create_game')
 def create_game():
     session['player_id'] = str(uuid.uuid4())
-    session['player_name'] = f"Leader_{random.randint(1000, 9999)}"  # Leader-Name
+    session['player_name'] = f"Leader_{random.randint(1000, 9999)}"
     session['is_leader'] = True
     return render_template('create_game.html')
 
@@ -456,6 +565,9 @@ def create_room_route():
     
     room_id = GameManager.create_room(session['player_id'], session['player_name'], settings)
     
+    # Leader dem Raum beitreten
+    GameManager.join_room(room_id, session['player_id'], session['player_name'], is_leader=True)
+    
     session['room_id'] = room_id
     return jsonify({'room_id': room_id})
 
@@ -470,61 +582,65 @@ def join_room_route(room_id):
 @app.route('/game_room')
 def game_room():
     room_id = session.get('room_id')
-    if not room_id or room_id not in rooms:
+    room = Room.query.get(room_id) if room_id else None
+    
+    if not room:
         return redirect(url_for('index'))
     
-    room = rooms[room_id]
     is_leader = session.get('is_leader', False)
+    player_data = Player.query.filter_by(id=session['player_id'], room_id=room_id).first()
     
-    # Für Leader erstellen wir ein Dummy-Player-Objekt
-    if is_leader:
-        player_data = {
-            'id': session['player_id'],
-            'name': session['player_name'],
-            'ready': True,  # Leader ist immer bereit
-            'coins': 0,     # Leader hat keine Coins
-            'balance_history': [],
-            'contribution_history': [],
-            'is_leader': True  # Zusätzliches Flag für Moderator
-        }
-    else:
-        player_data = players.get(session['player_id'])
-        if player_data:
-            player_data['is_leader'] = False
+    if not player_data:
+        return redirect(url_for('index'))
+    
+    players = GameManager.get_room_players(room_id)
+    ready_count = GameManager.get_ready_players_count(room_id)
     
     return render_template('game_room.html', 
                          room=room, 
                          player=player_data,
+                         players=players,
+                         ready_count=ready_count,
                          is_leader=is_leader)
 
 @app.route('/game')
 def game():
     room_id = session.get('room_id')
-    if not room_id or room_id not in rooms:
+    if not room_id:
         return redirect(url_for('index'))
     
-    room = rooms[room_id]
-    if room['status'] != 'playing':
+    room = Room.query.get(room_id)
+    if not room or room.status != 'playing':
         return redirect(url_for('game_room'))
     
-    player_data = players.get(session['player_id'])
+    player_data = Player.query.filter_by(id=session['player_id'], room_id=room_id).first()
+    if not player_data:
+        return redirect(url_for('index'))
+    
     player_group = GameManager.get_player_group(room_id, session['player_id'])
     
     return render_template('game.html', 
                          room=room, 
                          player=player_data,
                          player_group=player_group,
-                         current_round=room.get('current_round', 1))
+                         current_round=room.current_round)
 
 @app.route('/round_results')
 def round_results():
     room_id = session.get('room_id')
-    if not room_id or room_id not in rooms or room_id not in game_state:
+    if not room_id:
         return redirect(url_for('index'))
     
-    room = rooms[room_id]
-    player_data = players.get(session['player_id'])
-    results = game_state[room_id].get('group_results', [])
+    room = Room.query.get(room_id)
+    if not room:
+        return redirect(url_for('index'))
+    
+    player_data = Player.query.filter_by(id=session['player_id'], room_id=room_id).first()
+    if not player_data:
+        return redirect(url_for('index'))
+    
+    game_state = GameState.query.filter_by(room_id=room_id, round=room.current_round).first()
+    results = game_state.group_results if game_state else []
     
     return render_template('round_results.html',
                          room=room,
@@ -535,14 +651,19 @@ def round_results():
 @app.route('/evaluation')
 def evaluation():
     room_id = session.get('room_id')
-    if not room_id or room_id not in rooms:
+    if not room_id:
         return redirect(url_for('index'))
     
-    room = rooms[room_id]
-    player_data = players.get(session['player_id'])
+    room = Room.query.get(room_id)
+    if not room:
+        return redirect(url_for('index'))
     
-    initial_coins = room['settings'].get('initial_coins', 10)
-    total_rounds = room.get('current_round', 1)
+    player_data = Player.query.filter_by(id=session['player_id'], room_id=room_id).first()
+    if not player_data:
+        return redirect(url_for('index'))
+    
+    initial_coins = room.settings.get('initial_coins', 10)
+    total_rounds = room.current_round
     
     return render_template('evaluation.html', 
                          room=room, 
@@ -554,19 +675,61 @@ def evaluation():
 def available_rooms():
     return jsonify(GameManager.get_available_rooms())
 
-# Verbesserte SocketIO Events
+@app.route('/cleanup_old_rooms', methods=['POST'])
+def cleanup_old_rooms():
+    """Bereinigt alte Räume automatisch"""
+    try:
+        from sqlalchemy import text
+        
+        # Lösche Räume, die älter als 2 Stunden sind und im Status 'finished' oder 'waiting'
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=2)
+        
+        # Verwende SQL für bessere Performance bei großen Datenmengen
+        old_rooms = db.session.execute(
+            text("SELECT id FROM rooms WHERE created_at < :cutoff AND status IN ('finished', 'waiting')"),
+            {'cutoff': cutoff_time}
+        ).fetchall()
+        
+        cleaned_count = 0
+        for room in old_rooms:
+            if GameManager.cleanup_room(room[0]):
+                cleaned_count += 1
+        
+        return jsonify({
+            'cleaned_count': cleaned_count, 
+            'message': f'{cleaned_count} alte Räume bereinigt'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# WebSocket Events
 @socketio.on('connect')
 def handle_connect():
     print(f"🔌 Client verbunden: {request.sid}")
     player_id = session.get('player_id')
-    room_id = session.get('room_id')  # WICHTIG: Raum aus Session lesen
+    room_id = session.get('room_id')
     
     if player_id:
         sid_to_player[request.sid] = player_id
-        print(f"✅ Session player_id {player_id} für SID {request.sid}")
+        
+        # PlayerSession erstellen/aktualisieren
+        session_record = PlayerSession.query.filter_by(player_id=player_id).first()
+        if not session_record:
+            session_record = PlayerSession(
+                player_id=player_id,
+                session_id=request.sid,
+                room_id=room_id or ''
+            )
+            db.session.add(session_record)
+        else:
+            session_record.session_id = request.sid
+            session_record.connected = True
+            session_record.last_seen = datetime.now(timezone.utc)
+            session_record.room_id = room_id or ''
+        
+        db.session.commit()
     
-    # 🔥 AUTOMATISCH DEM RAUM BEITRETEN BEI RECONNECT
-    if room_id and room_id in rooms:
+    if room_id and room_id in [room.id for room in Room.query.all()]:
         join_room(room_id)
         print(f"✅ Automatisch Raum {room_id} beigetreten nach Reconnect")
     
@@ -574,7 +737,7 @@ def handle_connect():
         'message': 'Verbunden', 
         'sid': request.sid,
         'player_id': player_id,
-        'room_id': room_id,  # Raum-ID mitsenden
+        'room_id': room_id,
         'timestamp': time.time()
     })
 
@@ -584,40 +747,15 @@ def handle_disconnect():
     player_id = sid_to_player.pop(sid, None)
     print(f"🔌 Client getrennt: {sid} (player_id={player_id})")
 
-    if not player_id:
-        return
-
-    # Finde und bereinige den Raum des Spielers
-    affected_room = None
-    for room_id, room in rooms.items():
-        for p in list(room['players']):
-            if p['id'] == player_id:
-                room['players'].remove(p)
-                affected_room = room_id
-                break
-        if affected_room:
-            room['ready_players'].discard(player_id)
-            break
-
-    players.pop(player_id, None)
-
-    if affected_room:
-        room = rooms[affected_room]
-        emit('room_update', {
-            'players': [{
-                'id': p['id'],
-                'name': p['name'],
-                'ready': p['ready']
-            } for p in room['players']],
-            'ready_count': len(room['ready_players']),
-            'total_players': len(room['players']),
-            'group_size': room['settings'].get('group_size', 4)
-        }, room=affected_room)
+    if player_id:
+        session_record = PlayerSession.query.filter_by(player_id=player_id).first()
+        if session_record:
+            session_record.connected = False
+            db.session.commit()
 
 @socketio.on('join_room')
 def handle_join_room(data):
     room_id = data.get('room_id')
-    # WICHTIG: player_id aus Session nehmen, nicht aus data
     player_id = session.get('player_id')
     
     print(f"👥 join_room Event: room_id={room_id}, player_id={player_id}, sid={request.sid}")
@@ -626,17 +764,23 @@ def handle_join_room(data):
         emit('error', {'message': 'Keine player_id in Session'})
         return
 
-    if not room_id or room_id not in rooms:
+    room = Room.query.get(room_id)
+    if not room:
         print(f"❌ Raum {room_id} nicht gefunden")
         emit('error', {'message': 'Raum nicht gefunden'})
         return
 
-    # Dem Socket-Room beitreten
     join_room(room_id)
     sid_to_player[request.sid] = player_id
+    
+    # PlayerSession aktualisieren
+    session_record = PlayerSession.query.filter_by(player_id=player_id).first()
+    if session_record:
+        session_record.room_id = room_id
+        db.session.commit()
+    
     print(f"✅ Socket {request.sid} → Room {room_id} (player {player_id})")
 
-    # Bestätigung zurücksenden
     emit('room_joined', {
         'room_id': room_id,
         'message': 'Erfolgreich beigetreten',
@@ -644,16 +788,14 @@ def handle_join_room(data):
     })
 
     # Raum-Update an alle senden
-    room = rooms[room_id]
+    players = GameManager.get_room_players(room_id)
+    ready_count = GameManager.get_ready_players_count(room_id)
+    
     emit('room_update', {
-        'players': [{
-            'id': p['id'],
-            'name': p['name'],
-            'ready': p['ready']
-        } for p in room['players']],
-        'ready_count': len(room['ready_players']),
-        'total_players': len(room['players']),
-        'group_size': room['settings'].get('group_size', 4)
+        'players': players,
+        'ready_count': ready_count,
+        'total_players': len(players),
+        'group_size': room.settings.get('group_size', 4)
     }, room=room_id)
 
 @socketio.on('set_ready')
@@ -663,68 +805,66 @@ def handle_set_ready(data):
     
     print(f"✋ Ready-Event: room={room_id}, player={player_id}, sid={request.sid}")
     
-    if not room_id or room_id not in rooms:
+    room = Room.query.get(room_id)
+    if not room:
         print(f"❌ Raum {room_id} nicht gefunden")
         emit('error', {'message': 'Raum nicht gefunden'})
         return
         
-    if not player_id or player_id not in players:
+    player = Player.query.filter_by(id=player_id, room_id=room_id).first()
+    if not player:
         print(f"❌ Spieler {player_id} nicht gefunden")
         emit('error', {'message': 'Spieler nicht gefunden'})
         return
     
-    with lock:
-        room = rooms[room_id]
-        player = players[player_id]
-        
-        room['ready_players'].add(player_id)
-        player['ready'] = True
+    player.ready = True
+    db.session.commit()
     
-    print(f"✅ {player['name']} ist bereit")
+    print(f"✅ {player.name} ist bereit")
     
     # Aktualisierten Raumstatus an alle senden
+    players = GameManager.get_room_players(room_id)
+    ready_count = GameManager.get_ready_players_count(room_id)
+    
     emit('player_ready', {
         'player_id': player_id,
-        'player_name': player['name'],
-        'ready_count': len(room['ready_players']),
-        'total_players': len(room['players'])
+        'player_name': player.name,
+        'ready_count': ready_count,
+        'total_players': len(players)
     }, room=room_id)
     
     # Start-Button Status prüfen
-    ready_count = len(room['ready_players'])
-    total_players = len(room['players'])
-    group_size = room['settings'].get('group_size', 4)
+    group_size = room.settings.get('group_size', 4)
     
     can_start = (ready_count >= group_size and 
                 ready_count % group_size == 0 and 
-                total_players % group_size == 0)
+                len(players) % group_size == 0)
     
     emit('start_button_update', {
         'can_start': can_start,
         'ready_count': ready_count,
-        'total_players': total_players,
-        'group_size': room['settings'].get('group_size', 4)
+        'total_players': len(players),
+        'group_size': group_size
     }, room=room_id)
 
 @socketio.on('start_game')
 def handle_start_game(data):
     room_id = data.get('room_id')
-    player_id = data.get('player_id')  # WICHTIG: player_id aus data, nicht session
+    player_id = data.get('player_id')
     
     print(f"🎮 Start-Event von {player_id} für Raum {room_id}")
     
-    if not room_id or room_id not in rooms:
+    room = Room.query.get(room_id)
+    if not room:
         emit('start_failed', {'message': 'Raum nicht gefunden'})
         return
         
-    room = rooms[room_id]
-    
-    # ✅ Bessere Leader-Überprüfung
-    if player_id != room['leader']:
+    # Leader-Überprüfung
+    if player_id != room.leader_id:
         emit('start_failed', {'message': 'Nur der Leader kann das Spiel starten'})
         return
     
-    # ✅ Validierung vor Start
+    # Validierung vor Start
     can_start, message = GameManager.can_start_game(room_id)
     if not can_start:
         emit('start_failed', {'message': message})
@@ -741,10 +881,18 @@ def handle_submit_contribution(data):
     player_id = data.get('player_id')
     amount = int(data.get('amount', 0))
     
+    # Prüfe ob Spieler Leader ist
+    player = Player.query.filter_by(id=player_id).first()
+    if player and player.is_leader:
+        emit('contribution_failed', {
+            'message': 'Leader kann keine Beiträge leisten'
+        })
+        return
+    
     if GameManager.submit_contribution(room_id, player_id, amount):
         emit('contribution_submitted', {
             'player_id': player_id,
-            'player_name': players[player_id]['name'],
+            'player_name': player.name,
             'amount': amount
         }, room=room_id)
     else:
@@ -757,13 +905,36 @@ def handle_continue_next_round(data):
     room_id = data.get('room_id')
     
     if GameManager.start_next_round(room_id):
+        room = Room.query.get(room_id)
         emit('next_round_started', {
-            'round': rooms[room_id]['current_round']
+            'round': room.current_round
         }, room=room_id)
     else:
         emit('game_finished', room=room_id)
 
+@socketio.on('leave_room')
+def handle_leave_room(data):
+    room_id = data.get('room_id')
+    player_id = session.get('player_id')
+    
+    if room_id and player_id:
+        leave_room(room_id)
+        
+        # Spieler aus Datenbank entfernen
+        player = Player.query.filter_by(id=player_id, room_id=room_id).first()
+        if player:
+            db.session.delete(player)
+            db.session.commit()
+            
+        # Prüfen ob Raum leer ist
+        remaining_players = Player.query.filter_by(room_id=room_id).count()
+        if remaining_players == 0:
+            GameManager.cleanup_room(room_id)
+        
+        print(f"🚪 Spieler {player_id} hat Raum {room_id} verlassen")
+
 if __name__ == '__main__':
+    initialize_database()
     port = int(os.environ.get('PORT', 5000))
     debug_mode = os.environ.get('FLASK_ENV') != 'production'
     

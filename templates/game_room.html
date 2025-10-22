@@ -55,12 +55,11 @@
 
 {% block body %}
 <!-- Daten für JavaScript -->
-<div id="room-data" 
-     data-room-id="{{ room.id }}"
-     data-is-leader="{{ 'true' if is_leader else 'false' }}"
-     data-player-id="{{ player.id }}"
-     data-player-ready="{{ 'true' if player.ready else 'false' }}"
-     style="display: none;">
+<div class="room-info">
+    <p><strong>Raum-Code:</strong> {{ room.id }}</p>
+    <p><strong>Status:</strong> <span id="roomStatus">{{ room.status }}</span></p>
+    <p><strong>Spieler im Raum:</strong> <span id="totalPlayers">{{ players|length }}</span></p>
+    <p><strong>Bereite Spieler:</strong> <span id="readyCount">{{ ready_count }}</span></p>
 </div>
 
 <!-- Verbindungsstatus -->
@@ -89,12 +88,15 @@
     {% endif %}
     
     <div class="player-list">
-        <h3>Spieler (<span id="playersCount">{{ room.players|length }}</span>):</h3>
+        <h3>Spieler (<span id="playersCount">{{ players|length }}</span>):</h3>
         <div id="playersContainer">
-            {% for p in room.players %}
+            {% for p in players %}
             <div class="player-item {% if p.ready %}ready{% endif %}" id="player-{{ p.id }}">
                 <div>
                     <span class="player-name">{{ p.name }}</span>
+                    {% if p.is_leader %}
+                    <span style="color: #ffc107; margin-left: 10px;">👑</span>
+                    {% endif %}
                 </div>
                 <span class="player-status">
                     {% if p.ready %}

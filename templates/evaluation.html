@@ -29,10 +29,10 @@
     <div class="summary">
         <h3>Dein Endergebnis:</h3>
         <p>Endguthaben: <strong>{{ player.coins }} Coins</strong></p>
-        <p>Startguthaben: 10 Coins</p>
-        <p>Gewinn/Verlust: <strong>{{ player.coins - 10 }} Coins</strong></p>
+        <p>Startguthaben: {{ initial_coins }} Coins</p>
+        <p>Gewinn/Verlust: <strong>{{ player.coins - initial_coins }} Coins</strong></p>
     </div>
-    
+        
     <div class="balance-history">
         <h3>Guthabenverlauf:</h3>
         <ul class="history-list">
