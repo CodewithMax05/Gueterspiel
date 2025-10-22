@@ -558,16 +558,23 @@ def available_rooms():
 @socketio.on('connect')
 def handle_connect():
     print(f"🔌 Client verbunden: {request.sid}")
-    # Session-Informationen verfügbar durch manage_session=True
     player_id = session.get('player_id')
+    room_id = session.get('room_id')  # WICHTIG: Raum aus Session lesen
+    
     if player_id:
         sid_to_player[request.sid] = player_id
         print(f"✅ Session player_id {player_id} für SID {request.sid}")
+    
+    # 🔥 AUTOMATISCH DEM RAUM BEITRETEN BEI RECONNECT
+    if room_id and room_id in rooms:
+        join_room(room_id)
+        print(f"✅ Automatisch Raum {room_id} beigetreten nach Reconnect")
     
     emit('connection_success', {
         'message': 'Verbunden', 
         'sid': request.sid,
         'player_id': player_id,
+        'room_id': room_id,  # Raum-ID mitsenden
         'timestamp': time.time()
     })
 

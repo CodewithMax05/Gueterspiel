@@ -315,18 +315,27 @@
     
     // Socket - globalen Socket verwenden
     const socket = window.socket;
-    
+    let isConnected = socket.connected;
+
     // === SOCKET EVENTS ===
-    
     socket.on('connect', () => {
         console.log('✅ Verbunden mit Server:', socket.id);
+        isConnected = true;
         socket.emit('join_room', { room_id: roomId, player_id: playerId });
         startTimer();
     });
 
-    
+    socket.on('connection_success', (data) => {
+        console.log('✅ Server bestätigt Verbindung');
+    });
+
+    socket.on('room_joined', (data) => {
+        console.log('✅ Raum beigetreten:', data);
+    });
+
     socket.on('disconnect', () => {
         console.log('❌ Verbindung getrennt');
+        isConnected = false;
         clearInterval(timerInterval);
     });
     
@@ -484,8 +493,17 @@
     }
     
     // === INITIALISIERUNG ===
-    
     document.addEventListener('DOMContentLoaded', function() {
+        // Sofortige Initialisierung wenn schon verbunden
+        if (isConnected) {
+            console.log('🚀 Sofortiger Raum-Beitritt für Spiel:', roomId);
+            socket.emit('join_room', { room_id: roomId, player_id: playerId });
+            startTimer();
+        } else {
+            // Raum für später speichern
+            window.joinRoomGlobal(roomId);
+        }
+
         // Coin-Optionen generieren
         generateCoinOptions();
         

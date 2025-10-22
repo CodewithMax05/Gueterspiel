@@ -80,6 +80,7 @@
 			// === GLOBALE SOCKET VERWALTUNG ===
 			window.appSocket = null;
 			window.socketInitialized = false;
+			window.pendingRoomJoin = null;
 			
 			function getOrCreateSocket() {
 				if (!window.appSocket || !window.appSocket.connected) {
@@ -95,6 +96,12 @@
 					// Globale Event-Handler
 					window.appSocket.on('connect', () => {
 						console.log('✅ Globaler Socket verbunden:', window.appSocket.id);
+						// Wenn ein Raum-Pending ist, sofort beitreten
+						if (window.pendingRoomJoin) {
+							console.log('🚀 Beitrete pending Raum:', window.pendingRoomJoin);
+							window.appSocket.emit('join_room', { room_id: window.pendingRoomJoin });
+							window.pendingRoomJoin = null;
+						}
 					});
 					
 					window.appSocket.on('disconnect', () => {
@@ -104,9 +111,25 @@
 					window.appSocket.on('connect_error', (error) => {
 						console.error('❌ Globaler Socket Verbindungsfehler:', error);
 					});
+					
+					window.appSocket.on('connection_success', (data) => {
+						console.log('✅ Server bestätigt Verbindung:', data);
+					});
 				}
 				return window.appSocket;
 			}
+			
+			// Raum-Beitritts-Funktion für alle Seiten
+			window.joinRoomGlobal = function(roomId) {
+				const socket = getOrCreateSocket();
+				if (socket.connected) {
+					console.log('📡 Beitrete Raum sofort:', roomId);
+					socket.emit('join_room', { room_id: roomId });
+				} else {
+					console.log('⏳ Raum gespeichert, warte auf Verbindung:', roomId);
+					window.pendingRoomJoin = roomId;
+				}
+			};
 			
 			// Socket beim Laden initialisieren
 			document.addEventListener('DOMContentLoaded', function() {

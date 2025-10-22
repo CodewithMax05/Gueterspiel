@@ -256,11 +256,20 @@
     
     const socket = window.socket;
 
+    // Sofort dem Raum beitreten wenn verbunden
+    if (socket.connected) {
+        socket.emit('join_room', { room_id: roomId });
+    }
+
     socket.on('connect', () => {
         console.log('Verbunden mit Server');
         socket.emit('join_room', { room_id: roomId });
     });
-    
+
+    socket.on('room_joined', (data) => {
+        console.log('✅ Raum beigetreten für Ergebnisse');
+    });
+
     // Leader kann nächste Runde starten
     if (isLeader) {
         document.getElementById('continueBtn').addEventListener('click', function() {
