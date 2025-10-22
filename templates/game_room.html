@@ -95,9 +95,6 @@
             <div class="player-item {% if p.ready %}ready{% endif %}" id="player-{{ p.id }}">
                 <div>
                     <span class="player-name">{{ p.name }}</span>
-                    {% if p.id == room.leader %}
-                    <span style="color: #ffc107; margin-left: 10px;">👑 (Leader)</span>
-                    {% endif %}
                 </div>
                 <span class="player-status">
                     {% if p.ready %}
@@ -110,9 +107,9 @@
             {% endfor %}
         </div>
     </div>
-    
+
     <!-- Button für Spieler, die noch nicht bereit sind -->
-    {% if not player.ready %}
+    {% if not is_leader and not player.ready %}
     <button class="btn btn-primary" id="readyBtn" disabled>
         ⏳ Verbinde...
     </button>
@@ -275,6 +272,23 @@
         }
     });
 
+    socket.on('start_failed', (data) => {
+        console.error('❌ Start fehlgeschlagen:', data);
+        createFlashMessage('Spielstart fehlgeschlagen: ' + data.message, 'error');
+        
+        // Button zurücksetzen
+        const startBtn = document.getElementById('startBtn');
+        if (startBtn) {
+            startBtn.disabled = false;
+            startBtn.textContent = 'Spiel starten';
+        }
+    });
+
+    socket.on('error', (data) => {
+        console.error('❌ Fehler:', data);
+        createFlashMessage('Fehler: ' + data.message, 'error');
+    });
+
     // === HELPER FUNKTIONEN ===
     function updatePlayerList(players) {
         const container = document.getElementById('playersContainer');
@@ -297,6 +311,24 @@
             `;
             container.appendChild(div);
         });
+        
+        // Leader separat anzeigen (nicht in der Spielerliste)
+        const roomData = document.getElementById('room-data');
+        const isLeader = roomData.dataset.isLeader === 'true';
+        if (isLeader) {
+            const leaderDiv = document.createElement('div');
+            leaderDiv.className = 'player-item ready';
+            leaderDiv.innerHTML = `
+                <div>
+                    <span class="player-name">${roomData.dataset.playerName || 'Leader'}</span>
+                    <span style="color: #ffc107; margin-left: 10px;">👑 (Leader)</span>
+                </div>
+                <span class="player-status">
+                    <span style="color: #28a745;">✅ Immer bereit</span>
+                </span>
+            `;
+            container.insertBefore(leaderDiv, container.firstChild);
+        }
     }
 
     function updatePlayerStatus(playerId, isReady) {
@@ -345,15 +377,16 @@
         const readyBtn = document.getElementById('readyBtn');
         const startBtn = document.getElementById('startBtn');
 
-        if (readyBtn && !playerReady) {
+        // Leader sieht keinen Ready-Button
+        if (isLeader) {
+            if (readyBtn) readyBtn.style.display = 'none';
+            // Leader ist automatisch immer "bereit" für Start-Bedingungen
+            playerReady = true;
+        } else if (readyBtn && !playerReady) {
+            // Normale Spieler sehen den Ready-Button
             readyBtn.addEventListener('click', function() {
                 if (!isConnected) {
                     createFlashMessage('Keine Verbindung zum Server', 'error');
-                    return;
-                }
-                
-                if (playerReady) {
-                    createFlashMessage('Du bist bereits bereit!', 'info');
                     return;
                 }
                 
@@ -363,17 +396,7 @@
                 console.log('📤 Sende set_ready für:', playerId);
                 socket.emit('set_ready', { 
                     room_id: roomId 
-                    // player_id wird automatisch aus Session mitgesendet
                 });
-                
-                // Timeout für den Fall, dass keine Antwort kommt
-                setTimeout(() => {
-                    if (!playerReady && readyBtn.disabled) {
-                        readyBtn.disabled = false;
-                        readyBtn.textContent = '✋ Bereit';
-                        createFlashMessage('Timeout - Bitte erneut versuchen', 'error');
-                    }
-                }, 5000);
             });
         }
 
@@ -389,10 +412,10 @@
             });
         }
 
+        // Update der Startbedingungen für Leader
         if (isLeader) {
             const readyCount = parseInt(document.getElementById('readyCount').textContent);
             const totalPlayers = parseInt(document.getElementById('totalPlayers').textContent);
-            // benutze group size aus DOM wenn vorhanden (oder fallback 4)
             updateStartButton(readyCount, totalPlayers, parseInt(roomData.dataset.groupSize || 4));
             updateRequirements(false, readyCount, totalPlayers, parseInt(roomData.dataset.groupSize || 4));
         }

@@ -107,7 +107,7 @@ class RoundTimer:
 
 class GameManager:
     @staticmethod
-    def create_room(leader_id, settings):
+    def create_room(leader_id, leader_name, settings):
         room_id = str(uuid.uuid4())[:8]
         with lock:
             rooms[room_id] = {
@@ -117,9 +117,11 @@ class GameManager:
                 'settings': settings,
                 'status': 'waiting',
                 'ready_players': set(),
-                'min_players': settings.get('group_size', 4)
+                'min_players': settings.get('group_size', 4),
+                'leader_name': leader_name
             }
-        print(f"✅ Raum {room_id} erstellt durch {leader_id}")
+            
+        print(f"✅ Raum {room_id} erstellt durch {leader_name} ({leader_id})")
         return room_id
     
     @staticmethod
@@ -145,40 +147,59 @@ class GameManager:
         return False
     
     @staticmethod
+    def can_start_game(room_id):
+        """Prüft ob Spiel gestartet werden kann"""
+        if room_id not in rooms:
+            return False, "Raum nicht gefunden"
+            
+        room = rooms[room_id]
+        ready_count = len(room['ready_players'])
+        total_players = len(room['players'])
+        group_size = room['settings'].get('group_size', 4)
+        
+        if room['status'] != 'waiting':
+            return False, "Spiel läuft bereits"
+        
+        if ready_count < group_size:
+            return False, f"Mindestens {group_size} Spieler müssen bereit sein"
+        
+        if ready_count % group_size != 0:
+            return False, f"Anzahl bereiter Spieler muss durch {group_size} teilbar sein"
+        
+        if total_players % group_size != 0:
+            return False, f"Gesamtanzahl Spieler muss durch {group_size} teilbar sein"
+        
+        return True, "Spiel kann gestartet werden"
+    
+    @staticmethod
     def start_game(room_id):
         with lock:
             if room_id not in rooms:
                 return False
                 
             room = rooms[room_id]
-            ready_count = len(room['ready_players'])
-            total_players = len(room['players'])
-            group_size = room['settings'].get('group_size', 4)
             
-            print(f"🎮 Startversuch Raum {room_id}: {ready_count}/{total_players} bereit")
+            # ✅ Verbesserte Validierung
+            can_start, message = GameManager.can_start_game(room_id)
+            if not can_start:
+                print(f"❌ Spielstart fehlgeschlagen: {message}")
+                return False
             
-            if (room['status'] == 'waiting' and 
-                ready_count >= group_size and 
-                ready_count % group_size == 0 and 
-                total_players % group_size == 0):
-                
-                room['status'] = 'playing'
-                room['current_round'] = 1
-                room['groups'] = GameManager._create_groups(room['players'], room['settings'])
-                
-                game_state[room_id] = {
-                    'round': 1,
-                    'contributions': {},
-                    'group_results': {},
-                    'round_start_time': time.time()
-                }
-                
-                print(f"✅ Spiel gestartet in Raum {room_id}!")
-                
-                # Timer mit neuer Klasse starten
-                GameManager._start_round_timer(room_id)
-                return True
-        return False
+            # ✅ Restliche Start-Logik
+            room['status'] = 'playing'
+            room['current_round'] = 1
+            room['groups'] = GameManager._create_groups(room['players'], room['settings'])
+            
+            game_state[room_id] = {
+                'round': 1,
+                'contributions': {},
+                'group_results': {},
+                'round_start_time': time.time()
+            }
+            
+            print(f"✅ Spiel gestartet in Raum {room_id}!")
+            GameManager._start_round_timer(room_id)
+            return True
     
     @staticmethod
     def _create_groups(players_list, settings):
@@ -377,7 +398,7 @@ class GameManager:
                 available.append({
                     'id': room_id,
                     'players': len(room['players']),
-                    'leader': players[room['leader']]['name'] if room['leader'] in players else 'Unbekannt'
+                    'leader': room.get('leader_name', 'Unbekannt')
                 })
         return available
     
@@ -404,7 +425,7 @@ def index():
 @app.route('/create_game')
 def create_game():
     session['player_id'] = str(uuid.uuid4())
-    session['player_name'] = f"Spieler_{random.randint(1000, 9999)}"
+    session['player_name'] = f"Leader_{random.randint(1000, 9999)}"  # Leader-Name
     session['is_leader'] = True
     return render_template('create_game.html')
 
@@ -433,8 +454,7 @@ def create_room_route():
         'max_probability': float(data.get('max_probability', 0.8))
     }
     
-    room_id = GameManager.create_room(session['player_id'], settings)
-    GameManager.join_room(room_id, session['player_id'], session['player_name'])
+    room_id = GameManager.create_room(session['player_id'], session['player_name'], settings)
     
     session['room_id'] = room_id
     return jsonify({'room_id': room_id})
@@ -454,12 +474,28 @@ def game_room():
         return redirect(url_for('index'))
     
     room = rooms[room_id]
-    player_data = players.get(session['player_id'])
+    is_leader = session.get('is_leader', False)
+    
+    # Für Leader erstellen wir ein Dummy-Player-Objekt
+    if is_leader:
+        player_data = {
+            'id': session['player_id'],
+            'name': session['player_name'],
+            'ready': True,  # Leader ist immer bereit
+            'coins': 0,     # Leader hat keine Coins
+            'balance_history': [],
+            'contribution_history': [],
+            'is_leader': True  # Zusätzliches Flag für Moderator
+        }
+    else:
+        player_data = players.get(session['player_id'])
+        if player_data:
+            player_data['is_leader'] = False
     
     return render_template('game_room.html', 
                          room=room, 
                          player=player_data,
-                         is_leader=session.get('is_leader', False))
+                         is_leader=is_leader)
 
 @app.route('/game')
 def game():
@@ -666,7 +702,7 @@ def handle_set_ready(data):
 @socketio.on('start_game')
 def handle_start_game(data):
     room_id = data.get('room_id')
-    player_id = data.get('player_id')
+    player_id = data.get('player_id')  # WICHTIG: player_id aus data, nicht session
     
     print(f"🎮 Start-Event von {player_id} für Raum {room_id}")
     
@@ -676,14 +712,21 @@ def handle_start_game(data):
         
     room = rooms[room_id]
     
+    # ✅ Bessere Leader-Überprüfung
     if player_id != room['leader']:
-        emit('start_failed', {'message': 'Nur der Leader kann starten'})
+        emit('start_failed', {'message': 'Nur der Leader kann das Spiel starten'})
+        return
+    
+    # ✅ Validierung vor Start
+    can_start, message = GameManager.can_start_game(room_id)
+    if not can_start:
+        emit('start_failed', {'message': message})
         return
     
     if GameManager.start_game(room_id):
         emit('game_started', {'room_id': room_id}, room=room_id)
     else:
-        emit('start_failed', {'message': 'Startbedingungen nicht erfüllt'})
+        emit('start_failed', {'message': 'Spiel konnte nicht gestartet werden'})
 
 @socketio.on('submit_contribution')
 def handle_submit_contribution(data):

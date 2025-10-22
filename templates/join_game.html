@@ -67,8 +67,9 @@
                     roomItem.innerHTML = `
                         <div class="room-info">
                             <strong>Raum: ${room.id}</strong><br>
-                            Spieler: ${room.players}<br>
-                            Erstellt von: ${room.leader}
+                            Spieler: ${room.players}/${room.min_players || 4} benötigt<br>
+                            Erstellt von: ${room.leader}<br>
+                            <small>Status: Wartend</small>
                         </div>
                         <button class="join-btn" onclick="joinRoom('${room.id}')">Beitreten</button>
                     `;
