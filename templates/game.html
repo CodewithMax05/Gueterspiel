@@ -313,8 +313,8 @@
         roomId
     });
     
-    // Socket
-    const socket = io();
+    // Socket - globalen Socket verwenden
+    const socket = window.socket;
     
     // === SOCKET EVENTS ===
     
@@ -323,6 +323,7 @@
         socket.emit('join_room', { room_id: roomId, player_id: playerId });
         startTimer();
     });
+
     
     socket.on('disconnect', () => {
         console.log('❌ Verbindung getrennt');

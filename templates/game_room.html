@@ -136,15 +136,9 @@
         playerReady
     });
 
-    // Socket initialisieren (transport order + reconnect defaults)
-    const socket = io({
-        transports: ['websocket', 'polling'],  // WebSocket zuerst
-        reconnectionAttempts: 5,
-        timeout: 10000,
-        forceNew: false,  // WICHTIG: false für Session-Sharing
-        autoConnect: true
-    });
-    
+    // Globalen Socket verwenden
+    const socket = window.socket;
+
     let isConnected = false;
 
     // Verbindungsstatus UI
@@ -167,7 +161,7 @@
         isConnected = true;
         updateConnectionStatus(true);
 
-        // Dem Raum beitreten - player_id wird automatisch aus Session übermittelt
+        // Dem Raum beitreten
         console.log('📡 Sende join_room für:', roomId);
         socket.emit('join_room', { room_id: roomId });
 

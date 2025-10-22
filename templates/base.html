@@ -76,6 +76,45 @@
 					}, 500);
 				}, 5000);
 			}
+
+			// === GLOBALE SOCKET VERWALTUNG ===
+			window.appSocket = null;
+			window.socketInitialized = false;
+			
+			function getOrCreateSocket() {
+				if (!window.appSocket || !window.appSocket.connected) {
+					console.log('🔌 Erstelle neuen globalen Socket...');
+					window.appSocket = io({
+						transports: ['websocket', 'polling'],
+						reconnectionAttempts: 5,
+						timeout: 10000,
+						forceNew: false,
+						autoConnect: true
+					});
+					
+					// Globale Event-Handler
+					window.appSocket.on('connect', () => {
+						console.log('✅ Globaler Socket verbunden:', window.appSocket.id);
+					});
+					
+					window.appSocket.on('disconnect', () => {
+						console.log('❌ Globaler Socket getrennt');
+					});
+					
+					window.appSocket.on('connect_error', (error) => {
+						console.error('❌ Globaler Socket Verbindungsfehler:', error);
+					});
+				}
+				return window.appSocket;
+			}
+			
+			// Socket beim Laden initialisieren
+			document.addEventListener('DOMContentLoaded', function() {
+				if (!window.socketInitialized) {
+					window.socket = getOrCreateSocket();
+					window.socketInitialized = true;
+				}
+			});
 		</script>
 
 		{% block scripts %}{% endblock %}

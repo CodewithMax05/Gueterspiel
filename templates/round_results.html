@@ -254,8 +254,8 @@
     const playerId = roomData.dataset.playerId;
     const isLeader = roomData.dataset.isLeader === 'true';
     
-    const socket = io();
-    
+    const socket = window.socket;
+
     socket.on('connect', () => {
         console.log('Verbunden mit Server');
         socket.emit('join_room', { room_id: roomId });
