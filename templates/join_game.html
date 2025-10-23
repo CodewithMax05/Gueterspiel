@@ -125,11 +125,11 @@
     
     // WebSocket Events für join_game.html
     socket.on('room_joined', function(data) {
-        console.log('DEBUG: room_joined Event empfangen für Raum', data.room_id);
+        console.log('DEBUG: room_joined Event empfangen:', data);
         showNotification('Erfolgreich dem Raum beigetreten!', 'success');
         
-        // Direkte Weiterleitung ohne Verzögerung
-        window.location.href = `/game_room/${data.room_id}`;
+        // Weiterleitung mit player_id als URL-Parameter
+        window.location.href = `/game_room/${data.room_id}?player_id=${data.player_id}`;
     });
     
     socket.on('error', function(data) {

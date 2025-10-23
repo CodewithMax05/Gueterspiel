@@ -7,8 +7,22 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 from collections import defaultdict
 
 app = Flask(__name__)
+is_production = os.environ.get('FLASK_ENV') == 'production'
+
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_123')
-socketio = SocketIO(app, cors_allowed_origins="*")
+
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = is_production
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*",
+    manage_session=True,
+    logger=not is_production,  # Logger nur in Development
+    engineio_logger=not is_production,  # EngineIO Logger nur in Development
+    async_mode='gevent'  # Wichtig für Production
+)
 
 # Datenstrukturen zur Verwaltung der Räume und Spieler
 rooms = {}
@@ -125,7 +139,9 @@ class Player:
 
 # Hilfsfunktion zum Überprüfen der Raum-Zugriffsberechtigung
 def check_room_access(room_id, redirect_on_fail=True):
-    print(f"DEBUG: check_room_access für Raum {room_id}")
+    if not is_production:
+        print(f"DEBUG: check_room_access für Raum {room_id}")
+        print(f"DEBUG: Session-Daten: {dict(session)}")
     
     if room_id not in rooms:
         print(f"DEBUG: Raum {room_id} nicht gefunden")
@@ -139,7 +155,13 @@ def check_room_access(room_id, redirect_on_fail=True):
     print(f"DEBUG: Spieler-ID in Session: {player_id}")
     print(f"DEBUG: Spieler im Raum: {room.players}")
     
-    if not player_id or player_id not in players:
+    if not player_id:
+        print(f"DEBUG: Keine Spieler-ID in Session")
+        if redirect_on_fail:
+            return redirect(url_for('join_game'))
+        return room, None
+    
+    if player_id not in players:
         print(f"DEBUG: Spieler {player_id} nicht in players dictionary")
         if redirect_on_fail:
             return redirect(url_for('join_game'))
@@ -208,6 +230,17 @@ def join_game():
 
 @app.route('/game_room/<room_id>')
 def game_room(room_id):
+    # Prüfe ob Spieler-ID als URL-Parameter übergeben wurde
+    player_id_from_param = request.args.get('player_id')
+    
+    if player_id_from_param and player_id_from_param in players:
+        # Setze Session-Daten aus URL-Parameter
+        session['player_id'] = player_id_from_param
+        session['room_id'] = room_id
+        session['is_leader'] = False
+        session.modified = True
+        print(f"DEBUG: Session gesetzt von URL-Parameter: player_id={player_id_from_param}, room_id={room_id}")
+    
     result = check_room_access(room_id)
     if result and not isinstance(result, tuple):  # Redirect wurde zurückgegeben
         return result
@@ -376,7 +409,7 @@ def handle_join_room(data):
     room = rooms[room_id]
     
     # Prüfe ob Spielername bereits im Raum existiert
-    existing_names = [players[pid].name for pid in room.players if pid in players]
+    existing_names = [players[pid].name for pid in room.players if pid in players and not players[pid].is_leader]
     if player_name in existing_names:
         emit('error', {'message': 'Spielername bereits vergeben'})
         return
@@ -390,18 +423,13 @@ def handle_join_room(data):
     
     players[player_id] = player
     
-    # WICHTIG: Session-Daten SETZEN bevor join_room aufgerufen wird
-    session['player_id'] = player_id
-    session['room_id'] = room_id
-    session['is_leader'] = False
-    
     # Spieler zum Raum hinzufügen
     if room.add_player(player_id):
         join_room(room_id)
         
-        print(f"DEBUG: Spieler {player_name} zu Raum {room_id} hinzugefügt. Aktuelle Spieler: {len(room.players)}")
+        print(f"DEBUG: Spieler {player_name} zu Raum {room_id} hinzugefügt. Aktuelle Spieler: {room.players}")
         
-        # Benachrichtige andere Spieler
+        # Benachrichtige andere Spieler über neuen Spieler
         player_data = {
             'id': player_id,
             'name': player_name,
@@ -410,15 +438,42 @@ def handle_join_room(data):
         }
         emit('player_joined', player_data, room=room_id)
         
-        # Sende Erfolgsmeldung an neuen Spieler
-        emit('room_joined', {'room_id': room_id})
+        # Sende Erfolgsmeldung mit player_id für Weiterleitung
+        emit('room_joined', {
+            'room_id': room_id,
+            'player_id': player_id  # WICHTIG: player_id zurücksenden
+        })
         
-        print(f"DEBUG: room_joined Event gesendet für Raum {room_id}")
+        print(f"DEBUG: room_joined Event gesendet für Raum {room_id} mit player_id {player_id}")
+
+@socketio.on('join_room_reconnect')
+def handle_join_room_reconnect(data):
+    """Handler für Spieler, die bereits im Raum sind und die Seite neu laden"""
+    room_id = data.get('room_id')
+    player_id = data.get('player_id')
+    
+    print(f"DEBUG: join_room_reconnect - Raum: {room_id}, Spieler: {player_id}")
+    
+    if not room_id or not player_id:
+        return
+    
+    if room_id in rooms and player_id in players:
+        room = rooms[room_id]
+        player = players[player_id]
+        
+        # Stelle sicher, dass Spieler im Raum ist
+        if player_id not in room.players and not player.is_leader:
+            room.add_player(player_id)
+        
+        join_room(room_id)
+        print(f"DEBUG: Spieler {player_id} erneut Raum {room_id} beigetreten")
 
 @socketio.on('player_ready')
-def handle_player_ready(data):
+def handle_player_ready():
+    """Handler für Ready-Status ohne data Parameter"""
     player_id = session.get('player_id')
     if not player_id or player_id not in players:
+        print(f"DEBUG: player_ready - Spieler nicht gefunden: {player_id}")
         return
     
     player = players[player_id]
@@ -430,11 +485,15 @@ def handle_player_ready(data):
         room = rooms[room_id]
         ready_count = sum(1 for pid in room.players if players[pid].ready and not players[pid].is_leader)
         
+        print(f"DEBUG: player_ready - Spieler {player.name} ready: {player.ready}, Count: {ready_count}")
+        
         emit('player_ready_changed', {
             'player_id': player_id,
             'ready': player.ready,
             'ready_count': ready_count
         }, room=room_id)
+    else:
+        print(f"DEBUG: player_ready - Ungültiger Zustand: room_id={room_id}, is_leader={player.is_leader}")
 
 @socketio.on('start_game')
 def handle_start_game():
@@ -550,4 +609,11 @@ def handle_next_round():
             emit('game_finished', room=room_id)
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    
+    if is_production:
+        # In Production mit gunicorn kompatibel
+        socketio.run(app, host='0.0.0.0', port=port, debug=False)
+    else:
+        # In Development mit Debug-Modus
+        socketio.run(app, host='0.0.0.0', port=port, debug=True)

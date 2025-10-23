@@ -147,11 +147,25 @@
             setInterval(() => checkStartRequirements(roomId), 2000);
         }
         
-        // Bereit-Button Event
+        // Bereit-Button Event mit Debugging
         const readyBtn = document.getElementById('readyBtn');
         if (readyBtn) {
             readyBtn.addEventListener('click', function() {
+                console.log('DEBUG: Ready-Button geklickt');
+                console.log('DEBUG: Socket connected:', socket.connected);
+                console.log('DEBUG: Session player_id:', '{{ session.get("player_id") }}');
+                
                 socket.emit('player_ready');
+                
+                // Button-Text vorläufig ändern für visuelles Feedback
+                const originalText = this.textContent;
+                this.textContent = '⏳ Wird verarbeitet...';
+                this.disabled = true;
+                
+                setTimeout(() => {
+                    this.textContent = originalText;
+                    this.disabled = false;
+                }, 1000);
             });
         }
         
@@ -159,11 +173,12 @@
         const startBtn = document.getElementById('startBtn');
         if (startBtn) {
             startBtn.addEventListener('click', function() {
+                console.log('DEBUG: Start-Button geklickt');
                 socket.emit('start_game');
             });
         }
     });
-    
+
     function checkStartRequirements(roomId) {
         fetch(`/api/room/${roomId}/requirements`)
             .then(response => response.json())
@@ -207,6 +222,8 @@
     });
     
     socket.on('player_ready_changed', function(data) {
+        console.log('DEBUG: player_ready_changed Event empfangen:', data);
+        
         const playerElement = document.getElementById(`player-${data.player_id}`);
         if (playerElement) {
             if (data.ready) {
@@ -224,9 +241,20 @@
             }
         }
         
+        // Aktualisiere Ready-Count
         const readyCountElement = document.getElementById('readyCount');
         if (readyCountElement) {
             readyCountElement.textContent = data.ready_count;
+        }
+        
+        // Aktualisiere Ready-Button Text für den aktuellen Spieler
+        const readyBtn = document.getElementById('readyBtn');
+        if (readyBtn && data.player_id === '{{ session.get("player_id") }}') {
+            if (data.ready) {
+                readyBtn.textContent = '✅ Nicht bereit';
+            } else {
+                readyBtn.textContent = '❌ Bereit machen';
+            }
         }
     });
     
