@@ -220,6 +220,19 @@ def create_game():
         session['room_id'] = room_id
         session['is_leader'] = True
         
+        # TEST: 3 Test-Spieler mit Ready-Status erstellen
+        test_names = ["Test-Spieler 1", "Test-Spieler 2", "Test-Spieler 3"]
+        for name in test_names:
+            player_id = str(uuid.uuid4())
+            player = Player(player_id, name)
+            player.room_id = room_id
+            player.coins = room.settings['initial_coins']
+            player.game_history['balances'].append(player.coins)
+            player.ready = True  # Als bereit markieren
+            
+            players[player_id] = player
+            room.add_player(player_id)
+        
         return redirect(url_for('game_room', room_id=room_id))
     
     return render_template('create_game.html')
