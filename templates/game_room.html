@@ -57,6 +57,68 @@
         margin: 15px 0;
         border-left: 4px solid #ffc107;
     }
+    
+    /* Neue Styles für den Ready-Button */
+    .ready-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 12px 24px;
+        border: 2px solid #667eea;
+        background: rgba(102, 126, 234, 0.1);
+        color: #667eea;
+        transition: all 0.3s ease;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    
+    .ready-toggle:hover {
+        background: rgba(102, 126, 234, 0.2);
+        transform: translateY(-2px);
+    }
+    
+    .ready-toggle.ready {
+        background: rgba(40, 167, 69, 0.2);
+        border-color: #28a745;
+        color: #28a745;
+    }
+    
+    .ready-toggle.ready:hover {
+        background: rgba(40, 167, 69, 0.3);
+    }
+    
+    .checkbox-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+    }
+    
+    .checkbox-icon .fa-check-square {
+        display: none;
+        color: #28a745;
+    }
+    
+    .checkbox-icon .fa-square {
+        color: #667eea;
+    }
+    
+    .ready-toggle.ready .fa-check-square {
+        display: block;
+    }
+    
+    .ready-toggle.ready .fa-square {
+        display: none;
+    }
+    
+    /* Loading state */
+    .ready-toggle.loading {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
 </style>
 {% endblock %}
 
@@ -111,16 +173,22 @@
 
     {% if not is_leader %}
     <div style="text-align: center; margin: 20px 0;">
-        <button class="btn" id="readyBtn">
-            {% for p in players %}
-                {% if p.id == session.player_id %}
-                    {% if p.ready %}
-                        ✅ Nicht bereit
-                    {% else %}
-                        ❌ Bereit machen
+        <button class="ready-toggle {% for p in players %}{% if p.id == session.player_id %}{% if p.ready %}ready{% endif %}{% endif %}{% endfor %}" id="readyBtn">
+            <span class="checkbox-icon">
+                <i class="far fa-square"></i>
+                <i class="fas fa-check-square"></i>
+            </span>
+            <span class="ready-text">
+                {% for p in players %}
+                    {% if p.id == session.player_id %}
+                        {% if p.ready %}
+                            Bereit
+                        {% else %}
+                            Bereit machen
+                        {% endif %}
                     {% endif %}
-                {% endif %}
-            {% endfor %}
+                {% endfor %}
+            </span>
         </button>
     </div>
     {% endif %}
@@ -153,19 +221,15 @@
             readyBtn.addEventListener('click', function() {
                 console.log('DEBUG: Ready-Button geklickt');
                 console.log('DEBUG: Socket connected:', socket.connected);
-                console.log('DEBUG: Session player_id:', '{{ session.get("player_id") }}');
+                console.log('DEBUG: Session player_id:', currentPlayerId);
                 
-                socket.emit('player_ready');
-                
-                // Button-Text vorläufig ändern für visuelles Feedback
-                const originalText = this.textContent;
-                this.textContent = '⏳ Wird verarbeitet...';
+                // Button in Ladezustand versetzen
+                const readyText = this.querySelector('.ready-text');
+                readyText.textContent = '⏳ Wird verarbeitet...';
+                this.classList.add('loading');
                 this.disabled = true;
                 
-                setTimeout(() => {
-                    this.textContent = originalText;
-                    this.disabled = false;
-                }, 1000);
+                socket.emit('player_ready');
             });
         }
         
@@ -249,12 +313,18 @@
         
         // Aktualisiere Ready-Button Text für den aktuellen Spieler
         const readyBtn = document.getElementById('readyBtn');
-        if (readyBtn && data.player_id === '{{ session.get("player_id") }}') {
+        if (readyBtn && data.player_id === currentPlayerId) {
             if (data.ready) {
-                readyBtn.textContent = '✅ Nicht bereit';
+                readyBtn.classList.add('ready');
+                readyBtn.querySelector('.ready-text').textContent = 'Bereit';
             } else {
-                readyBtn.textContent = '❌ Bereit machen';
+                readyBtn.classList.remove('ready');
+                readyBtn.querySelector('.ready-text').textContent = 'Bereit machen';
             }
+            
+            // Button wieder aktivieren
+            readyBtn.classList.remove('loading');
+            readyBtn.disabled = false;
         }
     });
     
@@ -299,4 +369,3 @@
     }
 </script>
 {% endblock %}
-
