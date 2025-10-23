@@ -204,19 +204,6 @@
 {% endblock %}
 
 {% block body %}
-<!-- Daten für JavaScript -->
-<div id="game-data" 
-     data-player-coins="{{ player.coins }}" 
-     data-player-id="{{ player.id }}"
-     data-player-name="{{ player.name }}"
-     data-room-id="{{ room.id }}"
-     data-current-round="{{ current_round }}"
-     data-round-duration="{{ room.settings.round_duration }}"
-     data-max-contribution="{{ room.settings.max_contribution }}"
-     data-total-players="{{ players|length }}"
-     style="display: none;">
-</div>
-
 <div class="game-container">
     <!-- Runden-Header -->
     <div class="round-header">
@@ -283,238 +270,186 @@
     </div>
 </div>
 
+<div id="game-data" 
+     data-round-duration="{{ room.settings.round_duration }}"
+     data-max-contribution="{{ room.settings.max_contribution }}"
+     data-initial-balance="{{ player.coins }}"
+     data-total-players="{{ room.players|length }}"
+     style="display: none;">
+</div>
+{% endblock %}
+
+{% block scripts %}
 <script>
-    // Daten laden
-    const gameData = document.getElementById('game-data');
-    const playerCoins = parseFloat(gameData.dataset.playerCoins);
-    const playerId = gameData.dataset.playerId;
-    const playerName = gameData.dataset.playerName;
-    const roomId = gameData.dataset.roomId;
-    const currentRound = parseInt(gameData.dataset.currentRound);
-    const roundDuration = parseInt(gameData.dataset.roundDuration);
-    const maxContribution = Math.min(
-        playerCoins, 
-        parseInt(gameData.dataset.maxContribution)
-    );
-    const totalPlayers = parseInt(gameData.dataset.totalPlayers);
+    let selectedContribution = null;
+    let timeLeft;
+    let timerInterval;
     
-    let selectedAmount = null;
-    let timeLeft = roundDuration;
-    let timerInterval = null;
-    let hasSubmitted = false;
-    let submittedPlayers = 0;
-    
-    console.log('🎮 Spiel initialisiert:', {
-        playerId,
-        playerCoins,
-        maxContribution,
-        roundDuration,
-        totalPlayers,
-        roomId
-    });
-    
-    // Socket - globalen Socket verwenden
-    const socket = window.socket;
-    let isConnected = socket.connected;
-
-    // === SOCKET EVENTS ===
-    socket.on('connect', () => {
-        console.log('✅ Verbunden mit Server:', socket.id);
-        isConnected = true;
-        socket.emit('join_room', { room_id: roomId, player_id: playerId });
+    document.addEventListener('DOMContentLoaded', function() {
+        const gameData = document.getElementById('game-data');
+        timeLeft = parseInt(gameData.dataset.roundDuration);
+        const maxContribution = parseInt(gameData.dataset.maxContribution);
+        const initialBalance = parseFloat(gameData.dataset.initialBalance);
+        const totalPlayers = parseInt(gameData.dataset.totalPlayers);
+        
+        // Setze maximale Einzahlung im Text
+        const maxAmountElement = document.getElementById('maxAmount');
+        if (maxAmountElement) {
+            maxAmountElement.textContent = maxContribution;
+        }
+        
+        // Setze Gesamtspieler im Warte-Overlay
+        const totalPlayersElement = document.getElementById('totalPlayers');
+        if (totalPlayersElement) {
+            totalPlayersElement.textContent = totalPlayers;
+        }
+        
+        generateCoinOptions(maxContribution, initialBalance);
         startTimer();
-    });
-
-    socket.on('connection_success', (data) => {
-        console.log('✅ Server bestätigt Verbindung');
-    });
-
-    socket.on('room_joined', (data) => {
-        console.log('✅ Raum beigetreten:', data);
-    });
-
-    socket.on('disconnect', () => {
-        console.log('❌ Verbindung getrennt');
-        isConnected = false;
-        clearInterval(timerInterval);
-    });
-    
-    socket.on('contribution_submitted', (data) => {
-        console.log('💰 Beitrag eingereicht:', data);
         
-        if (data.player_id === playerId) {
-            // Eigener Beitrag
-            document.getElementById('waitingOverlay').style.display = 'flex';
-        } else {
-            // Anderer Spieler
-            submittedPlayers++;
-            updateSubmittedCount();
-            createFlashMessage(`${data.player_name} hat eingereicht`, 'info');
+        // Submit Button Event
+        const submitBtn = document.getElementById('submitBtn');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', submitContribution);
         }
     });
     
-    socket.on('round_time_up', () => {
-        console.log('⏰ Zeit abgelaufen!');
-        clearInterval(timerInterval);
-        
-        if (!hasSubmitted) {
-            createFlashMessage('Zeit abgelaufen! Automatisch 0 Coins eingezahlt', 'warning');
-            hasSubmitted = true;
-            document.getElementById('waitingOverlay').style.display = 'flex';
-        }
-    });
-    
-    socket.on('show_round_results', (data) => {
-        console.log('📊 Rundenergebnisse erhalten');
-        clearInterval(timerInterval);
-        createFlashMessage('Runde beendet! Zeige Ergebnisse...', 'success');
-        setTimeout(() => {
-            window.location.href = '/round_results';
-        }, 1000);
-    });
-    
-    socket.on('contribution_failed', (data) => {
-        console.error('❌ Beitrag fehlgeschlagen:', data);
-        createFlashMessage(data.message, 'error');
-        hasSubmitted = false;
-        document.getElementById('waitingOverlay').style.display = 'none';
-        enableContributionForm();
-    });
-    
-    // === FUNKTIONEN ===
-    
-    function generateCoinOptions() {
+    function generateCoinOptions(maxAmount, currentBalance) {
         const container = document.getElementById('coinOptions');
+        if (!container) return;
+        
         container.innerHTML = '';
         
-        for (let i = 0; i <= maxContribution; i++) {
+        for (let i = 0; i <= maxAmount; i++) {
             const option = document.createElement('div');
             option.className = 'coin-option';
             option.textContent = i;
-            option.dataset.amount = i;
+            option.dataset.value = i;
             
-            if (i > playerCoins) {
+            // Deaktiviere Optionen die über aktuellem Guthaben liegen
+            if (i > currentBalance) {
                 option.classList.add('disabled');
-                option.title = 'Nicht genug Guthaben';
             } else {
-                option.addEventListener('click', () => selectAmount(i, option));
+                option.addEventListener('click', function() {
+                    selectContribution(i, option);
+                });
             }
             
             container.appendChild(option);
         }
     }
     
-    function selectAmount(amount, element) {
-        if (hasSubmitted) return;
+    function selectContribution(amount, element) {
+        selectedContribution = amount;
         
-        selectedAmount = amount;
-        
-        // Alle Optionen zurücksetzen
+        // Entferne Auswahl von allen Optionen
         document.querySelectorAll('.coin-option').forEach(opt => {
             opt.classList.remove('selected');
         });
         
-        // Ausgewählte Option markieren
+        // Markiere ausgewählte Option
         element.classList.add('selected');
         
-        // Submit-Button aktivieren
-        document.getElementById('submitBtn').disabled = false;
-        
-        console.log('💵 Betrag ausgewählt:', amount);
-    }
-    
-    function submitContribution() {
-        if (selectedAmount === null || hasSubmitted) return;
-        
-        console.log('📤 Sende Beitrag:', selectedAmount);
-        
-        hasSubmitted = true;
-        socket.emit('submit_contribution', { 
-            room_id: roomId,
-            player_id: playerId,
-            amount: selectedAmount 
-        });
-        
-        // UI deaktivieren
-        disableContributionForm();
-        
-        // Eigenen Zähler erhöhen
-        submittedPlayers++;
-        updateSubmittedCount();
-    }
-    
-    function disableContributionForm() {
-        document.querySelectorAll('.coin-option').forEach(opt => {
-            opt.style.pointerEvents = 'none';
-            opt.style.opacity = '0.5';
-        });
-        document.getElementById('submitBtn').disabled = true;
-    }
-    
-    function enableContributionForm() {
-        document.querySelectorAll('.coin-option:not(.disabled)').forEach(opt => {
-            opt.style.pointerEvents = 'auto';
-            opt.style.opacity = '1';
-        });
-        document.getElementById('submitBtn').disabled = selectedAmount === null;
-    }
-    
-    function updateSubmittedCount() {
-        document.getElementById('submittedNumber').textContent = submittedPlayers;
+        const submitBtn = document.getElementById('submitBtn');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+        }
     }
     
     function startTimer() {
-        const timerElement = document.getElementById('timer');
-        timerElement.textContent = timeLeft;
+        updateTimerDisplay();
         
         timerInterval = setInterval(() => {
             timeLeft--;
-            timerElement.textContent = timeLeft;
+            updateTimerDisplay();
             
-            // Farbe ändern je nach verbleibender Zeit
-            timerElement.className = 'timer-time';
-            if (timeLeft <= 10) {
-                timerElement.classList.add('danger');
-            } else if (timeLeft <= 30) {
-                timerElement.classList.add('warning');
-            }
-            
-            // Zeit abgelaufen
             if (timeLeft <= 0) {
                 clearInterval(timerInterval);
-                
-                // Automatisch 0 einzahlen wenn noch nichts eingereicht
-                if (!hasSubmitted) {
-                    selectedAmount = 0;
-                    submitContribution();
+                // Automatisch 0 einreichen wenn Zeit abgelaufen
+                const waitingOverlay = document.getElementById('waitingOverlay');
+                if (!waitingOverlay || waitingOverlay.style.display === 'none' || waitingOverlay.style.display === '') {
+                    autoSubmitZero();
                 }
             }
         }, 1000);
     }
     
-    // === INITIALISIERUNG ===
-    document.addEventListener('DOMContentLoaded', function() {
-        // Sofortige Initialisierung wenn schon verbunden
-        if (isConnected) {
-            console.log('🚀 Sofortiger Raum-Beitritt für Spiel:', roomId);
-            socket.emit('join_room', { room_id: roomId, player_id: playerId });
-            startTimer();
-        } else {
-            // Raum für später speichern
-            window.joinRoomGlobal(roomId);
+    function updateTimerDisplay() {
+        const timerElement = document.getElementById('timer');
+        if (!timerElement) return;
+        
+        timerElement.textContent = timeLeft;
+        
+        // Farben basierend auf verbleibender Zeit
+        timerElement.classList.remove('warning', 'danger');
+        if (timeLeft <= 10) {
+            timerElement.classList.add('danger');
+        } else if (timeLeft <= 30) {
+            timerElement.classList.add('warning');
         }
-
-        // Coin-Optionen generieren
-        generateCoinOptions();
+    }
+    
+    function autoSubmitZero() {
+        selectedContribution = 0;
+        submitContribution();
+    }
+    
+    function submitContribution() {
+        if (selectedContribution === null) {
+            showNotification('Bitte wähle einen Betrag aus', 'error');
+            return;
+        }
         
-        // Submit-Button Handler
-        document.getElementById('submitBtn').addEventListener('click', submitContribution);
+        const currentBalanceElement = document.getElementById('currentBalance');
+        const currentBalance = currentBalanceElement ? parseFloat(currentBalanceElement.textContent) : 0;
         
-        // Spieler-Zähler initialisieren
-        document.getElementById('totalPlayers').textContent = totalPlayers;
-        updateSubmittedCount();
+        if (selectedContribution > currentBalance) {
+            showNotification('Nicht genügend Coins verfügbar', 'error');
+            return;
+        }
         
-        console.log('✅ UI initialisiert');
+        // Beitrag an Server senden
+        socket.emit('submit_contribution', {
+            contribution: selectedContribution
+        });
+        
+        // Warte-Overlay anzeigen
+        const waitingOverlay = document.getElementById('waitingOverlay');
+        if (waitingOverlay) {
+            waitingOverlay.style.display = 'flex';
+        }
+        
+        const submitBtn = document.getElementById('submitBtn');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+        }
+    }
+    
+    // WebSocket Events für game.html
+    socket.on('contribution_submitted', function(data) {
+        const submittedNumber = document.getElementById('submittedNumber');
+        const totalPlayers = document.getElementById('totalPlayers');
+        
+        if (submittedNumber) {
+            submittedNumber.textContent = data.submitted_count;
+        }
+        if (totalPlayers) {
+            totalPlayers.textContent = data.total_players;
+        }
+    });
+    
+    socket.on('round_finished', function(data) {
+        showNotification('Runde beendet! Zeige Ergebnisse...', 'success');
+        setTimeout(() => {
+            window.location.href = `/round_results/${data.room_id}`;
+        }, 1000);
+    });
+    
+    socket.on('game_finished', function(data) {
+        showNotification('Spiel beendet! Zeige Auswertung...', 'success');
+        setTimeout(() => {
+            window.location.href = `/evaluation/${data.room_id}`;
+        }, 1000);
     });
 </script>
 {% endblock %}

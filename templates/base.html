@@ -1,145 +1,276 @@
 <!DOCTYPE html>
 <html lang="de">
-	<head>
-		<meta charset="UTF-8" />
-		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-		<meta name="google" content="notranslate">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Öffentliches-Gut-Spiel</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Header Styles */
+        header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 1rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 20px;
+            list-style: none;
+        }
+        
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: background 0.3s ease;
+        }
+        
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Button Styles */
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .btn-success {
+            background: linear-gradient(45deg, #28a745, #20c997);
+        }
+        
+        /* Form Styles */
+        input, select, textarea {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        /* Utility Classes */
+        .text-center { text-align: center; }
+        .mt-1 { margin-top: 0.5rem; }
+        .mt-2 { margin-top: 1rem; }
+        .mt-3 { margin-top: 1.5rem; }
+        .mb-1 { margin-bottom: 0.5rem; }
+        .mb-2 { margin-bottom: 1rem; }
+        .mb-3 { margin-bottom: 1.5rem; }
+        
+        /* Flash Messages */
+        .flash-messages {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 1000;
+        }
+        
+        .flash {
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-left: 4px solid;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .flash.success {
+            border-left-color: #28a745;
+        }
+        
+        .flash.error {
+            border-left-color: #dc3545;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <header>
+        <nav class="navbar">
+            <div class="logo">
+                <i class="fas fa-users"></i>
+                Öffentliches-Gut-Spiel
+            </div>
+            <ul class="nav-links">
+                <li><a href="{{ url_for('index') }}">Home</a></li>
+                {% if session.get('room_id') %}
+                    <li><a href="{{ url_for('game_room', room_id=session.room_id) }}">Mein Raum</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+        <div class="connection-status connected" id="connectionStatus" style="display: none;">
+            ✅ Verbunden
+        </div>
+    </header>
 
-		<!-- CSS -->
-		<link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <main>
+        {% block body %}{% endblock %}
+    </main>
 
-		<!-- Favicon -->
-		<link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <footer style="text-align: center; padding: 2rem; margin-top: 3rem; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+        <p>Öffentliches-Gut-Spiel &copy; 2024</p>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        // Globale Variablen
+        const socket = io();
     
-		<!-- Browser-Farbthema -->
-		<meta name="theme-color" content="#1a1a2e">
-		
-		<!-- Titel -->
-		<title>Öffentliches-Gut-Spiel</title>
-
-		{% block head %}{% endblock %}
-	</head>
-	<body>
-		<!-- Flash-Message Container -->
-		<div id="flash-container">
-			{% with messages = get_flashed_messages(with_categories=true) %}
-				{% if messages %}
-					{% for category, message in messages %}
-						<div class="{% if category == 'error' %}error-message{% elif category == 'success' %}success-message{% else %}info-message{% endif %}">
-							{{ message }}
-							<div class="custom-progress-bar"></div>
-						</div>
-					{% endfor %}
-				{% endif %}
-			{% endwith %}
-		</div>
-		
-		{% block body %}{% endblock %}
-
-		<!-- Socket.io Script -->
-		<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-		
-		<script>
-			// Globale Flash-Message Funktion
-			function createFlashMessage(text, type = 'info') {
-				const flashContainer = document.getElementById('flash-container');
-				if (!flashContainer) return;
-				
-				const messages = flashContainer.querySelectorAll('.error-message, .success-message, .info-message');
-				messages.forEach(msg => msg.remove());
-				
-				const messageDiv = document.createElement('div');
-				
-				if (type === 'error') {
-					messageDiv.className = 'error-message';
-				} else if (type === 'success') {
-					messageDiv.className = 'success-message';
-				} else {
-					messageDiv.className = 'info-message';
-				}
-				
-				messageDiv.textContent = text;
-				
-				const progressBar = document.createElement('div');
-				progressBar.className = 'custom-progress-bar';
-				messageDiv.appendChild(progressBar);
-				
-				flashContainer.appendChild(messageDiv);
-				
-				setTimeout(() => {
-					messageDiv.style.animation = 'fadeOut 0.5s forwards';
-					setTimeout(() => {
-						if (flashContainer.contains(messageDiv)) {
-							flashContainer.removeChild(messageDiv);
-						}
-					}, 500);
-				}, 5000);
-			}
-
-			// === GLOBALE SOCKET VERWALTUNG ===
-			window.appSocket = null;
-			window.socketInitialized = false;
-			window.pendingRoomJoin = null;
-			
-			function getOrCreateSocket() {
-				if (!window.appSocket || !window.appSocket.connected) {
-					console.log('🔌 Erstelle neuen globalen Socket...');
-					window.appSocket = io({
-						transports: ['websocket', 'polling'],
-						reconnectionAttempts: 5,
-						timeout: 10000,
-						forceNew: false,
-						autoConnect: true
-					});
-					
-					// Globale Event-Handler
-					window.appSocket.on('connect', () => {
-						console.log('✅ Globaler Socket verbunden:', window.appSocket.id);
-						// Wenn ein Raum-Pending ist, sofort beitreten
-						if (window.pendingRoomJoin) {
-							console.log('🚀 Beitrete pending Raum:', window.pendingRoomJoin);
-							window.appSocket.emit('join_room', { room_id: window.pendingRoomJoin });
-							window.pendingRoomJoin = null;
-						}
-					});
-					
-					window.appSocket.on('disconnect', () => {
-						console.log('❌ Globaler Socket getrennt');
-					});
-					
-					window.appSocket.on('connect_error', (error) => {
-						console.error('❌ Globaler Socket Verbindungsfehler:', error);
-					});
-					
-					window.appSocket.on('connection_success', (data) => {
-						console.log('✅ Server bestätigt Verbindung:', data);
-					});
-				}
-				return window.appSocket;
-			}
-			
-			// Raum-Beitritts-Funktion für alle Seiten
-			window.joinRoomGlobal = function(roomId) {
-				const socket = getOrCreateSocket();
-				if (socket.connected) {
-					console.log('📡 Beitrete Raum sofort:', roomId);
-					socket.emit('join_room', { room_id: roomId });
-				} else {
-					console.log('⏳ Raum gespeichert, warte auf Verbindung:', roomId);
-					window.pendingRoomJoin = roomId;
-				}
-			};
-			
-			// Socket beim Laden initialisieren
-			document.addEventListener('DOMContentLoaded', function() {
-				if (!window.socketInitialized) {
-					window.socket = getOrCreateSocket();
-					window.socketInitialized = true;
-				}
-			});
-		</script>
-
-		{% block scripts %}{% endblock %}
-	</body>
+        // Session-Daten aus dem Template lesen
+        const currentRoomId = '{{ session.get("room_id", "") }}';
+        const currentPlayerId = '{{ session.get("player_id", "") }}';
+        const isLeader = '{{ session.get("is_leader", "false") }}' === 'true';
+        
+        console.log('DEBUG: Session-Daten - Raum:', currentRoomId, 'Spieler:', currentPlayerId, 'Leader:', isLeader);
+        
+        // Verbindungsstatus
+        socket.on('connect', function() {
+            console.log('DEBUG: Mit Server verbunden, Socket ID:', socket.id);
+            updateConnectionStatus(true);
+            
+            // Wenn wir in einem Raum sind, dem Raum erneut beitreten
+            if (currentRoomId) {
+                console.log('DEBUG: Automatischer Rejoin für Raum:', currentRoomId);
+                socket.emit('join_room_reconnect', { room_id: currentRoomId, player_id: currentPlayerId });
+            }
+        });
+        
+        socket.on('disconnect', function() {
+            console.log('Verbindung zum Server getrennt');
+            updateConnectionStatus(false);
+        });
+        
+        function updateConnectionStatus(connected) {
+            const statusElement = document.getElementById('connectionStatus');
+            if (statusElement) {
+                statusElement.textContent = connected ? '✅ Verbunden' : '❌ Getrennt';
+                statusElement.className = `connection-status ${connected ? 'connected' : 'disconnected'}`;
+            }
+        }
+        
+        // Utility-Funktionen
+        function showNotification(message, type = 'info', duration = 5000) {
+            // Erstelle Flash-Message Container falls nicht vorhanden
+            let flashContainer = document.getElementById('flash-messages');
+            if (!flashContainer) {
+                flashContainer = document.createElement('div');
+                flashContainer.id = 'flash-messages';
+                flashContainer.className = 'flash-messages';
+                document.body.appendChild(flashContainer);
+            }
+            
+            const flash = document.createElement('div');
+            flash.className = `flash ${type}`;
+            flash.innerHTML = `
+                <span>${message}</span>
+                <button onclick="this.parentElement.remove()" style="margin-left: 10px; background: none; border: none; color: white; cursor: pointer;">×</button>
+            `;
+            
+            flashContainer.appendChild(flash);
+            
+            if (duration > 0) {
+                setTimeout(() => {
+                    if (flash.parentElement) {
+                        flash.remove();
+                    }
+                }, duration);
+            }
+        }
+        
+        // Automatisches Ausblenden von Flash-Messages
+        document.addEventListener('DOMContentLoaded', function() {
+            const flashes = document.querySelectorAll('.flash');
+            flashes.forEach(flash => {
+                setTimeout(() => {
+                    flash.style.opacity = '0';
+                    setTimeout(() => flash.remove(), 300);
+                }, 5000);
+            });
+            
+            // Initialisiere Verbindungsstatus
+            updateConnectionStatus(socket.connected);
+        });
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
 </html>

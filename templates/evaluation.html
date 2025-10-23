@@ -36,7 +36,7 @@
     <div class="balance-history">
         <h3>Guthabenverlauf:</h3>
         <ul class="history-list">
-            {% for balance in player.balance_history %}
+            {% for balance in player.game_history.balances %}
             <li>Runde {{ loop.index }}: {{ balance }} Coins</li>
             {% endfor %}
         </ul>
@@ -49,4 +49,104 @@
         {% endif %}
     </div>
 </div>
+
+<div id="evaluation-data" 
+     data-initial-coins="{{ initial_coins }}"
+     data-is-leader="{{ 'true' if is_leader else 'false' }}"
+     data-balances="{{ player.game_history.balances | tojson | safe }}"
+     style="display: none;">
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const evaluationData = document.getElementById('evaluation-data');
+        const balancesJson = evaluationData.dataset.balances;
+        
+        if (balancesJson) {
+            try {
+                const balances = JSON.parse(balancesJson);
+                renderBalanceChart(balances);
+            } catch (error) {
+                console.error('Fehler beim Parsen der Balance-Daten:', error);
+            }
+        }
+    });
+    
+    function renderBalanceChart(balances) {
+        if (!balances || balances.length < 2) return;
+        
+        const container = document.querySelector('.balance-history');
+        if (!container) return;
+        
+        // Einfaches Chart mit Canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = 400;
+        canvas.height = 200;
+        canvas.style.maxWidth = '100%';
+        canvas.style.marginTop = '20px';
+        canvas.style.borderRadius = '8px';
+        canvas.style.background = 'rgba(255, 255, 255, 0.05)';
+        canvas.style.padding = '10px';
+        
+        container.appendChild(canvas);
+        
+        const context = canvas.getContext('2d');
+        if (!context) return;
+        
+        // Zeichne einfachen Linienchart
+        context.strokeStyle = '#667eea';
+        context.lineWidth = 3;
+        context.beginPath();
+        
+        const maxBalance = Math.max(...balances);
+        const minBalance = Math.min(...balances);
+        const range = maxBalance - minBalance || 1;
+        
+        const padding = 20;
+        const chartWidth = canvas.width - 2 * padding;
+        const chartHeight = canvas.height - 2 * padding;
+        
+        balances.forEach((balance, index) => {
+            const x = padding + (index / (balances.length - 1)) * chartWidth;
+            const y = canvas.height - padding - ((balance - minBalance) / range) * chartHeight;
+            
+            if (index === 0) {
+                context.moveTo(x, y);
+            } else {
+                context.lineTo(x, y);
+            }
+            
+            // Punkte zeichnen
+            context.fillStyle = '#667eea';
+            context.beginPath();
+            context.arc(x, y, 4, 0, 2 * Math.PI);
+            context.fill();
+        });
+        
+        context.stroke();
+        
+        // Beschriftungen hinzufügen
+        context.fillStyle = '#ffffff';
+        context.font = '12px Arial';
+        context.textAlign = 'center';
+        
+        // X-Achse Beschriftung (Runden)
+        balances.forEach((balance, index) => {
+            const x = padding + (index / (balances.length - 1)) * chartWidth;
+            const y = canvas.height - 5;
+            context.fillText(`R${index + 1}`, x, y);
+        });
+        
+        // Y-Achse Beschriftung (Coins)
+        context.textAlign = 'right';
+        const steps = 5;
+        for (let i = 0; i <= steps; i++) {
+            const value = minBalance + (i / steps) * range;
+            const y = canvas.height - padding - (i / steps) * chartHeight;
+            context.fillText(value.toFixed(1), padding - 5, y + 3);
+        }
+    }
+</script>
 {% endblock %}

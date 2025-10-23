@@ -231,88 +231,68 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
-    // Zeige/Verstecke Einstellungen je nach Modus
-    document.getElementById('endMode').addEventListener('change', function() {
-        const mode = this.value;
+    // Bedingte Einstellungen anzeigen/ausblenden
+    document.addEventListener('DOMContentLoaded', function() {
+        const endModeSelect = document.getElementById('endMode');
+        const fixedRounds = document.getElementById('fixedRoundsSetting');
+        const probability = document.getElementById('probabilitySetting');
+        const probabilityRange = document.getElementById('probabilityRangeSetting');
         
-        // Alle verstecken
-        document.getElementById('fixedRoundsSetting').style.display = 'none';
-        document.getElementById('probabilitySetting').style.display = 'none';
-        document.getElementById('probabilityRangeSetting').style.display = 'none';
+        function updateConditionalSettings() {
+            // Alle ausblenden
+            [fixedRounds, probability, probabilityRange].forEach(el => {
+                if (el) el.style.display = 'none';
+            });
+            
+            // Ausgewählte anzeigen
+            switch(endModeSelect.value) {
+                case 'fixed_rounds':
+                    if (fixedRounds) fixedRounds.style.display = 'block';
+                    break;
+                case 'probability':
+                    if (probability) probability.style.display = 'block';
+                    break;
+                case 'probability_range':
+                    if (probabilityRange) probabilityRange.style.display = 'block';
+                    break;
+            }
+        }
         
-        // Relevante anzeigen
-        if (mode === 'fixed_rounds') {
-            document.getElementById('fixedRoundsSetting').style.display = 'block';
-        } else if (mode === 'probability') {
-            document.getElementById('probabilitySetting').style.display = 'block';
-        } else if (mode === 'probability_range') {
-            document.getElementById('probabilityRangeSetting').style.display = 'block';
-        }
-    });
-    
-    // Initial anzeigen
-    document.getElementById('endMode').dispatchEvent(new Event('change'));
-    
-    // Validierung: max_contribution nicht größer als initial_coins
-    document.querySelector('[name="initial_coins"]').addEventListener('change', function() {
-        const maxContribution = document.querySelector('[name="max_contribution"]');
-        if (parseInt(maxContribution.value) > parseInt(this.value)) {
-            maxContribution.value = this.value;
-        }
-        maxContribution.max = this.value;
+        endModeSelect.addEventListener('change', updateConditionalSettings);
+        updateConditionalSettings(); // Initial aufrufen
     });
     
     function createGame() {
-        const formData = new FormData(document.getElementById('gameSettings'));
-        const settings = {};
+        const form = document.getElementById('gameSettings');
+        const formData = new FormData(form);
         
-        for (let [key, value] of formData.entries()) {
-            settings[key] = value;
-        }
+        // Validiere Eingaben
+        const initialCoins = parseInt(formData.get('initial_coins'));
+        const maxContribution = parseInt(formData.get('max_contribution'));
         
-        // Validierung
-        if (parseInt(settings.max_contribution) > parseInt(settings.initial_coins)) {
-            createFlashMessage('Max. Einzahlung kann nicht größer als Startguthaben sein', 'error');
+        if (initialCoins < 1 || initialCoins > 100) {
+            showNotification('Startguthaben muss zwischen 1 und 100 Coins liegen', 'error');
             return;
         }
         
-        if (settings.end_mode === 'probability_range') {
-            if (parseFloat(settings.min_probability) > parseFloat(settings.max_probability)) {
-                createFlashMessage('Minimale Wahrscheinlichkeit muss kleiner als maximale sein', 'error');
-                return;
-            }
+        if (maxContribution < 1 || maxContribution > 100) {
+            showNotification('Maximale Einzahlung muss zwischen 1 und 100 Coins liegen', 'error');
+            return;
         }
         
-        // Button deaktivieren während Anfrage
-        const btn = document.querySelector('.btn-create');
-        btn.disabled = true;
-        btn.textContent = '⏳ Erstelle Raum...';
+        if (maxContribution > initialCoins) {
+            showNotification('Maximale Einzahlung darf nicht größer als Startguthaben sein', 'error');
+            return;
+        }
         
-        fetch('/create_room', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(settings)
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Fehler beim Erstellen');
-            }
-            return response.json();
-        })
-        .then(data => {
-            createFlashMessage('Raum erfolgreich erstellt!', 'success');
-            setTimeout(() => {
-                window.location.href = '/game_room';
-            }, 500);
-        })
-        .catch(error => {
-            console.error('Fehler:', error);
-            createFlashMessage('Fehler beim Erstellen des Spiels', 'error');
-            btn.disabled = false;
-            btn.textContent = '🎮 Spiel mit diesen Einstellungen erstellen';
-        });
+        // Formular abschicken
+        form.method = 'POST';
+        form.action = "{{ url_for('create_game') }}";
+        form.submit();
     }
 </script>
 {% endblock %}

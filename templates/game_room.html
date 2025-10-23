@@ -50,31 +50,28 @@
     .player-status {
         margin-left: 10px;
     }
+    .leader-info {
+        background: rgba(255, 193, 7, 0.1);
+        padding: 15px;
+        border-radius: 8px;
+        margin: 15px 0;
+        border-left: 4px solid #ffc107;
+    }
 </style>
 {% endblock %}
 
 {% block body %}
-<!-- Daten für JavaScript -->
-<div class="room-info">
-    <p><strong>Raum-Code:</strong> {{ room.id }}</p>
-    <p><strong>Status:</strong> <span id="roomStatus">{{ room.status }}</span></p>
-    <p><strong>Spieler im Raum:</strong> <span id="totalPlayers">{{ players|length }}</span></p>
-    <p><strong>Bereite Spieler:</strong> <span id="readyCount">{{ ready_count }}</span></p>
-</div>
-
-<!-- Verbindungsstatus -->
-<div id="connectionStatus" class="connection-status disconnected">
-    🔴 Verbinde...
-</div>
-
 <div class="container">
     <h1>Spielraum: {{ room.id }}</h1>
     
+    <!-- Einheitlicher Raum-Informationen Block -->
     <div class="room-info">
         <p><strong>Raum-Code:</strong> {{ room.id }}</p>
         <p><strong>Status:</strong> <span id="roomStatus">{{ room.status }}</span></p>
-        <p><strong>Spieler im Raum:</strong> <span id="totalPlayers">{{ room.players|length }}</span></p>
-        <p><strong>Bereite Spieler:</strong> <span id="readyCount">{{ room.ready_players|length }}</span></p>
+        <p><strong>Aktive Spieler:</strong> <span id="totalPlayers">{{ players|length }}</span></p>
+        <p><strong>Bereite Spieler:</strong> <span id="readyCount">{{ ready_count }}</span></p>
+        <p><strong>Gruppengröße:</strong> <span id="groupSize">{{ room.settings.get('group_size', 4) }}</span> Spieler</p>
+        <p><strong>Erstellt von:</strong> {{ room.leader_name }}</p>
     </div>
 
     {% if is_leader %}
@@ -82,21 +79,18 @@
         <h4>Voraussetzungen für Spielstart:</h4>
         <ul>
             <li id="reqMinPlayers">Prüfe...</li>
-            <li id="reqDivisible">Prüfe...</li>
         </ul>
     </div>
     {% endif %}
     
     <div class="player-list">
-        <h3>Spieler (<span id="playersCount">{{ players|length }}</span>):</h3>
+        <h3>Aktive Spieler:</h3>
         <div id="playersContainer">
             {% for p in players %}
             <div class="player-item {% if p.ready %}ready{% endif %}" id="player-{{ p.id }}">
                 <div>
                     <span class="player-name">{{ p.name }}</span>
-                    {% if p.is_leader %}
-                    <span style="color: #ffc107; margin-left: 10px;">👑</span>
-                    {% endif %}
+                    <span style="color: #666; margin-left: 10px;">({{ p.coins }} Coins)</span>
                 </div>
                 <span class="player-status">
                     {% if p.ready %}
@@ -109,316 +103,172 @@
             {% endfor %}
         </div>
     </div>
-
-    <!-- Button für Spieler, die noch nicht bereit sind -->
-    {% if not is_leader and not player.ready %}
-    <button class="btn btn-primary" id="readyBtn" disabled>
-        ⏳ Verbinde...
-    </button>
-    {% endif %}
     
     {% if is_leader %}
     <button class="btn btn-success" id="startBtn" disabled>Spiel starten</button>
     <div id="startError" style="color: #dc3545; margin-top: 10px; display: none;"></div>
     {% endif %}
+
+    {% if not is_leader %}
+    <div style="text-align: center; margin: 20px 0;">
+        <button class="btn" id="readyBtn">
+            {% for p in players %}
+                {% if p.id == session.player_id %}
+                    {% if p.ready %}
+                        ✅ Nicht bereit
+                    {% else %}
+                        ❌ Bereit machen
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+        </button>
+    </div>
+    {% endif %}
 </div>
 
+<div id="room-data" 
+     data-room-id="{{ room.id }}"
+     data-is-leader="{{ 'true' if is_leader else 'false' }}"
+     style="display: none;">
+</div>
+
+{% endblock %}
+
+{% block scripts %}
 <script>
-    // Daten aus HTML lesen
-    const roomData = document.getElementById('room-data');
-    const roomId = roomData.dataset.roomId;
-    const isLeader = roomData.dataset.isLeader === 'true';
-    const playerId = roomData.dataset.playerId;
-    let playerReady = roomData.dataset.playerReady === 'true';
-
-    console.log('🎮 Initialisierung:', { 
-        roomId, 
-        isLeader, 
-        playerId, 
-        playerReady
-    });
-
-    // Globalen Socket verwenden
-    const socket = window.socket;
-    let isConnected = socket.connected;
-
-    // Verbindungsstatus UI
-    function updateConnectionStatus(connected) {
-        const statusDiv = document.getElementById('connectionStatus');
-        if (connected) {
-            statusDiv.textContent = '🟢 Verbunden';
-            statusDiv.className = 'connection-status connected';
-            setTimeout(() => { statusDiv.style.display = 'none'; }, 3000);
-        } else {
-            statusDiv.textContent = '🔴 Verbinde...';
-            statusDiv.className = 'connection-status disconnected';
-            statusDiv.style.display = 'block';
-        }
-    }
-
-    // Sofortigen Status setzen
-    updateConnectionStatus(isConnected);
-
-    // === SOCKET EVENTS ===
-    socket.on('connect', () => {
-        console.log('✅ Socket verbunden:', socket.id);
-        isConnected = true;
-        updateConnectionStatus(true);
-
-        // Dem Raum beitreten
-        console.log('📡 Sende join_room für:', roomId);
-        socket.emit('join_room', { room_id: roomId });
-
-        // Ready Button aktivieren
-        const readyBtn = document.getElementById('readyBtn');
-        if (readyBtn && !playerReady) {
-            readyBtn.disabled = false;
-            readyBtn.textContent = '✋ Bereit';
-        }
-    });
-
-    // Connection Success Event
-    socket.on('connection_success', (data) => {
-        console.log('✅ Server bestätigt Verbindung:', data);
-        updateConnectionStatus(true);
-    });
-
-    socket.on('room_joined', (data) => {
-        console.log('📥 Raum beigetreten:', data);
-        createFlashMessage('Mit Raum verbunden', 'success');
-    });
-
-    socket.on('reconnect_attempt', (attempt) => {
-        console.log(`🔄 Wiederherstellungsversuch: ${attempt}`);
-        updateConnectionStatus(false);
-    });
-
-    socket.on('reconnect', (attempt) => {
-        console.log('✅ Verbindung wiederhergestellt');
-        updateConnectionStatus(true);
+    document.addEventListener('DOMContentLoaded', function() {
+        const roomData = document.getElementById('room-data');
+        const roomId = roomData.dataset.roomId;
+        const isLeader = roomData.dataset.isLeader === 'true';
         
-        // Erneut dem Raum beitreten nach Reconnect
-        socket.emit('join_room', { room_id: roomId });
-    });
-
-    socket.on('connect_error', (error) => {
-        console.error('❌ Verbindungsfehler:', error);
-        updateConnectionStatus(false);
-        createFlashMessage('Verbindungsfehler: ' + error.message, 'error');
+        // Prüfe Startbedingungen (nur für Leader)
+        if (isLeader) {
+            checkStartRequirements(roomId);
+            setInterval(() => checkStartRequirements(roomId), 2000);
+        }
         
-        // Ready Button deaktivieren
+        // Bereit-Button Event
         const readyBtn = document.getElementById('readyBtn');
         if (readyBtn) {
-            readyBtn.disabled = true;
-            readyBtn.textContent = '❌ Verbindungsfehler';
+            readyBtn.addEventListener('click', function() {
+                socket.emit('player_ready');
+            });
         }
-    });
-
-    socket.on('disconnect', () => {
-        console.log('❌ Socket getrennt');
-        isConnected = false;
-        updateConnectionStatus(false);
-
-        // Ready Button deaktivieren
-        const readyBtn = document.getElementById('readyBtn');
-        if (readyBtn) {
-            readyBtn.disabled = true;
-            readyBtn.textContent = '⏳ Verbinde...';
-        }
-    });
-
-    socket.on('room_update', (data) => {
-        console.log('🔄 Raum-Update:', data);
-        updatePlayerList(data.players);
-        updateReadyCount(data.ready_count);
-        // wenn leader: Update Requirements basierend auf group_size
-        if (isLeader) {
-            updateStartButton(data.ready_count, data.total_players, data.group_size);
-            updateRequirements(false, data.ready_count, data.total_players, data.group_size);
-        }
-    });
-
-    socket.on('player_ready', (data) => {
-        console.log('✅ Spieler bereit:', data);
-        updatePlayerStatus(data.player_id, true);
-        updateReadyCount(data.ready_count);
-
-        if (data.player_id === playerId) {
-            createFlashMessage('Du bist jetzt bereit!', 'success');
-            const readyBtn = document.getElementById('readyBtn');
-            if (readyBtn) readyBtn.style.display = 'none';
-            playerReady = true;
-        } else {
-            createFlashMessage(`${data.player_name} ist bereit!`, 'info');
-        }
-
-        if (isLeader) {
-            updateStartButton(data.ready_count, data.total_players, data.group_size || 4);
-        }
-    });
-
-    socket.on('start_button_update', (data) => {
-        console.log('🎮 Start-Button Update:', data);
-        if (isLeader) {
-            updateStartButton(data.ready_count, data.total_players, data.group_size);
-            updateRequirements(data.can_start, data.ready_count, data.total_players, data.group_size);
-        }
-    });
-
-    socket.on('start_failed', (data) => {
-        console.error('❌ Start fehlgeschlagen:', data);
-        createFlashMessage('Spielstart fehlgeschlagen: ' + data.message, 'error');
         
-        // Button zurücksetzen
+        // Start-Button Event
         const startBtn = document.getElementById('startBtn');
         if (startBtn) {
-            startBtn.disabled = false;
-            startBtn.textContent = 'Spiel starten';
+            startBtn.addEventListener('click', function() {
+                socket.emit('start_game');
+            });
         }
     });
-
-    socket.on('error', (data) => {
-        console.error('❌ Fehler:', data);
-        createFlashMessage('Fehler: ' + data.message, 'error');
-    });
-
-    // === HELPER FUNKTIONEN ===
-    function updatePlayerList(players) {
-        const container = document.getElementById('playersContainer');
-        const countElement = document.getElementById('playersCount');
-        if (countElement) countElement.textContent = players.length;
-
-        // Vollständiges Rendering
-        container.innerHTML = '';
-        players.forEach(p => {
-            const div = document.createElement('div');
-            div.className = 'player-item' + (p.ready ? ' ready' : '');
-            div.id = `player-${p.id}`;
-            div.innerHTML = `
-                <div>
-                    <span class="player-name">${p.name}</span>
-                </div>
-                <span class="player-status">
-                    ${p.ready ? '<span style="color: #28a745;">✅ Bereit</span>' : '<span style="color: #dc3545;">❌ Nicht bereit</span>'}
-                </span>
-            `;
-            container.appendChild(div);
-        });
-        
-        // Leader separat anzeigen (nicht in der Spielerliste)
-        const roomData = document.getElementById('room-data');
-        const isLeader = roomData.dataset.isLeader === 'true';
-        if (isLeader) {
-            const leaderDiv = document.createElement('div');
-            leaderDiv.className = 'player-item ready';
-            leaderDiv.innerHTML = `
-                <div>
-                    <span class="player-name">${roomData.dataset.playerName || 'Leader'}</span>
-                    <span style="color: #ffc107; margin-left: 10px;">👑 (Leader)</span>
-                </div>
-                <span class="player-status">
-                    <span style="color: #28a745;">✅ Immer bereit</span>
-                </span>
-            `;
-            container.insertBefore(leaderDiv, container.firstChild);
-        }
+    
+    function checkStartRequirements(roomId) {
+        fetch(`/api/room/${roomId}/requirements`)
+            .then(response => response.json())
+            .then(data => {
+                const reqElement = document.getElementById('reqMinPlayers');
+                const startBtn = document.getElementById('startBtn');
+                const errorElement = document.getElementById('startError');
+                
+                if (!reqElement || !startBtn) return;
+                
+                if (data.can_start) {
+                    reqElement.innerHTML = '✅ Alle Voraussetzungen erfüllt!';
+                    startBtn.disabled = false;
+                    if (errorElement) errorElement.style.display = 'none';
+                } else {
+                    reqElement.innerHTML = `❌ Benötigt: ${data.required_players} Spieler (aktuell: ${data.current_players})`;
+                    startBtn.disabled = true;
+                    if (errorElement) {
+                        errorElement.textContent = data.message;
+                        errorElement.style.display = 'block';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Fehler beim Prüfen der Startvoraussetzungen:', error);
+            });
     }
-
-    function updatePlayerStatus(playerId, isReady) {
-        const playerElement = document.getElementById(`player-${playerId}`);
+    
+    // WebSocket Events für game_room.html
+    socket.on('player_joined', function(data) {
+        updatePlayerList(data);
+        updatePlayerCount();
+    });
+    
+    socket.on('player_left', function(data) {
+        const playerElement = document.getElementById(`player-${data.player_id}`);
         if (playerElement) {
-            if (isReady) {
+            playerElement.remove();
+        }
+        updatePlayerCount();
+    });
+    
+    socket.on('player_ready_changed', function(data) {
+        const playerElement = document.getElementById(`player-${data.player_id}`);
+        if (playerElement) {
+            if (data.ready) {
                 playerElement.classList.add('ready');
-                const statusSpan = playerElement.querySelector('.player-status');
-                if (statusSpan) statusSpan.innerHTML = '<span style="color: #28a745;">✅ Bereit</span>';
+                const statusElement = playerElement.querySelector('.player-status');
+                if (statusElement) {
+                    statusElement.innerHTML = '<span style="color: #28a745;">✅ Bereit</span>';
+                }
+            } else {
+                playerElement.classList.remove('ready');
+                const statusElement = playerElement.querySelector('.player-status');
+                if (statusElement) {
+                    statusElement.innerHTML = '<span style="color: #dc3545;">❌ Nicht bereit</span>';
+                }
             }
         }
-    }
-
-    function updateReadyCount(count) {
+        
         const readyCountElement = document.getElementById('readyCount');
-        if (readyCountElement) readyCountElement.textContent = count;
-    }
-
-    function updateStartButton(readyCount, totalPlayers, groupSize = 4) {
-        const canStart = readyCount >= groupSize && readyCount % groupSize === 0 && totalPlayers % groupSize === 0;
-        const startBtn = document.getElementById('startBtn');
-        if (startBtn) startBtn.disabled = !canStart;
-    }
-
-    function updateRequirements(canStart, ready, total, groupSize = 4) {
-        const reqMinPlayers = document.getElementById('reqMinPlayers');
-        const reqDivisible = document.getElementById('reqDivisible');
-        if (!reqMinPlayers || !reqDivisible) return;
-
-        const minMet = ready >= groupSize;
-        const divisibleMet = ready % groupSize === 0 && total % groupSize === 0;
-
-        reqMinPlayers.style.color = minMet ? '#28a745' : '#dc3545';
-        reqMinPlayers.innerHTML = minMet 
-            ? `✓ Mindestens ${groupSize} Spieler bereit` 
-            : `✗ Mindestens ${groupSize} Spieler bereit (aktuell: ${ready})`;
-
-        reqDivisible.style.color = divisibleMet ? '#28a745' : '#dc3545';
-        reqDivisible.innerHTML = divisibleMet 
-            ? `✓ Anzahl durch ${groupSize} teilbar` 
-            : `✗ Anzahl durch ${groupSize} teilbar (aktuell: ${ready}/${total})`;
-    }
-
-    // === EVENT HANDLERS ===
-    document.addEventListener('DOMContentLoaded', function() {
-        // Sofort dem Raum beitreten (wenn schon verbunden)
-        if (isConnected) {
-            console.log('🚀 Sofortiger Raum-Beitritt:', roomId);
-            socket.emit('join_room', { room_id: roomId });
-        } else {
-            // Raum für später speichern
-            window.joinRoomGlobal(roomId);
-        }
-
-        const readyBtn = document.getElementById('readyBtn');
-        const startBtn = document.getElementById('startBtn');
-
-        // Leader sieht keinen Ready-Button
-        if (isLeader) {
-            if (readyBtn) readyBtn.style.display = 'none';
-            playerReady = true;
-        } else if (readyBtn && !playerReady) {
-            readyBtn.addEventListener('click', function() {
-                if (!isConnected) {
-                    createFlashMessage('Keine Verbindung zum Server', 'error');
-                    return;
-                }
-                
-                this.disabled = true;
-                this.textContent = '⏳ Sende...';
-                
-                console.log('📤 Sende set_ready für:', playerId);
-                socket.emit('set_ready', { 
-                    room_id: roomId 
-                });
-            });
-        }
-
-        if (startBtn && isLeader) {
-            startBtn.addEventListener('click', function() {
-                if (!isConnected) {
-                    createFlashMessage('Keine Verbindung zum Server', 'error');
-                    return;
-                }
-                this.disabled = true;
-                this.textContent = '🚀 Starte...';
-                socket.emit('start_game', { room_id: roomId, player_id: playerId });
-            });
-        }
-
-        // Update der Startbedingungen für Leader
-        if (isLeader) {
-            const readyCount = parseInt(document.getElementById('readyCount').textContent);
-            const totalPlayers = parseInt(document.getElementById('totalPlayers').textContent);
-            updateStartButton(readyCount, totalPlayers, parseInt(roomData.dataset.groupSize || 4));
-            updateRequirements(false, readyCount, totalPlayers, parseInt(roomData.dataset.groupSize || 4));
+        if (readyCountElement) {
+            readyCountElement.textContent = data.ready_count;
         }
     });
+    
+    socket.on('game_started', function(data) {
+        showNotification('Spiel wird gestartet!', 'success');
+        setTimeout(() => {
+            window.location.href = `/game/${data.room_id}`;
+        }, 1000);
+    });
+    
+    function updatePlayerList(playerData) {
+        const container = document.getElementById('playersContainer');
+        if (!container) return;
+        
+        const existingPlayer = document.getElementById(`player-${playerData.id}`);
+        if (existingPlayer) return;
+        
+        const playerElement = document.createElement('div');
+        playerElement.className = `player-item ${playerData.ready ? 'ready' : ''}`;
+        playerElement.id = `player-${playerData.id}`;
+        playerElement.innerHTML = `
+            <div>
+                <span class="player-name">${playerData.name}</span>
+                <span style="color: #666; margin-left: 10px;">(${playerData.coins} Coins)</span>
+            </div>
+            <span class="player-status">
+                ${playerData.ready ? 
+                    '<span style="color: #28a745;">✅ Bereit</span>' : 
+                    '<span style="color: #dc3545;">❌ Nicht bereit</span>'
+                }
+            </span>
+        `;
+        container.appendChild(playerElement);
+    }
+    
+    function updatePlayerCount() {
+        const playerItems = document.querySelectorAll('.player-item');
+        const totalPlayersElement = document.getElementById('totalPlayers');
+        if (totalPlayersElement) {
+            totalPlayersElement.textContent = playerItems.length;
+        }
+    }
 </script>
 {% endblock %}
+

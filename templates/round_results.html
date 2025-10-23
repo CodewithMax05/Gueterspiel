@@ -171,7 +171,7 @@
     <!-- Persönliche Zusammenfassung -->
     <div class="player-summary">
         <h2>Dein Ergebnis</h2>
-        {% set player_profit = player.coins - player.balance_history[-2] if player.balance_history|length > 1 else 0 %}
+        {% set player_profit = player.coins - player.game_history.balances[-2] if player.game_history.balances|length > 1 else 0 %}
         <div class="balance-change {% if player_profit > 0 %}positive{% elif player_profit < 0 %}negative{% else %}neutral{% endif %}">
             {% if player_profit > 0 %}+{% endif %}{{ "%.1f"|format(player_profit) }} Coins
         </div>
@@ -248,51 +248,69 @@
     {% endif %}
 </div>
 
+<div id="results-data" 
+     data-room-id="{{ room.id }}"
+     data-player-id="{{ player.id }}"
+     data-is-leader="{{ 'true' if is_leader else 'false' }}"
+     style="display: none;">
+</div>
+{% endblock %}
+
+{% block scripts %}
 <script>
-    const roomData = document.getElementById('room-data');
-    const roomId = roomData.dataset.roomId;
-    const playerId = roomData.dataset.playerId;
-    const isLeader = roomData.dataset.isLeader === 'true';
-    
-    const socket = window.socket;
-
-    // Sofort dem Raum beitreten wenn verbunden
-    if (socket.connected) {
-        socket.emit('join_room', { room_id: roomId });
-    }
-
-    socket.on('connect', () => {
-        console.log('Verbunden mit Server');
-        socket.emit('join_room', { room_id: roomId });
+    document.addEventListener('DOMContentLoaded', function() {
+        const resultsData = document.getElementById('results-data');
+        const isLeader = resultsData.dataset.isLeader === 'true';
+        const roomId = resultsData.dataset.roomId;
+        
+        if (isLeader) {
+            const continueBtn = document.getElementById('continueBtn');
+            if (continueBtn) {
+                continueBtn.addEventListener('click', function() {
+                    this.disabled = true;
+                    this.textContent = '⏳ Wird verarbeitet...';
+                    socket.emit('next_round');
+                });
+            }
+        }
+        
+        // Prüfe alle 3 Sekunden ob nächste Runde startet
+        setInterval(() => checkGameStatus(roomId), 3000);
     });
-
-    socket.on('room_joined', (data) => {
-        console.log('✅ Raum beigetreten für Ergebnisse');
-    });
-
-    // Leader kann nächste Runde starten
-    if (isLeader) {
-        document.getElementById('continueBtn').addEventListener('click', function() {
-            this.disabled = true;
-            this.textContent = '⏳ Starte nächste Runde...';
-            socket.emit('continue_to_next_round');
-        });
+    
+    function checkGameStatus(roomId) {
+        fetch(`/api/room/${roomId}/status`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'playing') {
+                    window.location.href = `/game/${roomId}`;
+                } else if (data.status === 'finished') {
+                    window.location.href = `/evaluation/${roomId}`;
+                }
+            })
+            .catch(error => {
+                console.error('Fehler beim Prüfen des Spielstatus:', error);
+            });
     }
     
-    // Nächste Runde gestartet
-    socket.on('next_round_started', (data) => {
-        createFlashMessage(`Runde ${data.round} beginnt!`, 'info');
+    // WebSocket Events für round_results.html
+    socket.on('next_round_started', function(data) {
+        showNotification('Nächste Runde startet!', 'success');
         setTimeout(() => {
-            window.location.href = '/game';
+            window.location.href = `/game/${data.room_id}`;
         }, 1500);
     });
     
-    // Spiel beendet
-    socket.on('game_finished', () => {
-        createFlashMessage('🏁 Spiel beendet! Zur Auswertung...', 'success');
+    socket.on('game_finished', function(data) {
+        showNotification('Spiel beendet!', 'info');
         setTimeout(() => {
-            window.location.href = '/evaluation';
-        }, 2000);
+            window.location.href = `/evaluation/${data.room_id}`;
+        }, 1500);
     });
 </script>
 {% endblock %}
