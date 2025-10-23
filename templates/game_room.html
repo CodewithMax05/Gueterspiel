@@ -329,10 +329,11 @@
     });
     
     socket.on('game_started', function(data) {
-        showNotification('Spiel wird gestartet!', 'success');
-        setTimeout(() => {
-            window.location.href = `/game/${data.room_id}`;
-        }, 1000);
+        console.log('DEBUG: game_started Event empfangen, leite weiter zu game.html');
+        showNotification('Spiel startet!', 'success');
+        
+        // Weiterleitung zur game.html mit der room_id aus dem Event
+        window.location.href = `/game/${data.room_id}`;
     });
     
     function updatePlayerList(playerData) {

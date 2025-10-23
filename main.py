@@ -531,6 +531,7 @@ def handle_start_game():
                 players[pid].ready = False
             
             emit('game_started', {
+                'room_id': room_id,  # WICHTIG: room_id hinzufügen
                 'current_round': room.current_round
             }, room=room_id)
         else:
