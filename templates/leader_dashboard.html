@@ -226,11 +226,8 @@
         {% endif %}
     </div>
     
-    <!-- Aktions-Buttons -->
+    <!-- Aktions-Button -->
     <div class="action-buttons">
-        <button class="btn btn-large" id="forceNextRound" style="display: none;">
-            ⏭️ Runde vorzeitig beenden
-        </button>
         <button class="btn btn-large btn-success" id="nextRoundBtn" style="display: none;">
             ▶️ Nächste Runde starten
         </button>
@@ -264,18 +261,7 @@
         initializeTimer();
         
         // Event Listeners
-        const forceNextRoundBtn = document.getElementById('forceNextRound');
         const nextRoundBtn = document.getElementById('nextRoundBtn');
-        
-        if (forceNextRoundBtn) {
-            forceNextRoundBtn.addEventListener('click', function() {
-                if (confirm('Möchtest du die aktuelle Runde wirklich vorzeitig beenden? Nicht eingereichte Spieler zahlen 0 Coins ein.')) {
-                    socket.emit('stop_game_timer', { room_id: roomId });
-                    // Simuliere, dass alle Spieler eingereicht haben
-                    socket.emit('force_round_finish', { room_id: roomId });
-                }
-            });
-        }
         
         if (nextRoundBtn) {
             nextRoundBtn.addEventListener('click', function() {
@@ -327,14 +313,6 @@
             progressFill.style.width = percentage + '%';
             progressText.textContent = submittedCount + ' von ' + totalPlayers + ' Spielern haben eingereicht';
             submittedCountElement.textContent = submittedCount;
-            
-            // Zeige "Runde vorzeitig beenden" Button, wenn noch nicht alle eingereicht haben
-            const forceNextRoundBtn = document.getElementById('forceNextRound');
-            if (forceNextRoundBtn && submittedCount > 0 && submittedCount < totalPlayers) {
-                forceNextRoundBtn.style.display = 'block';
-            } else if (forceNextRoundBtn) {
-                forceNextRoundBtn.style.display = 'none';
-            }
         }
     }
     
@@ -420,11 +398,6 @@
                     const nextRoundBtn = document.getElementById('nextRoundBtn');
                     if (nextRoundBtn) {
                         nextRoundBtn.style.display = 'block';
-                    }
-                    // Verstecke "vorzeitig beenden" Button
-                    const forceNextRoundBtn = document.getElementById('forceNextRound');
-                    if (forceNextRoundBtn) {
-                        forceNextRoundBtn.style.display = 'none';
                     }
                 }
             })

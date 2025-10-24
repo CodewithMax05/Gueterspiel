@@ -592,35 +592,6 @@ def api_room_status(room_id):
         'current_round': room.current_round
     })
 
-@app.route('/api/room/<room_id>/start_timer', methods=['POST'])
-def api_start_timer(room_id):
-    """Startet den Timer für eine Runde"""
-    if room_id not in rooms:
-        return jsonify({'error': 'Raum nicht gefunden'}), 404
-    
-    room = rooms[room_id]
-    duration = room.settings.get('round_duration', 60)
-    
-    # Timer starten
-    socketio.emit('start_game_timer', {
-        'room_id': room_id,
-        'duration': duration
-    }, room=room_id)
-    
-    return jsonify({'success': True, 'duration': duration})
-
-@app.route('/api/room/<room_id>/stop_timer', methods=['POST'])
-def api_stop_timer(room_id):
-    """Stoppt den Timer für einen Raum"""
-    if room_id not in rooms:
-        return jsonify({'error': 'Raum nicht gefunden'}), 404
-    
-    # Timer stoppen
-    socketio.emit('stop_game_timer', {'room_id': room_id}, room=room_id)
-    stop_game_timer(room_id)
-    
-    return jsonify({'success': True})
-
 @app.route('/api/room/<room_id>/can_continue')
 def api_room_can_continue(room_id):
     """Prüft ob das Spiel weitergehen kann"""
@@ -758,56 +729,6 @@ def handle_join_room_reconnect(data):
         
         print(f"DEBUG: Spieler {player_id} erneut Raum {room_id} beigetreten")
 
-@socketio.on('start_game_timer')
-def handle_start_game_timer(data):
-    """Startet den Timer für eine Spielrunde (kann vom Client aufgerufen werden)"""
-    room_id = data.get('room_id')
-    duration = data.get('duration', 60)
-    
-    if room_id in rooms:
-        get_or_create_game_timer(room_id, duration)
-        print(f"Game-Timer für Raum {room_id} gestartet (Dauer: {duration}s)")
-
-@socketio.on('stop_game_timer')  
-def handle_stop_game_timer(data):
-    """Stoppt den Timer für einen Spielraum (kann vom Client aufgerufen werden)"""
-    room_id = data.get('room_id')
-    if room_id:
-        stop_game_timer(room_id)
-        print(f"Game-Timer für Raum {room_id} gestoppt")
-
-@socketio.on('force_round_finish')
-def handle_force_round_finish(data):
-    """Erzwingt das Beenden der aktuellen Runde (nur für Leader)"""
-    player_id = session.get('player_id')
-    if not player_id or player_id not in players:
-        return
-    
-    player = players[player_id]
-    room_id = player.room_id
-    
-    if room_id and room_id in rooms and player.is_leader:
-        room = rooms[room_id]
-        
-        # Stoppe Timer
-        stop_game_timer(room_id)
-        
-        # Für Spieler die nicht eingereicht haben, setze Beitrag auf 0
-        for pid in room.players:
-            if pid not in room.submitted_players and not players[pid].is_leader:
-                players[pid].current_contribution = 0
-                room.submitted_players.add(pid)
-        
-        # Berechne Ergebnisse
-        results = room.calculate_round_results()
-        room.status = "round_results"
-        room.submitted_players.clear()
-        
-        emit('round_finished', {
-            'results': results,
-            'current_round': room.current_round
-        }, room=room_id)
-
 @socketio.on('player_ready')
 def handle_player_ready():
     """Handler für Ready-Status ohne data Parameter"""
@@ -928,35 +849,6 @@ def finish_round(room_id):
         if pid not in room.submitted_players and not players[pid].is_leader:
             players[pid].current_contribution = 0
             room.submitted_players.add(pid)
-    
-    # Berechne Ergebnisse
-    results = room.calculate_round_results()
-    room.status = "round_results"
-    room.submitted_players.clear()
-    
-    # Sende Event an alle im Raum
-    socketio.emit('round_finished', {
-        'results': results,
-        'current_round': room.current_round,
-        'room_id': room_id
-    }, room=room_id)
-    
-    # Leite Spieler automatisch zu round_results weiter
-    for player_id in room.players:
-        if player_id in players and not players[player_id].is_leader:
-            # Für normale Spieler: Weiterleitung zu round_results
-            socketio.emit('redirect_to_results', {
-                'room_id': room_id
-            }, room=player_id)
-    
-    print(f"Runde {room.current_round} abgeschlossen, Spieler werden zu Ergebnissen weitergeleitet")
-
-def handle_round_completion(room_id):
-    """Behandelt den Abschluss einer Runde und leitet Spieler weiter"""
-    if room_id not in rooms:
-        return
-    
-    room = rooms[room_id]
     
     # Berechne Ergebnisse
     results = room.calculate_round_results()

@@ -388,16 +388,8 @@
     }
     
     function startGameTimer(initialTime) {
-        // Alten Interval löschen
-        if (gameTimerInterval) {
-            clearInterval(gameTimerInterval);
-        }
-        
         serverTimeLeft = initialTime;
         updateTimerDisplay();
-        
-        // Wir setzen keinen clientseitigen Interval, da wir Updates vom Server bekommen
-        // Stattdessen listen wir auf Server-Events
     }
     
     function updateTimerDisplay() {
@@ -422,17 +414,6 @@
             timerElement.classList.add('danger');
         } else if (serverTimeLeft <= 30) {
             timerElement.classList.add('warning');
-        }
-    }
-
-    function handleTimeExpired() {
-        const waitingOverlay = document.getElementById('waitingOverlay');
-        if (!waitingOverlay || waitingOverlay.style.display === 'none') {
-            // Nur automatisch einreichen wenn noch nicht eingereicht
-            if (selectedContribution === null) {
-                selectedContribution = 0;
-            }
-            submitContribution();
         }
     }
     
