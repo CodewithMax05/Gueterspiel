@@ -301,9 +301,14 @@
     // WebSocket Events für round_results.html
     socket.on('next_round_started', function(data) {
         showNotification('Nächste Runde startet!', 'success');
-        setTimeout(() => {
+        
+        if (isLeader) {
+            // Leader bleibt auf dem Dashboard
+            window.location.href = `/leader_dashboard/${data.room_id}`;
+        } else {
+            // Spieler gehen zum Spiel
             window.location.href = `/game/${data.room_id}`;
-        }, 1500);
+        }
     });
     
     socket.on('game_finished', function(data) {

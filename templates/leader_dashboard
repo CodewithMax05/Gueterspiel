@@ -1,0 +1,410 @@
+[file name]: leader_dashboard.html
+[file content begin]
+{% extends "base.html" %}
+
+{% block head %}
+<style>
+    .dashboard-container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    
+    .round-header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+    
+    .round-number {
+        font-size: 36px;
+        font-weight: bold;
+        color: #667eea;
+    }
+    
+    .timer-display {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 20px;
+        text-align: center;
+        margin: 20px 0;
+        border: 2px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .timer-time {
+        font-size: 48px;
+        font-weight: bold;
+        color: #28a745;
+    }
+    
+    .timer-time.warning {
+        color: #ffc107;
+    }
+    
+    .timer-time.danger {
+        color: #dc3545;
+        animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.8; transform: scale(1.05); }
+    }
+    
+    .groups-container {
+        margin: 30px 0;
+    }
+    
+    .group-card {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 25px;
+        margin: 20px 0;
+        border-left: 4px solid #667eea;
+    }
+    
+    .group-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 15px;
+        border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+        margin-bottom: 20px;
+    }
+    
+    .group-members {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 10px;
+    }
+    
+    .member-badge {
+        background: rgba(102, 126, 234, 0.2);
+        padding: 8px 15px;
+        border-radius: 20px;
+        font-size: 14px;
+        border: 1px solid #667eea;
+    }
+    
+    .status-overview {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 20px;
+        margin: 20px 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+    }
+    
+    .status-item {
+        text-align: center;
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 8px;
+    }
+    
+    .status-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #667eea;
+        margin: 10px 0;
+    }
+    
+    .status-label {
+        color: #aaa;
+        font-size: 14px;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        margin: 30px 0;
+    }
+    
+    .btn-large {
+        padding: 15px 30px;
+        font-size: 18px;
+    }
+    
+    .submission-progress {
+        background: rgba(40, 167, 69, 0.2);
+        padding: 15px;
+        border-radius: 8px;
+        margin: 15px 0;
+        border: 1px solid #28a745;
+        text-align: center;
+    }
+    
+    .progress-bar {
+        width: 100%;
+        height: 20px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        margin: 10px 0;
+        overflow: hidden;
+    }
+    
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(45deg, #28a745, #20c997);
+        border-radius: 10px;
+        transition: width 0.3s ease;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="dashboard-container">
+    <!-- Runden-Header -->
+    <div class="round-header">
+        <div class="round-number">Runde <span id="currentRound">{{ room.current_round }}</span> - Leader Dashboard</div>
+        <p style="opacity: 0.8; margin-top: 10px;">Übersicht aller Gruppen und Spieler</p>
+    </div>
+    
+    <!-- Timer -->
+    <div class="timer-display">
+        <div style="font-size: 18px; margin-bottom: 10px;">⏱️ Verbleibende Zeit</div>
+        <div class="timer-time" id="timer">--</div>
+        <div style="font-size: 14px; margin-top: 5px; opacity: 0.7;">Sekunden</div>
+    </div>
+    
+    <!-- Status-Übersicht -->
+    <div class="status-overview">
+        <div class="status-item">
+            <div class="status-label">Aktive Gruppen</div>
+            <div class="status-value" id="totalGroups">{{ room.groups|length if room.groups else 0 }}</div>
+        </div>
+        <div class="status-item">
+            <div class="status-label">Aktive Spieler</div>
+            <div class="status-value" id="totalPlayers">{{ room.players|length }}</div>
+        </div>
+        <div class="status-item">
+            <div class="status-label">Eingereichte Beiträge</div>
+            <div class="status-value" id="submittedCount">0</div>
+        </div>
+        <div class="status-item">
+            <div class="status-label">Gruppengröße</div>
+            <div class="status-value" id="groupSize">{{ room.settings.group_size }}</div>
+        </div>
+    </div>
+    
+    <!-- Einreichungs-Fortschritt -->
+    <div class="submission-progress">
+        <h4>📊 Beiträge der Spieler</h4>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+        </div>
+        <div id="progressText">0 von <span id="totalPlayersCount">{{ room.players|length }}</span> Spielern haben eingereicht</div>
+    </div>
+    
+    <!-- Gruppen-Übersicht -->
+    <div class="groups-container">
+        <h2 style="text-align: center; margin-bottom: 30px;">👥 Gruppenübersicht</h2>
+        
+        {% if room.groups %}
+            {% for group in room.groups %}
+            <div class="group-card" data-group-number="{{ group.group_number }}">
+                <div class="group-header">
+                    <h3>Gruppe {{ group.group_number }}</h3>
+                    <span style="color: #667eea; font-size: 18px;">
+                        {{ group.members|length }} Spieler
+                    </span>
+                </div>
+                
+                <div class="group-members">
+                    {% for member in group.members %}
+                    <div class="member-badge">
+                        {{ member }}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div style="text-align: center; padding: 40px; background: rgba(255, 255, 255, 0.05); border-radius: 12px;">
+                <p>Noch keine Gruppen erstellt. Das Spiel startet bald...</p>
+            </div>
+        {% endif %}
+    </div>
+    
+    <!-- Aktions-Buttons -->
+    <div class="action-buttons">
+        <button class="btn btn-large" id="forceNextRound" style="display: none;">
+            ⏭️ Runde vorzeitig beenden
+        </button>
+        <button class="btn btn-large btn-success" id="nextRoundBtn" style="display: none;">
+            ▶️ Nächste Runde starten
+        </button>
+    </div>
+</div>
+
+<!-- Data attributes für JavaScript -->
+<div id="dashboard-data" 
+     data-room-id="{{ room.id }}"
+     data-total-players="{{ room.players|length }}"
+     data-group-size="{{ room.settings.group_size }}"
+     data-current-round="{{ room.current_round }}"
+     style="display: none;">
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let serverTimeLeft;
+    let submittedCount = 0;
+    let totalPlayers = 0;
+    let roomId = '';
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        // Daten aus HTML data attributes lesen
+        const dashboardData = document.getElementById('dashboard-data');
+        roomId = dashboardData.dataset.roomId;
+        totalPlayers = parseInt(dashboardData.dataset.totalPlayers);
+        
+        // Timer initialisieren
+        initializeTimer();
+        
+        // Event Listeners
+        const forceNextRoundBtn = document.getElementById('forceNextRound');
+        const nextRoundBtn = document.getElementById('nextRoundBtn');
+        
+        if (forceNextRoundBtn) {
+            forceNextRoundBtn.addEventListener('click', function() {
+                if (confirm('Möchtest du die aktuelle Runde wirklich vorzeitig beenden? Nicht eingereichte Spieler zahlen 0 Coins ein.')) {
+                    socket.emit('stop_game_timer', { room_id: roomId });
+                    // Simuliere, dass alle Spieler eingereicht haben
+                    socket.emit('force_round_finish', { room_id: roomId });
+                }
+            });
+        }
+        
+        if (nextRoundBtn) {
+            nextRoundBtn.addEventListener('click', function() {
+                this.disabled = true;
+                this.textContent = '⏳ Wird verarbeitet...';
+                socket.emit('next_round');
+            });
+        }
+        
+        // Prüfe alle 3 Sekunden den Spielstatus
+        setInterval(() => checkGameStatus(roomId), 3000);
+    });
+    
+    function initializeTimer() {
+        serverTimeLeft = 60; // Default, wird vom Server überschrieben
+        updateTimerDisplay();
+    }
+    
+    function updateTimerDisplay() {
+        const timerElement = document.getElementById('timer');
+        if (!timerElement) return;
+        
+        timerElement.textContent = serverTimeLeft;
+        
+        // Farb- und Warnzustände aktualisieren
+        updateTimerWarnings();
+    }
+    
+    function updateTimerWarnings() {
+        const timerElement = document.getElementById('timer');
+        if (!timerElement) return;
+        
+        timerElement.classList.remove('warning', 'danger');
+        
+        if (serverTimeLeft <= 10) {
+            timerElement.classList.add('danger');
+        } else if (serverTimeLeft <= 30) {
+            timerElement.classList.add('warning');
+        }
+    }
+    
+    function updateProgress() {
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const submittedCountElement = document.getElementById('submittedCount');
+        
+        if (progressFill && progressText && submittedCountElement) {
+            const percentage = totalPlayers > 0 ? (submittedCount / totalPlayers) * 100 : 0;
+            progressFill.style.width = percentage + '%';
+            progressText.textContent = submittedCount + ' von ' + totalPlayers + ' Spielern haben eingereicht';
+            submittedCountElement.textContent = submittedCount;
+            
+            // Zeige "Runde vorzeitig beenden" Button, wenn noch nicht alle eingereicht haben
+            const forceNextRoundBtn = document.getElementById('forceNextRound');
+            if (forceNextRoundBtn && submittedCount > 0 && submittedCount < totalPlayers) {
+                forceNextRoundBtn.style.display = 'block';
+            } else if (forceNextRoundBtn) {
+                forceNextRoundBtn.style.display = 'none';
+            }
+        }
+    }
+    
+    function checkGameStatus(roomId) {
+        fetch(`/api/room/${roomId}/status`)
+            .then(response => response.json())
+            .then(data => {
+                // Aktualisiere Rundenanzahl
+                const currentRoundElement = document.getElementById('currentRound');
+                if (currentRoundElement && data.current_round) {
+                    currentRoundElement.textContent = data.current_round;
+                }
+                
+                // Zeige/Verstecke Buttons basierend auf Status
+                const nextRoundBtn = document.getElementById('nextRoundBtn');
+                if (nextRoundBtn) {
+                    if (data.status === 'round_results') {
+                        nextRoundBtn.style.display = 'block';
+                    } else {
+                        nextRoundBtn.style.display = 'none';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Fehler beim Prüfen des Spielstatus:', error);
+            });
+    }
+    
+    // WebSocket Events für leader_dashboard.html
+    socket.on('game_timer_update', function(data) {
+        serverTimeLeft = data.time_left;
+        updateTimerDisplay();
+    });
+    
+    socket.on('contribution_submitted', function(data) {
+        submittedCount = data.submitted_count;
+        totalPlayers = data.total_players;
+        updateProgress();
+    });
+    
+    socket.on('round_finished', function(data) {
+        showNotification('Runde beendet! Alle Spieler haben eingereicht.', 'success');
+        submittedCount = totalPlayers;
+        updateProgress();
+        
+        // Verstecke "vorzeitig beenden" Button
+        const forceNextRoundBtn = document.getElementById('forceNextRound');
+        if (forceNextRoundBtn) {
+            forceNextRoundBtn.style.display = 'none';
+        }
+    });
+    
+    socket.on('next_round_started', function(data) {
+        showNotification('Nächste Runde startet!', 'success');
+        submittedCount = 0;
+        updateProgress();
+        setTimeout(() => {
+            // Bleibe auf dem Dashboard für die nächste Runde
+            window.location.reload();
+        }, 1000);
+    });
+    
+    socket.on('game_finished', function(data) {
+        showNotification('Spiel beendet!', 'info');
+        setTimeout(() => {
+            window.location.href = `/evaluation/${data.room_id}`;
+        }, 1500);
+    });
+</script>
+{% endblock %}
+[file content end]

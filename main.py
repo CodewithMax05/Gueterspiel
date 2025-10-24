@@ -397,6 +397,9 @@ def game(room_id):
         return result
     
     room, player = result
+
+    if player.is_leader:
+        return redirect(url_for('leader_dashboard', room_id=room_id))
     
     # Initialisiere Spieler-Guthaben beim ersten Betreten des Spiels
     if player.coins == 0 and len(player.game_history['balances']) == 0:
@@ -424,6 +427,23 @@ def round_results(room_id):
                          room=room,
                          player=player,
                          results=room.round_results or [],
+                         is_leader=is_leader)
+
+@app.route('/leader_dashboard/<room_id>')
+def leader_dashboard(room_id):
+    result = check_room_access(room_id)
+    if result and not isinstance(result, tuple):
+        return result
+    
+    room, player = result
+    is_leader = player.id == room.leader_id
+    
+    if not is_leader:
+        return redirect(url_for('game_room', room_id=room_id))
+    
+    return render_template('leader_dashboard.html',
+                         room=room,
+                         player=player,
                          is_leader=is_leader)
 
 @app.route('/evaluation/<room_id>')
@@ -672,6 +692,38 @@ def handle_stop_game_timer(data):
     if room_id:
         stop_game_timer(room_id)
         print(f"Game-Timer für Raum {room_id} gestoppt")
+
+@socketio.on('force_round_finish')
+def handle_force_round_finish(data):
+    """Erzwingt das Beenden der aktuellen Runde (nur für Leader)"""
+    player_id = session.get('player_id')
+    if not player_id or player_id not in players:
+        return
+    
+    player = players[player_id]
+    room_id = player.room_id
+    
+    if room_id and room_id in rooms and player.is_leader:
+        room = rooms[room_id]
+        
+        # Stoppe Timer
+        stop_game_timer(room_id)
+        
+        # Für Spieler die nicht eingereicht haben, setze Beitrag auf 0
+        for pid in room.players:
+            if pid not in room.submitted_players and not players[pid].is_leader:
+                players[pid].current_contribution = 0
+                room.submitted_players.add(pid)
+        
+        # Berechne Ergebnisse
+        results = room.calculate_round_results()
+        room.status = "round_results"
+        room.submitted_players.clear()
+        
+        emit('round_finished', {
+            'results': results,
+            'current_round': room.current_round
+        }, room=room_id)
 
 @socketio.on('player_ready')
 def handle_player_ready():

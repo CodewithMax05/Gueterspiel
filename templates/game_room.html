@@ -329,11 +329,16 @@
     });
     
     socket.on('game_started', function(data) {
-        console.log('DEBUG: game_started Event empfangen, leite weiter zu game.html');
+        console.log('DEBUG: game_started Event empfangen, leite weiter');
         showNotification('Spiel startet!', 'success');
         
-        // Weiterleitung zur game.html mit der room_id aus dem Event
-        window.location.href = `/game/${data.room_id}`;
+        if (isLeader) {
+            // Leader geht zum Dashboard
+            window.location.href = `/leader_dashboard/${data.room_id}`;
+        } else {
+            // Spieler gehen zum Spiel
+            window.location.href = `/game/${data.room_id}`;
+        }
     });
     
     function updatePlayerList(playerData) {
