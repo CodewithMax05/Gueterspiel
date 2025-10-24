@@ -258,7 +258,7 @@
                     startBtn.disabled = false;
                     if (errorElement) errorElement.style.display = 'none';
                 } else {
-                    reqElement.innerHTML = `❌ Benötigt: ${data.required_players} Spieler (aktuell: ${data.current_players})`;
+                    reqElement.innerHTML = `❌ ${data.message}`;
                     startBtn.disabled = true;
                     if (errorElement) {
                         errorElement.textContent = data.message;

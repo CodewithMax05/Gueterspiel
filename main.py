@@ -56,7 +56,12 @@ class GameRoom:
     
     def can_start_game(self):
         group_size = self.settings.get('group_size', 4)
-        return len(self.players) >= group_size and len(self.players) % group_size == 0
+        has_correct_player_count = len(self.players) >= group_size and len(self.players) % group_size == 0
+        
+        # Prüfe ob alle Spieler ready sind
+        all_players_ready = all(players[pid].ready for pid in self.players)
+        
+        return has_correct_player_count and all_players_ready
     
     def create_groups(self):
         group_size = self.settings.get('group_size', 4)
@@ -358,13 +363,27 @@ def api_room_requirements(room_id):
     normal_players = [pid for pid in room.players if pid in players and not players[pid].is_leader]
     current_players = len(normal_players)
     
-    can_start = current_players >= group_size and current_players % group_size == 0
+    # Ready-Spieler zählen
+    ready_players = sum(1 for pid in normal_players if players[pid].ready)
+    
+    can_start = current_players >= group_size and current_players % group_size == 0 and ready_players == current_players
+    
+    # Detaillierte Fehlermeldung
+    message = ''
+    if not can_start:
+        if current_players < group_size:
+            message = f'Zu wenige Spieler. Benötigt mindestens {group_size}, haben {current_players}'
+        elif current_players % group_size != 0:
+            message = f'Spieleranzahl muss durch {group_size} teilbar sein. Aktuell: {current_players}'
+        else:
+            message = f'Nicht alle Spieler sind bereit. Bereit: {ready_players}/{current_players}'
     
     return jsonify({
         'can_start': can_start,
         'current_players': current_players,
+        'ready_players': ready_players,
         'required_players': group_size,
-        'message': f'Benötigt mindestens {group_size} Spieler (durch {group_size} teilbar)' if not can_start else ''
+        'message': message
     })
 
 @app.route('/api/room/<room_id>/status')
@@ -531,11 +550,23 @@ def handle_start_game():
                 players[pid].ready = False
             
             emit('game_started', {
-                'room_id': room_id,  # WICHTIG: room_id hinzufügen
+                'room_id': room_id,
                 'current_round': room.current_round
             }, room=room_id)
         else:
-            emit('error', {'message': 'Nicht genügend Spieler zum Starten'})
+            # Detaillierte Fehlermeldung
+            group_size = room.settings.get('group_size', 4)
+            player_count = len(room.players)
+            ready_count = sum(1 for pid in room.players if players[pid].ready)
+            
+            if player_count < group_size:
+                error_msg = f"Zu wenige Spieler. Benötigt mindestens {group_size}, haben {player_count}"
+            elif player_count % group_size != 0:
+                error_msg = f"Spieleranzahl muss durch {group_size} teilbar sein. Aktuell: {player_count}"
+            else:
+                error_msg = f"Nicht alle Spieler sind bereit. Bereit: {ready_count}/{player_count}"
+            
+            emit('error', {'message': error_msg})
 
 @socketio.on('submit_contribution')
 def handle_submit_contribution(data):
