@@ -1,10 +1,15 @@
+from gevent import monkey, spawn, sleep  
+monkey.patch_all()
+
 import os
 import random
 import uuid
+import time
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from collections import defaultdict
+from threading import Lock 
 
 app = Flask(__name__)
 is_production = os.environ.get('FLASK_ENV') == 'production'
@@ -142,6 +147,104 @@ class Player:
             'contributions': []
         }
 
+class GameTimer:
+    def __init__(self, socketio, room_id, duration=60):
+        self.socketio = socketio
+        self.room_id = room_id
+        self.duration = duration
+        self.time_left = duration
+        self.is_running = False
+        self.lock = Lock()
+        self.start_time = None
+        self.greenlet = None
+
+    def start(self):
+        with self.lock:
+            if self.is_running:
+                return
+            self.is_running = True
+            self.start_time = time.time()
+            self.time_left = self.duration
+            self.greenlet = spawn(self._run_timer)
+
+    def _run_timer(self):
+        """Läuft in einem eigenen Greenlet und sendet Timer-Updates"""
+        start_time = time.time()
+        while self.is_running:
+            with self.lock:
+                if not self.is_running:
+                    break
+                    
+                # Berechne verbleibende Zeit genau
+                elapsed = time.time() - start_time
+                self.time_left = max(0, self.duration - int(elapsed))
+                
+                # Sende Update an den Raum
+                try:
+                    self.socketio.emit('game_timer_update', 
+                                    {'time_left': self.time_left}, 
+                                    room=self.room_id)
+                except Exception as e:
+                    print(f"Fehler beim Senden des Timer-Updates: {e}")
+                
+                # Zeit abgelaufen?
+                if self.time_left <= 0:
+                    try:
+                        self.socketio.emit('game_time_out', room=self.room_id)
+                    except Exception as e:
+                        print(f"Fehler beim Timeout: {e}")
+                    self.is_running = False
+                    break
+            
+            # Exakt 1 Sekunde warten
+            next_update = start_time + (self.duration - self.time_left + 1)
+            sleep_time = max(0, next_update - time.time())
+            sleep(sleep_time)
+
+    def stop(self):
+        with self.lock:
+            self.is_running = False
+            if self.greenlet:
+                try:
+                    self.greenlet.kill()
+                except:
+                    pass
+                self.greenlet = None
+
+    def get_time_left(self):
+        with self.lock:
+            if not self.is_running or not self.start_time:
+                return self.duration
+            elapsed = time.time() - self.start_time
+            return max(0, self.duration - int(elapsed))
+        
+# Globale Variablen für Game-Timer
+game_timers = {}
+game_timer_lock = Lock()
+
+def stop_game_timer(room_id):
+    """Stoppt und entfernt Timer sicher"""
+    with game_timer_lock:
+        if room_id in game_timers:
+            game_timers[room_id].stop()
+            del game_timers[room_id]
+            print(f"Game-Timer für Raum {room_id} gestoppt")
+
+def get_or_create_game_timer(room_id, duration=60):
+    """Erstellt oder gibt existierenden Timer zurück"""
+    with game_timer_lock:
+        # Stoppe vorhandenen Timer falls vorhanden
+        if room_id in game_timers:
+            game_timers[room_id].stop()
+            del game_timers[room_id]
+        
+        # Erstelle neuen Timer
+        timer = GameTimer(socketio, room_id, duration)
+        game_timers[room_id] = timer
+        timer.start()
+        print(f"Neuer Game-Timer für Raum {room_id} gestartet (Dauer: {duration}s)")
+        return timer
+
 # Hilfsfunktion zum Überprüfen der Raum-Zugriffsberechtigung
 def check_room_access(room_id, redirect_on_fail=True):
     if not is_production:
@@ -176,10 +279,14 @@ def check_room_access(room_id, redirect_on_fail=True):
     
     # Prüfe ob Spieler im Raum ist (außer für Leader)
     if not player.is_leader and player_id not in room.players:
-        print(f"DEBUG: Spieler {player_id} nicht in Raum {room_id}")
-        if redirect_on_fail:
-            return redirect(url_for('join_game'))
-        return room, None
+        if room.status == "waiting":
+            room.add_player(player_id)
+            print(f"DEBUG: Spieler {player_id} wieder zu Raum {room_id} hinzugefügt")
+        else:
+            print(f"DEBUG: Spieler {player_id} nicht in Raum {room_id}")
+            if redirect_on_fail:
+                return redirect(url_for('join_game'))
+            return room, None
     
     print(f"DEBUG: Zugriff gewährt für Spieler {player_id} in Raum {room_id}")
     return room, player
@@ -397,6 +504,35 @@ def api_room_status(room_id):
         'current_round': room.current_round
     })
 
+@app.route('/api/room/<room_id>/start_timer', methods=['POST'])
+def api_start_timer(room_id):
+    """Startet den Timer für eine Runde"""
+    if room_id not in rooms:
+        return jsonify({'error': 'Raum nicht gefunden'}), 404
+    
+    room = rooms[room_id]
+    duration = room.settings.get('round_duration', 60)
+    
+    # Timer starten
+    socketio.emit('start_game_timer', {
+        'room_id': room_id,
+        'duration': duration
+    }, room=room_id)
+    
+    return jsonify({'success': True, 'duration': duration})
+
+@app.route('/api/room/<room_id>/stop_timer', methods=['POST'])
+def api_stop_timer(room_id):
+    """Stoppt den Timer für einen Raum"""
+    if room_id not in rooms:
+        return jsonify({'error': 'Raum nicht gefunden'}), 404
+    
+    # Timer stoppen
+    socketio.emit('stop_game_timer', {'room_id': room_id}, room=room_id)
+    stop_game_timer(room_id)
+    
+    return jsonify({'success': True})
+
 # WebSocket Events
 @socketio.on('connect')
 def handle_connect():
@@ -414,9 +550,15 @@ def handle_disconnect():
             
             # Leader wird nicht aus Raum entfernt
             if not player.is_leader:
-                room.remove_player(player_id)
-                emit('player_left', {'player_id': player_id, 'player_name': player.name}, room=room_id)
-            
+                # Spieler bleibt im Raum für Reconnect-Möglichkeit
+                print(f"DEBUG: Spieler {player.name} disconnected, bleibt im Raum für Reconnect")
+                
+                # Optional: Benachrichtige andere Spieler über Disconnect
+                emit('player_disconnected', {
+                    'player_id': player_id, 
+                    'player_name': player.name
+                }, room=room_id)
+                
             # Raum nur löschen wenn keine Spieler mehr (außer Leader)
             active_players = [pid for pid in room.players if not players[pid].is_leader]
             if len(active_players) == 0:
@@ -459,6 +601,12 @@ def handle_join_room(data):
     if room.add_player(player_id):
         join_room(room_id)
         
+        with game_timer_lock:
+            timer = game_timers.get(room_id)
+            if timer and timer.is_running:
+                time_left = timer.get_time_left()
+                emit('game_timer_update', {'time_left': time_left}, room=request.sid)
+        
         print(f"DEBUG: Spieler {player_name} zu Raum {room_id} hinzugefügt. Aktuelle Spieler: {room.players}")
         
         # Benachrichtige andere Spieler über neuen Spieler
@@ -473,7 +621,7 @@ def handle_join_room(data):
         # Sende Erfolgsmeldung mit player_id für Weiterleitung
         emit('room_joined', {
             'room_id': room_id,
-            'player_id': player_id  # WICHTIG: player_id zurücksenden
+            'player_id': player_id
         })
         
         print(f"DEBUG: room_joined Event gesendet für Raum {room_id} mit player_id {player_id}")
@@ -498,7 +646,32 @@ def handle_join_room_reconnect(data):
             room.add_player(player_id)
         
         join_room(room_id)
+        
+        with game_timer_lock:
+            timer = game_timers.get(room_id)
+            if timer and timer.is_running:
+                time_left = timer.get_time_left()
+                emit('game_timer_update', {'time_left': time_left}, room=request.sid)
+        
         print(f"DEBUG: Spieler {player_id} erneut Raum {room_id} beigetreten")
+
+@socketio.on('start_game_timer')
+def handle_start_game_timer(data):
+    """Startet den Timer für eine Spielrunde (kann vom Client aufgerufen werden)"""
+    room_id = data.get('room_id')
+    duration = data.get('duration', 60)
+    
+    if room_id in rooms:
+        get_or_create_game_timer(room_id, duration)
+        print(f"Game-Timer für Raum {room_id} gestartet (Dauer: {duration}s)")
+
+@socketio.on('stop_game_timer')  
+def handle_stop_game_timer(data):
+    """Stoppt den Timer für einen Spielraum (kann vom Client aufgerufen werden)"""
+    room_id = data.get('room_id')
+    if room_id:
+        stop_game_timer(room_id)
+        print(f"Game-Timer für Raum {room_id} gestoppt")
 
 @socketio.on('player_ready')
 def handle_player_ready():
@@ -544,6 +717,10 @@ def handle_start_game():
             room.status = "playing"
             room.current_round = 1
             room.create_groups()
+
+            duration = room.settings.get('round_duration', 60)
+            get_or_create_game_timer(room_id, duration)
+            print(f"DEBUG: Spiel gestartet - Timer für Raum {room_id} mit {duration}s gestartet")
             
             # Setze alle Spieler auf nicht bereit für nächste Runde
             for pid in room.players:
@@ -596,6 +773,8 @@ def handle_submit_contribution(data):
         
         # Prüfe ob alle Spieler eingezahlt haben
         if submitted_count == total_players:
+            stop_game_timer(room_id)
+            
             # Berechne Ergebnisse
             results = room.calculate_round_results()
             room.status = "round_results"

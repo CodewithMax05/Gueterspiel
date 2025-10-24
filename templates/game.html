@@ -187,6 +187,30 @@
         border: 1px solid #28a745;
     }
     
+    .timer-time.critical {
+        color: #dc3545;
+        animation: blink 0.5s infinite alternate;
+    }
+
+    .timer-time.danger {
+        color: #ffc107;
+        animation: pulse 1s infinite;
+    }
+
+    .timer-time.warning {
+        color: #ffc107;
+    }
+
+    @keyframes blink {
+        from { opacity: 1; }
+        to { opacity: 0.5; }
+    }
+
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
+
     @media (max-width: 768px) {
         .balance-amount {
             font-size: 36px;
@@ -282,15 +306,18 @@
 {% block scripts %}
 <script>
     let selectedContribution = null;
-    let timeLeft;
-    let timerInterval;
+    let gameTimerInterval;
+    let serverTimeLeft;
     
     document.addEventListener('DOMContentLoaded', function() {
         const gameData = document.getElementById('game-data');
-        timeLeft = parseInt(gameData.dataset.roundDuration);
         const maxContribution = parseInt(gameData.dataset.maxContribution);
         const initialBalance = parseFloat(gameData.dataset.initialBalance);
         const totalPlayers = parseInt(gameData.dataset.totalPlayers);
+        const roundDuration = parseInt(gameData.dataset.roundDuration);
+
+        // Timer initialisieren (wird vom Server gestartet)
+        initializeTimer(roundDuration);
         
         // Setze maximale Einzahlung im Text
         const maxAmountElement = document.getElementById('maxAmount');
@@ -305,7 +332,6 @@
         }
         
         generateCoinOptions(maxContribution, initialBalance);
-        startTimer();
         
         // Submit Button Event
         const submitBtn = document.getElementById('submitBtn');
@@ -355,37 +381,56 @@
             submitBtn.disabled = false;
         }
     }
+
+    function initializeTimer(initialTime) {
+        serverTimeLeft = initialTime;
+        updateTimerDisplay();
+    }
     
-    function startTimer() {
+    function startGameTimer(initialTime) {
+        // Alten Interval löschen
+        if (gameTimerInterval) {
+            clearInterval(gameTimerInterval);
+        }
+        
+        serverTimeLeft = initialTime;
         updateTimerDisplay();
         
-        timerInterval = setInterval(() => {
-            timeLeft--;
-            updateTimerDisplay();
-            
-            if (timeLeft <= 0) {
-                clearInterval(timerInterval);
-                // Automatisch 0 einreichen wenn Zeit abgelaufen
-                const waitingOverlay = document.getElementById('waitingOverlay');
-                if (!waitingOverlay || waitingOverlay.style.display === 'none' || waitingOverlay.style.display === '') {
-                    autoSubmitZero();
-                }
-            }
-        }, 1000);
+        // Wir setzen keinen clientseitigen Interval, da wir Updates vom Server bekommen
+        // Stattdessen listen wir auf Server-Events
     }
     
     function updateTimerDisplay() {
         const timerElement = document.getElementById('timer');
         if (!timerElement) return;
         
-        timerElement.textContent = timeLeft;
+        timerElement.textContent = serverTimeLeft;
         
-        // Farben basierend auf verbleibender Zeit
-        timerElement.classList.remove('warning', 'danger');
-        if (timeLeft <= 10) {
+        // Farb- und Warnzustände aktualisieren
+        updateTimerWarnings();
+    }
+
+    function updateTimerWarnings() {
+        const timerElement = document.getElementById('timer');
+        if (!timerElement) return;
+        
+        timerElement.classList.remove('warning', 'danger', 'critical');
+        
+        if (serverTimeLeft <= 5) {
+            timerElement.classList.add('critical');
+        } else if (serverTimeLeft <= 15) {
             timerElement.classList.add('danger');
-        } else if (timeLeft <= 30) {
+        } else if (serverTimeLeft <= 30) {
             timerElement.classList.add('warning');
+        }
+    }
+
+    function handleTimeExpired() {
+        // Prüfe ob bereits eingereicht wurde
+        const waitingOverlay = document.getElementById('waitingOverlay');
+        if (!waitingOverlay || waitingOverlay.style.display === 'none') {
+            showNotification('Zeit abgelaufen! Beitrag wird automatisch eingereicht.', 'warning');
+            autoSubmitZero();
         }
     }
     
@@ -437,7 +482,20 @@
             totalPlayers.textContent = data.total_players;
         }
     });
+
+    socket.on('game_timer_update', function(data) {
+        serverTimeLeft = data.time_left;
+        updateTimerDisplay();
+        updateTimerWarnings();
+    });
+
+    socket.on('game_time_out', function() {
+        handleTimeExpired();
+    });
     
+    // Beim Beitreten des Spielraums
+    socket.emit('join_game_room', { room_id: currentRoomId });
+
     socket.on('round_finished', function(data) {
         showNotification('Runde beendet! Zeige Ergebnisse...', 'success');
         setTimeout(() => {
