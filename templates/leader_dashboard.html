@@ -405,6 +405,31 @@
             window.location.href = `/evaluation/${data.room_id}`;
         }, 1500);
     });
+
+    function checkRoundStatus() {
+        fetch(`/api/room/${roomId}/status`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'round_results') {
+                    // Zeige "Nächste Runde" Button
+                    const nextRoundBtn = document.getElementById('nextRoundBtn');
+                    if (nextRoundBtn) {
+                        nextRoundBtn.style.display = 'block';
+                    }
+                    // Verstecke "vorzeitig beenden" Button
+                    const forceNextRoundBtn = document.getElementById('forceNextRound');
+                    if (forceNextRoundBtn) {
+                        forceNextRoundBtn.style.display = 'none';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Fehler beim Prüfen des Rundenstatus:', error);
+            });
+    }
+
+    // Starte regelmäßige Überprüfung
+    setInterval(() => checkRoundStatus(roomId), 2000);
 </script>
 {% endblock %}
 [file content end]

@@ -426,17 +426,14 @@
     }
 
     function handleTimeExpired() {
-        // Prüfe ob bereits eingereicht wurde
         const waitingOverlay = document.getElementById('waitingOverlay');
         if (!waitingOverlay || waitingOverlay.style.display === 'none') {
-            showNotification('Zeit abgelaufen! Beitrag wird automatisch eingereicht.', 'warning');
-            autoSubmitZero();
+            // Nur automatisch einreichen wenn noch nicht eingereicht
+            if (selectedContribution === null) {
+                selectedContribution = 0;
+            }
+            submitContribution();
         }
-    }
-    
-    function autoSubmitZero() {
-        selectedContribution = 0;
-        submitContribution();
     }
     
     function submitContribution() {
@@ -490,6 +487,7 @@
     });
 
     socket.on('game_time_out', function() {
+        showNotification('Zeit abgelaufen! Beiträge werden automatisch eingereicht.', 'warning');
         handleTimeExpired();
     });
     
@@ -499,8 +497,8 @@
     socket.on('round_finished', function(data) {
         showNotification('Runde beendet! Zeige Ergebnisse...', 'success');
         setTimeout(() => {
-            window.location.href = `/round_results/${data.room_id}`;
-        }, 1000);
+            window.location.href = `/round_results/${currentRoomId}`;
+        }, 1500);
     });
     
     socket.on('game_finished', function(data) {

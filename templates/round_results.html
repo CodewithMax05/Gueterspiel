@@ -303,11 +303,15 @@
         showNotification('Nächste Runde startet!', 'success');
         
         if (isLeader) {
-            // Leader bleibt auf dem Dashboard
-            window.location.href = `/leader_dashboard/${data.room_id}`;
+            // Leader geht zurück zum Dashboard
+            setTimeout(() => {
+                window.location.href = `/leader_dashboard/${data.room_id}`;
+            }, 1000);
         } else {
             // Spieler gehen zum Spiel
-            window.location.href = `/game/${data.room_id}`;
+            setTimeout(() => {
+                window.location.href = `/game/${data.room_id}`;
+            }, 1000);
         }
     });
     

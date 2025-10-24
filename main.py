@@ -88,6 +88,37 @@ class GameRoom:
                 return group
         return None
     
+    def should_continue_game(self):
+        """Prüft ob das Spiel weitergehen soll basierend auf den Einstellungen"""
+        end_mode = self.settings['end_mode']
+        
+        if end_mode == 'fixed_rounds':
+            return self.current_round < self.settings['max_rounds']
+        elif end_mode == 'probability':
+            return random.random() <= self.settings['continue_probability']
+        elif end_mode == 'probability_range':
+            prob = random.uniform(
+                self.settings['min_probability'], 
+                self.settings['max_probability']
+            )
+            return random.random() <= prob
+        return False
+    
+    def reset_for_next_round(self):
+        """Bereitet den Raum für die nächste Runde vor"""
+        self.status = "playing"
+        self.current_round += 1
+        
+        if not self.settings['fixed_groups']:
+            self.create_groups()
+        
+        # Setze Beiträge zurück
+        for pid in self.players:
+            players[pid].current_contribution = 0
+        
+        self.submitted_players.clear()
+        self.round_results = None
+    
     def calculate_round_results(self):
         results = []
         multiplier = self.settings.get('multiplier', 2)
@@ -553,6 +584,21 @@ def api_stop_timer(room_id):
     
     return jsonify({'success': True})
 
+@app.route('/api/room/<room_id>/can_continue')
+def api_room_can_continue(room_id):
+    """Prüft ob das Spiel weitergehen kann"""
+    if room_id not in rooms:
+        return jsonify({'error': 'Raum nicht gefunden'}), 404
+    
+    room = rooms[room_id]
+    can_continue = room.should_continue_game()
+    
+    return jsonify({
+        'can_continue': can_continue,
+        'current_round': room.current_round,
+        'max_rounds': room.settings.get('max_rounds', 5)
+    })
+
 # WebSocket Events
 @socketio.on('connect')
 def handle_connect():
@@ -810,6 +856,11 @@ def handle_submit_contribution(data):
     if room_id and room_id in rooms and not player.is_leader:
         room = rooms[room_id]
         
+        # Prüfe ob der Spieler genug Coins hat
+        if contribution > player.coins:
+            emit('error', {'message': 'Nicht genügend Coins verfügbar'})
+            return
+        
         # Beitrag speichern
         player.current_contribution = contribution
         room.submitted_players.add(player_id)
@@ -826,16 +877,31 @@ def handle_submit_contribution(data):
         # Prüfe ob alle Spieler eingezahlt haben
         if submitted_count == total_players:
             stop_game_timer(room_id)
-            
-            # Berechne Ergebnisse
-            results = room.calculate_round_results()
-            room.status = "round_results"
-            room.submitted_players.clear()
-            
-            emit('round_finished', {
-                'results': results,
-                'current_round': room.current_round
-            }, room=room_id)
+            finish_round(room_id)
+
+def finish_round(room_id):
+    """Beendet die aktuelle Runde und berechnet Ergebnisse"""
+    if room_id not in rooms:
+        return
+    
+    room = rooms[room_id]
+    
+    # Für Spieler die nicht eingereicht haben, setze Beitrag auf 0
+    for pid in room.players:
+        if pid not in room.submitted_players and not players[pid].is_leader:
+            players[pid].current_contribution = 0
+            room.submitted_players.add(pid)
+    
+    # Berechne Ergebnisse
+    results = room.calculate_round_results()
+    room.status = "round_results"
+    room.submitted_players.clear()
+    
+    emit('round_finished', {
+        'results': results,
+        'current_round': room.current_round,
+        'room_id': room_id
+    }, room=room_id)
 
 @socketio.on('next_round')
 def handle_next_round():
@@ -849,40 +915,39 @@ def handle_next_round():
     if room_id and room_id in rooms and player.is_leader:
         room = rooms[room_id]
         
-        # Prüfe Spielende
-        end_mode = room.settings['end_mode']
-        continue_game = True
-        
-        if end_mode == 'fixed_rounds':
-            if room.current_round >= room.settings['max_rounds']:
-                continue_game = False
-        elif end_mode == 'probability':
-            if random.random() > room.settings['continue_probability']:
-                continue_game = False
-        elif end_mode == 'probability_range':
-            prob = random.uniform(room.settings['min_probability'], room.settings['max_probability'])
-            if random.random() > prob:
-                continue_game = False
-        
-        if continue_game:
+        # Prüfe ob Spiel weitergeht
+        if room.should_continue_game():
             # Nächste Runde starten
-            room.status = "playing"
-            room.current_round += 1
+            room.reset_for_next_round()
             
-            if not room.settings['fixed_groups']:
-                room.create_groups()
-            
-            # Setze Beiträge zurück
-            for pid in room.players:
-                players[pid].current_contribution = 0
+            # Timer für neue Runde starten
+            duration = room.settings.get('round_duration', 60)
+            get_or_create_game_timer(room_id, duration)
             
             emit('next_round_started', {
-                'current_round': room.current_round
+                'current_round': room.current_round,
+                'room_id': room_id
             }, room=room_id)
         else:
             # Spiel beenden
             room.status = "finished"
-            emit('game_finished', room=room_id)
+            emit('game_finished', {
+                'room_id': room_id
+            }, room=room_id)
+
+@socketio.on('game_time_out')
+def handle_game_time_out():
+    """Wird aufgerufen wenn der Timer abläuft - ohne data Parameter"""
+    player_id = session.get('player_id')
+    if not player_id or player_id not in players:
+        return
+    
+    player = players[player_id]
+    room_id = player.room_id
+    
+    if room_id and room_id in rooms:
+        print(f"DEBUG: Timer abgelaufen für Raum {room_id}, beende Runde")
+        finish_round(room_id)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
