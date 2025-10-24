@@ -1,27 +1,7 @@
 {% extends "base.html" %}
 
 {% block head %}
-<style>
-    .hero {
-        text-align: center;
-        padding: 60px 20px;
-    }
-    .btn-container {
-        margin: 40px 0;
-    }
-    .btn-large {
-        padding: 20px 40px;
-        font-size: 20px;
-        margin: 10px 20px;
-    }
-    .rules {
-        text-align: left;
-        background: rgba(255, 255, 255, 0.1);
-        padding: 30px;
-        border-radius: 12px;
-        margin-top: 40px;
-    }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
 {% endblock %}
 
 {% block body %}
@@ -33,17 +13,6 @@
         <div class="btn-container">
             <a href="{{ url_for('create_game') }}" class="btn btn-large">Spiel erstellen</a>
             <a href="{{ url_for('join_game') }}" class="btn btn-large btn-secondary">Spiel beitreten</a>
-        </div>
-        
-        <div class="rules">
-            <h3>Spielregeln:</h3>
-            <ul>
-                <li>Jeder Spieler startet mit 10 Coins</li>
-                <li>In jeder Runde kann man 0-10 Coins in das öffentliche Gut einzahlen</li>
-                <li>Die Einzahlungen werden in Gruppen von 4 Spielern zusammengezählt</li>
-                <li>Die Gesamtsumme wird verdoppelt und gleichmäßig aufgeteilt</li>
-                <li>Ziel: Möglichst hohes Gesamtguthaben erreichen</li>
-            </ul>
         </div>
     </div>
 </div>

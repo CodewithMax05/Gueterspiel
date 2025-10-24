@@ -1,25 +1,7 @@
 {% extends "base.html" %}
 
 {% block head %}
-<style>
-    .summary { 
-        background: rgba(255, 255, 255, 0.1); 
-        padding: 30px; 
-        border-radius: 12px; 
-        margin: 20px 0; 
-    }
-    .balance-history {
-        margin: 30px 0;
-    }
-    .history-list {
-        list-style: none;
-        padding: 0;
-    }
-    .history-list li {
-        padding: 10px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/evaluation.css') }}">
 {% endblock %}
 
 {% block body %}
@@ -84,11 +66,7 @@
         const canvas = document.createElement('canvas');
         canvas.width = 400;
         canvas.height = 200;
-        canvas.style.maxWidth = '100%';
-        canvas.style.marginTop = '20px';
-        canvas.style.borderRadius = '8px';
-        canvas.style.background = 'rgba(255, 255, 255, 0.05)';
-        canvas.style.padding = '10px';
+        canvas.className = 'balance-chart';
         
         container.appendChild(canvas);
         
