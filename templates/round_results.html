@@ -300,19 +300,12 @@
     
     // WebSocket Events für round_results.html
     socket.on('next_round_started', function(data) {
+        // Fallback
+        console.log('DEBUG: next_round_started received, redirecting to game');
         showNotification('Nächste Runde startet!', 'success');
-        
-        if (isLeader) {
-            // Leader geht zurück zum Dashboard
-            setTimeout(() => {
-                window.location.href = `/leader_dashboard/${data.room_id}`;
-            }, 1000);
-        } else {
-            // Spieler gehen zum Spiel
-            setTimeout(() => {
-                window.location.href = `/game/${data.room_id}`;
-            }, 1000);
-        }
+        setTimeout(() => {
+            window.location.href = `/game/${data.room_id}`;
+        }, 1000);
     });
     
     socket.on('game_finished', function(data) {
@@ -320,6 +313,14 @@
         setTimeout(() => {
             window.location.href = `/evaluation/${data.room_id}`;
         }, 1500);
+    });
+
+    socket.on('redirect_to_game', function(data) {
+        console.log('DEBUG: redirect_to_game received, redirecting to game');
+        showNotification('Nächste Runde startet!', 'success');
+        setTimeout(() => {
+            window.location.href = `/game/${data.room_id}`;
+        }, 1000);
     });
 </script>
 {% endblock %}

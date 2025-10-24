@@ -487,20 +487,36 @@
     });
 
     socket.on('game_time_out', function() {
+        console.log('DEBUG: game_time_out received, handling time expiration');
         showNotification('Zeit abgelaufen! Beiträge werden automatisch eingereicht.', 'warning');
-        handleTimeExpired();
+        
+        // Automatisch 0 Coins einreichen wenn noch nichts ausgewählt
+        if (selectedContribution === null) {
+            selectedContribution = 0;
+            submitContribution();
+        }
     });
     
     // Beim Beitreten des Spielraums
     socket.emit('join_game_room', { room_id: currentRoomId });
 
     socket.on('round_finished', function(data) {
+        // Fallback - falls redirect_to_results nicht funktioniert
+        console.log('DEBUG: round_finished received, redirecting to round results');
         showNotification('Runde beendet! Zeige Ergebnisse...', 'success');
         setTimeout(() => {
-            window.location.href = `/round_results/${currentRoomId}`;
+            window.location.href = `/round_results/${data.room_id}`;
         }, 1500);
     });
     
+    socket.on('redirect_to_results', function(data) {
+        console.log('DEBUG: redirect_to_results received, redirecting to round results');
+        showNotification('Runde beendet! Zeige Ergebnisse...', 'success');
+        setTimeout(() => {
+            window.location.href = `/round_results/${data.room_id}`;
+        }, 1000);
+    });
+
     socket.on('game_finished', function(data) {
         showNotification('Spiel beendet! Zeige Auswertung...', 'success');
         setTimeout(() => {

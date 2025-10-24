@@ -90,6 +90,10 @@ class GameRoom:
     
     def should_continue_game(self):
         """Prüft ob das Spiel weitergehen soll basierend auf den Einstellungen"""
+        # Wenn noch keine Runde gespielt wurde, soll weitergemacht werden
+        if self.current_round == 0:
+            return True
+            
         end_mode = self.settings['end_mode']
         
         if end_mode == 'fixed_rounds':
@@ -221,9 +225,42 @@ class GameTimer:
                 # Zeit abgelaufen?
                 if self.time_left <= 0:
                     try:
+                        # Runde automatisch beenden
+                        print(f"DEBUG: Timer abgelaufen für Raum {self.room_id}, runde finish_round auf")
                         self.socketio.emit('game_time_out', room=self.room_id)
+                        
+                        # Runde direkt beenden (kein Event-Handler nötig)
+                        if self.room_id in rooms:
+                            room = rooms[self.room_id]
+                            
+                            # Für Spieler die nicht eingereicht haben, setze Beitrag auf 0
+                            for pid in room.players:
+                                if pid not in room.submitted_players and not players[pid].is_leader:
+                                    players[pid].current_contribution = 0
+                                    room.submitted_players.add(pid)
+                            
+                            # Berechne Ergebnisse
+                            results = room.calculate_round_results()
+                            room.status = "round_results"
+                            room.submitted_players.clear()
+                            
+                            self.socketio.emit('round_finished', {
+                                'results': results,
+                                'current_round': room.current_round,
+                                'room_id': self.room_id
+                            }, room=self.room_id)
+                            
+                            # Leite Spieler automatisch zu round_results weiter
+                            for pid in room.players:
+                                if pid in players and not players[pid].is_leader:
+                                    self.socketio.emit('redirect_to_results', {
+                                        'room_id': self.room_id
+                                    }, room=pid)
+                            
+                            print(f"Runde {room.current_round} automatisch beendet (Timer abgelaufen)")
+                            
                     except Exception as e:
-                        print(f"Fehler beim Timeout: {e}")
+                        print(f"Fehler beim automatischen Rundenende: {e}")
                     self.is_running = False
                     break
             
@@ -897,11 +934,51 @@ def finish_round(room_id):
     room.status = "round_results"
     room.submitted_players.clear()
     
-    emit('round_finished', {
+    # Sende Event an alle im Raum
+    socketio.emit('round_finished', {
         'results': results,
         'current_round': room.current_round,
         'room_id': room_id
     }, room=room_id)
+    
+    # Leite Spieler automatisch zu round_results weiter
+    for player_id in room.players:
+        if player_id in players and not players[player_id].is_leader:
+            # Für normale Spieler: Weiterleitung zu round_results
+            socketio.emit('redirect_to_results', {
+                'room_id': room_id
+            }, room=player_id)
+    
+    print(f"Runde {room.current_round} abgeschlossen, Spieler werden zu Ergebnissen weitergeleitet")
+
+def handle_round_completion(room_id):
+    """Behandelt den Abschluss einer Runde und leitet Spieler weiter"""
+    if room_id not in rooms:
+        return
+    
+    room = rooms[room_id]
+    
+    # Berechne Ergebnisse
+    results = room.calculate_round_results()
+    room.status = "round_results"
+    room.submitted_players.clear()
+    
+    # Sende Event an alle im Raum
+    socketio.emit('round_finished', {
+        'results': results,
+        'current_round': room.current_round,
+        'room_id': room_id
+    }, room=room_id)
+    
+    # Leite Spieler automatisch zu round_results weiter
+    for player_id in room.players:
+        if player_id in players and not players[player_id].is_leader:
+            # Für normale Spieler: Weiterleitung zu round_results
+            socketio.emit('redirect_to_results', {
+                'room_id': room_id
+            }, room=player_id)
+    
+    print(f"Runde {room.current_round} abgeschlossen, Spieler werden zu Ergebnissen weitergeleitet")
 
 @socketio.on('next_round')
 def handle_next_round():
@@ -928,6 +1005,14 @@ def handle_next_round():
                 'current_round': room.current_round,
                 'room_id': room_id
             }, room=room_id)
+            
+            # Leite Spieler zurück zum Spiel
+            for pid in room.players:
+                if pid in players and not players[pid].is_leader:
+                    socketio.emit('redirect_to_game', {
+                        'room_id': room_id
+                    }, room=pid)
+                    
         else:
             # Spiel beenden
             room.status = "finished"
@@ -936,8 +1021,8 @@ def handle_next_round():
             }, room=room_id)
 
 @socketio.on('game_time_out')
-def handle_game_time_out():
-    """Wird aufgerufen wenn der Timer abläuft - ohne data Parameter"""
+def handle_game_time_out(data=None):
+    """Wird aufgerufen wenn der Timer abläuft - mit optionalem data Parameter"""
     player_id = session.get('player_id')
     if not player_id or player_id not in players:
         return
