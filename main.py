@@ -99,13 +99,14 @@ class GameRoom:
         if end_mode == 'fixed_rounds':
             return self.current_round < self.settings['max_rounds']
         elif end_mode == 'probability':
+            # Mindestrunden garantieren
+            if self.current_round < self.settings['min_rounds']:
+                return True
+            # Maximalrunden begrenzen
+            if self.current_round >= self.settings['max_rounds_probability']:
+                return False
+            # Zwischen min_rounds und max_rounds_probability: Wahrscheinlichkeit prüfen
             return random.random() <= self.settings['continue_probability']
-        elif end_mode == 'probability_range':
-            prob = random.uniform(
-                self.settings['min_probability'], 
-                self.settings['max_probability']
-            )
-            return random.random() <= prob
         return False
     
     def reset_for_next_round(self):
@@ -368,6 +369,9 @@ def index():
 def create_game():
     if request.method == 'POST':
         # Einstellungen aus dem Formular verarbeiten
+        end_mode = request.form.get('end_mode', 'fixed_rounds')
+        
+        # Basis-Einstellungen
         settings = {
             'initial_coins': int(request.form.get('initial_coins', 10)),
             'max_contribution': int(request.form.get('max_contribution', 10)),
@@ -375,12 +379,27 @@ def create_game():
             'multiplier': float(request.form.get('multiplier', 2)),
             'round_duration': int(request.form.get('round_duration', 60)),
             'fixed_groups': request.form.get('fixed_groups') == 'true',
-            'end_mode': request.form.get('end_mode', 'fixed_rounds'),
-            'max_rounds': int(request.form.get('max_rounds', 5)),
-            'continue_probability': float(request.form.get('continue_probability', 0.5)),
-            'min_probability': float(request.form.get('min_probability', 0.3)),
-            'max_probability': float(request.form.get('max_probability', 0.8))
+            'end_mode': end_mode,
         }
+        
+        # Modus-spezifische Einstellungen
+        if end_mode == 'fixed_rounds':
+            max_rounds = int(request.form.get('max_rounds', 5))
+            # Stelle sicher, dass max_rounds nicht über 20 liegt
+            settings['max_rounds'] = min(max_rounds, 20)
+        elif end_mode == 'probability':
+            min_rounds = int(request.form.get('min_rounds', 1))
+            max_rounds_probability = int(request.form.get('max_rounds_probability', 10))
+            continue_probability = float(request.form.get('continue_probability', 0.5))
+            
+            # Stelle sicher, dass Rundenanzahlen nicht über 20 liegen
+            settings['min_rounds'] = min(min_rounds, 20)
+            settings['max_rounds_probability'] = min(max_rounds_probability, 20)
+            settings['continue_probability'] = continue_probability
+            
+            # Korrigiere falls min_rounds > max_rounds_probability
+            if settings['min_rounds'] > settings['max_rounds_probability']:
+                settings['min_rounds'] = settings['max_rounds_probability']
         
         # Raum erstellen
         room_id = str(uuid.uuid4())[:8]

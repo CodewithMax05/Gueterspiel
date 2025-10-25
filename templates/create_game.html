@@ -89,7 +89,6 @@
                     <select name="end_mode" id="endMode" required>
                         <option value="fixed_rounds" selected>Feste Rundenzahl</option>
                         <option value="probability">Feste Wahrscheinlichkeit</option>
-                        <option value="probability_range">Zufällige Wahrscheinlichkeit (Bereich)</option>
                     </select>
                     <small>Wann soll das Spiel enden?</small>
                 </div>
@@ -98,42 +97,42 @@
                 <div class="form-group conditional-setting" id="fixedRoundsSetting">
                     <label>Anzahl der Runden</label>
                     <div class="input-with-unit">
-                        <input type="number" name="max_rounds" min="1" max="50" value="5">
+                        <input type="number" name="max_rounds" min="1" max="20" value="5" required>
                         <span class="unit-label">Runden</span>
                     </div>
-                    <small>Das Spiel endet nach dieser Rundenzahl</small>
+                    <small>Das Spiel endet nach dieser Rundenzahl (max. 20 Runden)</small>
                 </div>
                 
                 <!-- Feste Wahrscheinlichkeit -->
-                <div class="form-group conditional-setting" id="probabilitySetting">
-                    <label>Wahrscheinlichkeit für weitere Runde</label>
-                    <div class="input-with-unit">
-                        <input type="number" name="continue_probability" min="0" max="1" step="0.05" value="0.5">
-                        <span class="unit-label">(0 = 0%, 1 = 100%)</span>
+                <div class="conditional-setting" id="probabilitySetting">
+                    <div class="form-group">
+                        <label>Wahrscheinlichkeit für weitere Runde</label>
+                        <div class="input-with-unit">
+                            <input type="number" name="continue_probability" min="0" max="1" step="0.05" value="0.5" required>
+                            <span class="unit-label">(0 = 0%, 1 = 100%)</span>
+                        </div>
+                        <small>Nach jeder Runde wird gewürfelt, ob es weitergeht</small>
                     </div>
-                    <small>Nach jeder Runde wird gewürfelt, ob es weitergeht</small>
-                </div>
-                
-                <!-- Wahrscheinlichkeitsbereich -->
-                <div class="conditional-setting" id="probabilityRangeSetting">
+                    
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Minimale Wahrscheinlichkeit</label>
+                            <label>Mindestanzahl Runden</label>
                             <div class="input-with-unit">
-                                <input type="number" name="min_probability" min="0" max="1" step="0.05" value="0.3">
-                                <span class="unit-label">min</span>
+                                <input type="number" name="min_rounds" min="1" max="20" value="1" required>
+                                <span class="unit-label">Runden</span>
                             </div>
+                            <small>Garantierte Mindestrunden (max. 20)</small>
                         </div>
                         
                         <div class="form-group">
-                            <label>Maximale Wahrscheinlichkeit</label>
+                            <label>Maximalanzahl Runden</label>
                             <div class="input-with-unit">
-                                <input type="number" name="max_probability" min="0" max="1" step="0.05" value="0.8">
-                                <span class="unit-label">max</span>
+                                <input type="number" name="max_rounds_probability" min="1" max="20" value="10" required>
+                                <span class="unit-label">Runden</span>
                             </div>
+                            <small>Spätestes Ende nach dieser Runde (max. 20)</small>
                         </div>
                     </div>
-                    <small>Pro Runde wird eine zufällige Wahrscheinlichkeit aus diesem Bereich gezogen</small>
                 </div>
             </div>
             
@@ -156,11 +155,10 @@
         const endModeSelect = document.getElementById('endMode');
         const fixedRounds = document.getElementById('fixedRoundsSetting');
         const probability = document.getElementById('probabilitySetting');
-        const probabilityRange = document.getElementById('probabilityRangeSetting');
         
         function updateConditionalSettings() {
             // Alle ausblenden
-            [fixedRounds, probability, probabilityRange].forEach(el => {
+            [fixedRounds, probability].forEach(el => {
                 if (el) el.style.display = 'none';
             });
             
@@ -171,9 +169,6 @@
                     break;
                 case 'probability':
                     if (probability) probability.style.display = 'block';
-                    break;
-                case 'probability_range':
-                    if (probabilityRange) probabilityRange.style.display = 'block';
                     break;
             }
         }
@@ -189,7 +184,9 @@
         // Validiere Eingaben
         const initialCoins = parseInt(formData.get('initial_coins'));
         const maxContribution = parseInt(formData.get('max_contribution'));
+        const endMode = formData.get('end_mode');
         
+        // Allgemeine Validierungen
         if (initialCoins < 1 || initialCoins > 100) {
             showNotification('Startguthaben muss zwischen 1 und 100 Coins liegen', 'error');
             return;
@@ -203,6 +200,43 @@
         if (maxContribution > initialCoins) {
             showNotification('Maximale Einzahlung darf nicht größer als Startguthaben sein', 'error');
             return;
+        }
+        
+        // Validierung für feste Rundenzahl
+        if (endMode === 'fixed_rounds') {
+            const maxRounds = parseInt(formData.get('max_rounds'));
+            
+            if (maxRounds < 1 || maxRounds > 20) {
+                showNotification('Rundenanzahl muss zwischen 1 und 20 liegen', 'error');
+                return;
+            }
+        }
+        
+        // Validierung für Wahrscheinlichkeitsmodus
+        if (endMode === 'probability') {
+            const minRounds = parseInt(formData.get('min_rounds'));
+            const maxRounds = parseInt(formData.get('max_rounds_probability'));
+            const probability = parseFloat(formData.get('continue_probability'));
+            
+            if (minRounds < 1 || minRounds > 20) {
+                showNotification('Mindestrunden müssen zwischen 1 und 20 liegen', 'error');
+                return;
+            }
+            
+            if (maxRounds < 1 || maxRounds > 20) {
+                showNotification('Maximalrunden müssen zwischen 1 und 20 liegen', 'error');
+                return;
+            }
+            
+            if (minRounds > maxRounds) {
+                showNotification('Mindestrunden dürfen nicht größer als Maximalrunden sein', 'error');
+                return;
+            }
+            
+            if (probability < 0 || probability > 1) {
+                showNotification('Wahrscheinlichkeit muss zwischen 0 und 1 liegen', 'error');
+                return;
+            }
         }
         
         // Formular abschicken
