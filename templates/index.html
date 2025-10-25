@@ -6,13 +6,19 @@
 
 {% block body %}
 <div class="container">
-    <div class="hero">
-        <h1>Öffentliches-Gut-Spiel</h1>
-        <p>Willkommen zum öffentlichen Gut-Spiel!</p>
-        
-        <div class="btn-container">
-            <a href="{{ url_for('create_game') }}" class="btn btn-large">Spiel erstellen</a>
-            <a href="{{ url_for('join_game') }}" class="btn btn-large btn-secondary">Spiel beitreten</a>
+    <div class="hero-box">
+        <div class="welcome-section">
+            <h1>Willkommen zum öffentlichen Gut-Spiel!</h1>
+            
+            <div class="game-explanation">
+                <p>Spieler investieren Coins in ein öffentliches Gut. Die Gesamteinzahlungen werden vervielfacht und gleichmäßig auf alle Gruppenmitglieder verteilt.</p>
+                <p><strong>Ziel:</strong> Durch strategische Entscheidungen das höchste Gesamtguthaben zu erreichen!</p>
+            </div>
+
+            <div class="btn-container">
+                <a href="{{ url_for('create_game') }}" class="btn btn-large">Spiel erstellen</a>
+                <a href="{{ url_for('join_game') }}" class="btn btn-large btn-secondary">Spiel beitreten</a>
+            </div>
         </div>
     </div>
 </div>

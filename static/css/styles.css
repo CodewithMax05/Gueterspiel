@@ -11,6 +11,12 @@ body {
     color: white;
     min-height: 100vh;
     line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1 0 auto;
 }
 
 .container {
@@ -65,11 +71,12 @@ header {
 /* Footer Styles */
 footer {
     text-align: center;
-    padding: 2rem;
-    margin-top: 3rem;
+    padding: 1rem 2rem;
+    margin-top: auto;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(10px);
+    flex-shrink: 0;
 }
 
 /* Button Styles */
