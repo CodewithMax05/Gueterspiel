@@ -116,15 +116,6 @@
     color: #dc3545;
 }
 
-.continue-button {
-    width: 100%;
-    max-width: 400px;
-    margin: 30px auto;
-    display: block;
-    padding: 20px;
-    font-size: 18px;
-}
-
 .waiting-message {
     text-align: center;
     margin: 30px 0;

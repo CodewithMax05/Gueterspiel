@@ -5,13 +5,6 @@
 {% endblock %}
 
 {% block body %}
-<div id="room-data" 
-     data-room-id="{{ room.id }}"
-     data-player-id="{{ player.id }}"
-     data-is-leader="{{ 'true' if is_leader else 'false' }}"
-     style="display: none;">
-</div>
-
 <div class="results-container">
     <h1 style="text-align: center;">📊 Ergebnisse Runde {{ room.current_round }}</h1>
     
@@ -27,78 +20,80 @@
         </p>
     </div>
     
-    <!-- Gruppenergebnisse -->
+    <!-- Gruppenergebnisse - Nur die eigene Gruppe -->
     <div class="group-results">
-        <h2 style="text-align: center; margin-bottom: 30px;">Alle Gruppen</h2>
+        <h2 style="text-align: center; margin-bottom: 30px;">Deine Gruppe</h2>
         
         {% for group in results %}
-        <div class="group-card">
-            <div class="group-header">
-                <h3>Gruppe {{ group.group_number }}</h3>
-                <span style="color: #667eea; font-size: 18px;">
-                    {{ group.players|length }} Spieler
-                </span>
-            </div>
+            {% set ns = namespace(found=false) %}
+            {% for p in group.players %}
+                {% if p.id == player.id %}
+                    {% set ns.found = true %}
+                {% endif %}
+            {% endfor %}
             
-            <div class="group-stats">
-                <div class="stat-box">
-                    <div class="stat-label">Eingezahlt</div>
-                    <div class="stat-value">{{ "%.1f"|format(group.total_contribution) }}</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Pool gesamt</div>
-                    <div class="stat-value">{{ "%.1f"|format(group.total_pool) }}</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Pro Spieler</div>
-                    <div class="stat-value">{{ "%.1f"|format(group.payout_per_player) }}</div>
-                </div>
-            </div>
-            
-            <div class="players-table">
-                <div class="player-row header">
-                    <div>Spieler</div>
-                    <div>Eingezahlt</div>
-                    <div>Ausgezahlt</div>
-                    <div>Neues Guthaben</div>
-                    <div>Gewinn/Verlust</div>
+            {% if ns.found %}
+            <div class="group-card">
+                <div class="group-header">
+                    <h3>Gruppe {{ group.group_number }}</h3>
+                    <span style="color: #667eea; font-size: 18px;">
+                        {{ group.players|length }} Spieler
+                    </span>
                 </div>
                 
-                {% for p in group.players %}
-                <div class="player-row {% if p.id == player.id %}current-player{% endif %}">
-                    <div data-label="Spieler:">
-                        {{ p.name }}
-                        {% if p.id == player.id %}<strong>(Du)</strong>{% endif %}
+                <div class="group-stats">
+                    <div class="stat-box">
+                        <div class="stat-label">Eingezahlt</div>
+                        <div class="stat-value">{{ "%.1f"|format(group.total_contribution) }}</div>
                     </div>
-                    <div data-label="Eingezahlt:">{{ "%.1f"|format(p.contribution) }}</div>
-                    <div data-label="Ausgezahlt:">{{ "%.1f"|format(p.payout) }}</div>
-                    <div data-label="Guthaben:">{{ "%.1f"|format(p.new_balance) }}</div>
-                    <div data-label="Gewinn/Verlust:" class="profit-indicator {% if p.profit > 0 %}positive{% elif p.profit < 0 %}negative{% endif %}">
-                        {% if p.profit > 0 %}+{% endif %}{{ "%.1f"|format(p.profit) }}
+                    <div class="stat-box">
+                        <div class="stat-label">Pool gesamt</div>
+                        <div class="stat-value">{{ "%.1f"|format(group.total_pool) }}</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Pro Spieler</div>
+                        <div class="stat-value">{{ "%.1f"|format(group.payout_per_player) }}</div>
                     </div>
                 </div>
-                {% endfor %}
+                
+                <div class="players-table">
+                    <div class="player-row header">
+                        <div>Spieler</div>
+                        <div>Eingezahlt</div>
+                        <div>Ausgezahlt</div>
+                        <div>Neues Guthaben</div>
+                        <div>Gewinn/Verlust</div>
+                    </div>
+                    
+                    {% for p in group.players %}
+                    <div class="player-row {% if p.id == player.id %}current-player{% endif %}">
+                        <div data-label="Spieler:">
+                            {{ p.name }}
+                            {% if p.id == player.id %}<strong>(Du)</strong>{% endif %}
+                        </div>
+                        <div data-label="Eingezahlt:">{{ "%.1f"|format(p.contribution) }}</div>
+                        <div data-label="Ausgezahlt:">{{ "%.1f"|format(p.payout) }}</div>
+                        <div data-label="Guthaben:">{{ "%.1f"|format(p.new_balance) }}</div>
+                        <div data-label="Gewinn/Verlust:" class="profit-indicator {% if p.profit > 0 %}positive{% elif p.profit < 0 %}negative{% endif %}">
+                            {% if p.profit > 0 %}+{% endif %}{{ "%.1f"|format(p.profit) }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
-        </div>
+            {% endif %}
         {% endfor %}
     </div>
     
-    <!-- Weiter-Button (nur für Leader) -->
-    {% if is_leader %}
-    <button class="btn continue-button" id="continueBtn">
-        ▶️ Weiter zur nächsten Runde
-    </button>
-    {% else %}
+    <!-- Warte auf Leader -->
     <div class="waiting-message">
         ⏳ Warte auf den Leader, um fortzufahren...
     </div>
-    {% endif %}
 </div>
 
 <div id="results-data" 
      data-room-id="{{ room.id }}"
      data-player-id="{{ player.id }}"
-     data-is-leader="{{ 'true' if is_leader else 'false' }}"
      style="display: none;">
 </div>
 {% endblock %}
@@ -107,19 +102,7 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const resultsData = document.getElementById('results-data');
-        const isLeader = resultsData.dataset.isLeader === 'true';
         const roomId = resultsData.dataset.roomId;
-        
-        if (isLeader) {
-            const continueBtn = document.getElementById('continueBtn');
-            if (continueBtn) {
-                continueBtn.addEventListener('click', function() {
-                    this.disabled = true;
-                    this.textContent = '⏳ Wird verarbeitet...';
-                    socket.emit('next_round');
-                });
-            }
-        }
         
         // Prüfe alle 3 Sekunden ob nächste Runde startet
         setInterval(() => checkGameStatus(roomId), 3000);
