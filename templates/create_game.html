@@ -64,7 +64,7 @@
                 <div class="form-group">
                     <label>Rundendauer</label>
                     <div class="input-with-unit">
-                        <input type="number" name="round_duration" min="10" max="300" value="60" required>
+                        <input type="number" name="round_duration" min="1" value="60" required>
                         <span class="unit-label">Sekunden</span>
                     </div>
                     <small>Zeit pro Runde. Bei Ablauf wird automatisch 0 Coins eingezahlt.</small>
@@ -185,6 +185,7 @@
         const initialCoins = parseInt(formData.get('initial_coins'));
         const maxContribution = parseInt(formData.get('max_contribution'));
         const endMode = formData.get('end_mode');
+        const roundDuration = parseFloat(formData.get('round_duration'));
         
         // Allgemeine Validierungen
         if (initialCoins < 1 || initialCoins > 100) {
@@ -199,6 +200,17 @@
         
         if (maxContribution > initialCoins) {
             showNotification('Maximale Einzahlung darf nicht größer als Startguthaben sein', 'error');
+            return;
+        }
+        
+        // Rundendauer Validierung
+        if (isNaN(roundDuration) || roundDuration <= 0) {
+            showNotification('Rundendauer muss größer als 0 sein', 'error');
+            return;
+        }
+        
+        if (!Number.isInteger(roundDuration)) {
+            showNotification('Rundendauer muss eine ganze Zahl sein', 'error');
             return;
         }
         
