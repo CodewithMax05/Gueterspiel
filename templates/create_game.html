@@ -49,10 +49,10 @@
                     <div class="form-group">
                         <label>Multiplikator</label>
                         <div class="input-with-unit">
-                            <input type="number" name="multiplier" min="1" max="10" step="0.1" value="2" required>
+                            <input type="number" name="multiplier" min="0.1" step="0.1" value="2" required>
                             <span class="unit-label">×</span>
                         </div>
-                        <small>Summe wird verdoppelt (× 2), verdreifacht (× 3), ...</small>
+                        <small>Summe wird verdoppelt (× 2), verdreifacht (× 3), ... Muss größer als 0 sein.</small>
                     </div>
                 </div>
             </div>
@@ -204,12 +204,14 @@
         // Validiere Eingaben
         const initialCoinsStr = formData.get('initial_coins');
         const maxContributionStr = formData.get('max_contribution');
+        const multiplierStr = formData.get('multiplier');
         const endMode = formData.get('end_mode');
         const roundDuration = parseFloat(formData.get('round_duration'));
         
-        // Parse Startguthaben und maximale Einzahlung
+        // Parse Startguthaben, maximale Einzahlung und Multiplikator
         const initialCoins = parseNumber(initialCoinsStr);
         const maxContribution = parseNumber(maxContributionStr);
+        const multiplier = parseNumber(multiplierStr);
         
         // Validierung für Startguthaben
         if (initialCoins === null) {
@@ -235,6 +237,17 @@
         
         if (maxContribution > initialCoins) {
             showNotification('Maximale Einzahlung darf nicht größer als Startguthaben sein', 'error');
+            return;
+        }
+        
+        // Validierung für Multiplikator
+        if (multiplier === null) {
+            showNotification('Multiplikator muss eine gültige Zahl sein (z.B. 0.5, 2, 3.5)', 'error');
+            return;
+        }
+        
+        if (multiplier <= 0) {
+            showNotification('Multiplikator muss größer als 0 sein', 'error');
             return;
         }
         
