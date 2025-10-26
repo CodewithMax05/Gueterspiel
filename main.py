@@ -370,11 +370,19 @@ def create_game():
     if request.method == 'POST':
         # Einstellungen aus dem Formular verarbeiten
         end_mode = request.form.get('end_mode', 'fixed_rounds')
+
+        try:
+            initial_coins = float(request.form.get('initial_coins', '10').replace(',', '.'))
+            max_contribution = float(request.form.get('max_contribution', '10').replace(',', '.'))
+        except ValueError:
+            # Fallback zu Standardwerten bei Parse-Fehlern
+            initial_coins = 10.0
+            max_contribution = 10.0
         
         # Basis-Einstellungen
         settings = {
-            'initial_coins': int(request.form.get('initial_coins', 10)),
-            'max_contribution': int(request.form.get('max_contribution', 10)),
+            'initial_coins': initial_coins,
+            'max_contribution': max_contribution,
             'group_size': int(request.form.get('group_size', 4)),
             'multiplier': float(request.form.get('multiplier', 2)),
             'round_duration': int(request.form.get('round_duration', 60)),

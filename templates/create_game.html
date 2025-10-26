@@ -18,19 +18,19 @@
                     <div class="form-group">
                         <label>Startguthaben pro Spieler</label>
                         <div class="input-with-unit">
-                            <input type="number" name="initial_coins" min="1" max="100" value="10" required>
+                            <input type="number" name="initial_coins" min="1" step="any" value="10" required>
                             <span class="unit-label">Coins</span>
                         </div>
-                        <small>Wie viele Coins erhält jeder Spieler zu Beginn?</small>
+                        <small>Wie viele Coins erhält jeder Spieler zu Beginn? (Mindestens 1, Kommazahlen erlaubt)</small>
                     </div>
                     
                     <div class="form-group">
                         <label>Maximale Einzahlung</label>
                         <div class="input-with-unit">
-                            <input type="number" name="max_contribution" min="1" max="100" value="10" required>
+                            <input type="number" name="max_contribution" min="1" step="any" value="10" required>
                             <span class="unit-label">Coins</span>
                         </div>
-                        <small>Maximaler Betrag pro Runde</small>
+                        <small>Maximaler Betrag pro Runde (Mindestens 1, Kommazahlen erlaubt)</small>
                     </div>
                 </div>
                 
@@ -177,24 +177,58 @@
         updateConditionalSettings(); // Initial aufrufen
     });
     
+    function parseNumber(input) {
+        if (typeof input !== 'string') {
+            input = String(input);
+        }
+        
+        // Ersetze Komma durch Punkt für korrekte Float-Parsing
+        const normalized = input.replace(',', '.');
+        
+        // Versuche die Zahl zu parsen
+        const parsed = parseFloat(normalized);
+        
+        // Prüfe ob das Ergebnis eine gültige Zahl ist
+        if (isNaN(parsed)) {
+            return null;
+        }
+        
+        return parsed;
+    }
+    
     function createGame() {
         const form = document.getElementById('gameSettings');
         const formData = new FormData(form);
         
         // Validiere Eingaben
-        const initialCoins = parseInt(formData.get('initial_coins'));
-        const maxContribution = parseInt(formData.get('max_contribution'));
+        const initialCoinsStr = formData.get('initial_coins');
+        const maxContributionStr = formData.get('max_contribution');
         const endMode = formData.get('end_mode');
         const roundDuration = parseFloat(formData.get('round_duration'));
         
-        // Allgemeine Validierungen
-        if (initialCoins < 1 || initialCoins > 100) {
-            showNotification('Startguthaben muss zwischen 1 und 100 Coins liegen', 'error');
+        // Parse Startguthaben und maximale Einzahlung
+        const initialCoins = parseNumber(initialCoinsStr);
+        const maxContribution = parseNumber(maxContributionStr);
+        
+        // Validierung für Startguthaben
+        if (initialCoins === null) {
+            showNotification('Startguthaben muss eine gültige Zahl sein (z.B. 10, 10.5, 7.25)', 'error');
             return;
         }
         
-        if (maxContribution < 1 || maxContribution > 100) {
-            showNotification('Maximale Einzahlung muss zwischen 1 und 100 Coins liegen', 'error');
+        if (initialCoins < 1) {
+            showNotification('Startguthaben muss mindestens 1 Coin betragen', 'error');
+            return;
+        }
+        
+        // Validierung für maximale Einzahlung
+        if (maxContribution === null) {
+            showNotification('Maximale Einzahlung muss eine gültige Zahl sein (z.B. 10, 10.5, 7.25)', 'error');
+            return;
+        }
+        
+        if (maxContribution < 1) {
+            showNotification('Maximale Einzahlung muss mindestens 1 Coin betragen', 'error');
             return;
         }
         
