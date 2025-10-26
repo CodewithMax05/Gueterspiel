@@ -10,16 +10,16 @@
     
     <div class="summary">
         <h3>Dein Endergebnis:</h3>
-        <p>Endguthaben: <strong>{{ player.coins }} Coins</strong></p>
-        <p>Startguthaben: {{ initial_coins }} Coins</p>
-        <p>Gewinn/Verlust: <strong>{{ player.coins - initial_coins }} Coins</strong></p>
+        <p>Endguthaben: <strong>{{ "%.2f"|format(player.coins) }} Coins</strong></p>
+        <p>Startguthaben: {{ "%.2f"|format(initial_coins) }} Coins</p>
+        <p>Gewinn/Verlust: <strong>{{ "%.2f"|format(player.coins - initial_coins) }} Coins</strong></p>
     </div>
         
     <div class="balance-history">
         <h3>Guthabenverlauf:</h3>
         <ul class="history-list">
             {% for balance in player.game_history.balances %}
-            <li>Runde {{ loop.index }}: {{ balance }} Coins</li>
+            <li>Runde {{ loop.index }}: {{ "%.2f"|format(balance) }} Coins</li>
             {% endfor %}
         </ul>
     </div>

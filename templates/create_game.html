@@ -193,7 +193,8 @@
             return null;
         }
         
-        return parsed;
+        // Auf 2 Nachkommastellen runden
+        return Math.round(parsed * 100) / 100;
     }
     
     function createGame() {

@@ -13,10 +13,10 @@
         <h2>Dein Ergebnis</h2>
         {% set player_profit = player.coins - player.game_history.balances[-2] if player.game_history.balances|length > 1 else 0 %}
         <div class="balance-change {% if player_profit > 0 %}positive{% elif player_profit < 0 %}negative{% else %}neutral{% endif %}">
-            {% if player_profit > 0 %}+{% endif %}{{ "%.1f"|format(player_profit) }} Coins
+            {% if player_profit > 0 %}+{% endif %}{{ "%.2f"|format(player_profit) }} Coins
         </div>
         <p style="font-size: 20px;">
-            Neues Guthaben: <strong>{{ "%.1f"|format(player.coins) }} Coins</strong>
+            Neues Guthaben: <strong>{{ "%.2f"|format(player.coins) }} Coins</strong>
         </p>
     </div>
     
@@ -44,15 +44,15 @@
                 <div class="group-stats">
                     <div class="stat-box">
                         <div class="stat-label">Eingezahlt</div>
-                        <div class="stat-value">{{ "%.1f"|format(group.total_contribution) }}</div>
+                        <div class="stat-value">{{ "%.2f"|format(group.total_contribution) }}</div>
                     </div>
                     <div class="stat-box">
                         <div class="stat-label">Pool gesamt</div>
-                        <div class="stat-value">{{ "%.1f"|format(group.total_pool) }}</div>
+                        <div class="stat-value">{{ "%.2f"|format(group.total_pool) }}</div>
                     </div>
                     <div class="stat-box">
                         <div class="stat-label">Pro Spieler</div>
-                        <div class="stat-value">{{ "%.1f"|format(group.payout_per_player) }}</div>
+                        <div class="stat-value">{{ "%.2f"|format(group.payout_per_player) }}</div>
                     </div>
                 </div>
                 
@@ -71,11 +71,11 @@
                             {{ p.name }}
                             {% if p.id == player.id %}<strong>(Du)</strong>{% endif %}
                         </div>
-                        <div data-label="Eingezahlt:">{{ "%.1f"|format(p.contribution) }}</div>
-                        <div data-label="Ausgezahlt:">{{ "%.1f"|format(p.payout) }}</div>
-                        <div data-label="Guthaben:">{{ "%.1f"|format(p.new_balance) }}</div>
+                        <div data-label="Eingezahlt:">{{ "%.2f"|format(p.contribution) }}</div>
+                        <div data-label="Ausgezahlt:">{{ "%.2f"|format(p.payout) }}</div>
+                        <div data-label="Guthaben:">{{ "%.2f"|format(p.new_balance) }}</div>
                         <div data-label="Gewinn/Verlust:" class="profit-indicator {% if p.profit > 0 %}positive{% elif p.profit < 0 %}negative{% endif %}">
-                            {% if p.profit > 0 %}+{% endif %}{{ "%.1f"|format(p.profit) }}
+                            {% if p.profit > 0 %}+{% endif %}{{ "%.2f"|format(p.profit) }}
                         </div>
                     </div>
                     {% endfor %}

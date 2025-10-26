@@ -34,7 +34,7 @@
             <div class="player-item {% if p.ready %}ready{% endif %}" id="player-{{ p.id }}">
                 <div>
                     <span class="player-name">{{ p.name }}</span>
-                    <span style="color: #666; margin-left: 10px;">({{ p.coins }} Coins)</span>
+                    <span style="color: #666; margin-left: 10px;">({{ "%.2f"|format(p.coins) }} Coins)</span>
                 </div>
                 <span class="player-status">
                     {% if p.ready %}

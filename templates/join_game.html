@@ -50,7 +50,7 @@
                         <div class="room-info">
                             <strong>Raum ${room.id}</strong>
                             <p>Spieler: ${room.player_count} | Gruppengröße: ${room.settings.group_size}</p>
-                            <p>Startguthaben: ${room.settings.initial_coins} Coins | Multiplikator: ${room.settings.multiplier}×</p>
+                            <p>Startguthaben: ${parseFloat(room.settings.initial_coins).toFixed(2)} Coins | Multiplikator: ${room.settings.multiplier}×</p>
                         </div>
                         <button class="join-btn" onclick="joinRoom('${room.id}')">Beitreten</button>
                     `;

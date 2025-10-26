@@ -142,27 +142,27 @@ class GameRoom:
                 
                 # Auszahlung berechnen
                 payout = (total_contribution * multiplier) / len(group['player_ids'])
-                player.coins = (old_balance - contribution) + payout
+                player.coins = round((old_balance - contribution) + payout, 2)
                 
                 # Spieler-Daten für Ergebnisse
                 group_players.append({
                     'id': player_id,
                     'name': player.name,
-                    'contribution': contribution,
-                    'payout': payout,
-                    'new_balance': player.coins,
-                    'profit': payout - contribution
+                    'contribution': round(contribution, 2),
+                    'payout': round(payout, 2),
+                    'new_balance': round(player.coins, 2),
+                    'profit': round(payout - contribution, 2)
                 })
                 
                 # Spielverlauf aktualisieren
-                player.game_history['balances'].append(player.coins)
-                player.game_history['contributions'].append(contribution)
+                player.game_history['balances'].append(round(player.coins, 2))
+                player.game_history['contributions'].append(round(contribution, 2))
             
             results.append({
                 'group_number': group['group_number'],
-                'total_contribution': total_contribution,
-                'total_pool': total_contribution * multiplier,
-                'payout_per_player': (total_contribution * multiplier) / len(group['player_ids']),
+                'total_contribution': round(total_contribution, 2),
+                'total_pool': round(total_contribution * multiplier, 2),
+                'payout_per_player': round((total_contribution * multiplier) / len(group['player_ids']), 2),
                 'players': group_players
             })
         
