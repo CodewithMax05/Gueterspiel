@@ -357,19 +357,19 @@ def check_room_access(room_id, redirect_on_fail=True):
     
     # Prüfe ob Spieler im Raum ist (außer für Leader)
     if not player.is_leader and player_id not in room.players:
-        # Wenn der Spieler eine room_id hat, die nicht dieser Raum-ID entspricht, 
-        # wurde er entfernt und sollte nicht wieder hinzugefügt werden
-        if player.room_id is not None and player.room_id != room_id:
-            print(f"DEBUG: Spieler {player_id} wurde aus Raum {room_id} entfernt (hat andere room_id: {player.room_id})")
+        # Wenn player's serverseitige room_id nicht mit diesem Raum übereinstimmt,
+        # wurde der Spieler entfernt oder die Session ist für einen anderen Raum.
+        if player.room_id != room_id:
+            print(f"DEBUG: Spieler {player_id} hat room_id={player.room_id}, erwartet {room_id} -> Zugriff verweigert")
             if redirect_on_fail:
                 return redirect(url_for('join_game'))
             return room, None
             
         if room.status == "waiting":
             room.add_player(player_id)
-            print(f"DEBUG: Spieler {player_id} wieder zu Raum {room_id} hinzugefügt")
+            print(f"DEBUG: Spieler {player_id} (mit matching room_id) wieder zu Raum {room_id} hinzugefügt")
         else:
-            print(f"DEBUG: Spieler {player_id} nicht in Raum {room_id}")
+            print(f"DEBUG: Spieler {player_id} nicht in Raum {room_id} und Raum nicht im 'waiting' Zustand")
             if redirect_on_fail:
                 return redirect(url_for('join_game'))
             return room, None
@@ -771,23 +771,32 @@ def handle_join_room_reconnect(data):
     if not room_id or not player_id:
         return
     
+    # Stelle sicher, dass Raum und Spieler existieren
     if room_id in rooms and player_id in players:
         room = rooms[room_id]
         player = players[player_id]
         
-        # Stelle sicher, dass Spieler im Raum ist
-        if player_id not in room.players and not player.is_leader:
-            room.add_player(player_id)
-        
-        join_room(room_id)
-        
-        with game_timer_lock:
-            timer = game_timers.get(room_id)
-            if timer and timer.is_running:
-                time_left = timer.get_time_left()
-                emit('game_timer_update', {'time_left': time_left}, room=request.sid)
-        
-        print(f"DEBUG: Spieler {player_id} erneut Raum {room_id} beigetreten")
+        # Nur Rejoin erlauben wenn der Spieler serverseitig wirklich zu diesem Raum gehört
+        # (d.h. er wurde nicht vom Leader entfernt)
+        if player.is_leader:
+            # Leader darf immer wieder beitreten
+            join_room(room_id)
+            print(f"DEBUG: Leader {player_id} rejoined Raum {room_id}")
+        else:
+            if player.room_id == room_id:
+                # Spieler war vorher Teil dieses Raums -> readd falls noch nicht vorhanden
+                if player_id not in room.players:
+                    room.add_player(player_id)
+                join_room(room_id)
+                print(f"DEBUG: Spieler {player_id} erneut Raum {room_id} beigetreten (validierte room_id)")
+            else:
+                # Spieler wurde offensichtlich entfernt oder session verwirrt -> sende Event zum redirect
+                print(f"DEBUG: Spieler {player_id} versucht reconnect für Raum {room_id}, aber player.room_id={player.room_id} -> reject")
+                # Wenn möglich, schicke ein individuelles Event an die Socket (sid)
+                socketio.emit('force_redirect', {
+                    'message': 'Sie wurden aus dem Raum entfernt oder Ihre Sitzung ist abgelaufen.'
+                }, room=request.sid)
+                return
 
 @socketio.on('player_ready')
 def handle_player_ready():
@@ -1019,6 +1028,12 @@ def handle_remove_player(data):
     # Entferne Spieler aus dem Raum UND setze room_id zurück
     room.remove_player(target_player_id)
     target_player.room_id = None  # WICHTIG: Raum-ID zurücksetzen
+
+    try:
+        del players[target_player_id]
+        print(f"DEBUG: Spieler {target_player_id} vollständig aus players gelöscht")
+    except KeyError:
+        pass
     
     # Aktualisiere Raumstatus
     room.update_status_based_on_conditions()
