@@ -8,13 +8,26 @@
 <div class="container">
     <h1>Spielraum: {{ room.id }}</h1>
     
-    <!-- Einheitlicher Raum-Informationen Block (überarbeitet) -->
+    <!-- Einheitlicher Raum-Informationen Block -->
     <div class="room-info">
         <p><strong>Status:</strong> <span id="roomStatus">{{ room.status }}</span></p>
         <p><strong>Aktive Spieler:</strong> <span id="totalPlayers">{{ players|length }}</span></p>
         <p><strong>Bereite Spieler:</strong> <span id="readyCount">{{ ready_count }}</span></p>
         <p><strong>Gruppengröße:</strong> <span id="groupSize">{{ room.settings.get('group_size', 4) }}</span> Spieler</p>
         <p><strong>Erstellt von:</strong> {{ room.leader_name }}</p>
+    </div>
+
+    <!-- Raumleiter Anzeige -->
+    <div class="leader-item">
+        <div class="leader-avatar">
+            <i class="fas fa-crown"></i>
+        </div>
+        <div class="leader-info">
+            <span class="leader-name">{{ room.leader_name }}</span>
+            <span class="leader-stats">
+                <span class="role">Spielleiter / Moderator</span>
+            </span>
+        </div>
     </div>
 
     <!-- Buttons über den Spielern -->
@@ -50,29 +63,12 @@
         {% endif %}
     </div>
     
+    <!-- Spielerliste -->
     <div class="player-list">
         <h3>Aktive Spieler:</h3>
         <div id="playersContainer">
             {% for p in players %}
-                {% if p.id == room.leader_id %}
-                <div class="player-item leader {% if p.ready %}ready{% endif %} {% if p.id == session.player_id %}current-player{% endif %}" id="player-{{ p.id }}">
-                    <div>
-                        <span class="player-name">👑 {{ p.name }} (Leader)</span>
-                        <span style="color: #666; margin-left: 10px;">({{ "%.2f"|format(p.coins) }} Coins)</span>
-                    </div>
-                    <span class="player-status">
-                        {% if p.ready %}
-                        <span style="color: #28a745;">✅ Bereit</span>
-                        {% else %}
-                        <span style="color: #dc3545;">❌ Nicht bereit</span>
-                        {% endif %}
-                    </span>
-                </div>
-                {% endif %}
-            {% endfor %}
-            
-            {% for p in players %}
-                {% if p.id != room.leader_id and p.id == session.player_id %}
+                {% if p.id == session.player_id %}
                 <div class="player-item current-player {% if p.ready %}ready{% endif %}" id="player-{{ p.id }}">
                     <div>
                         <span class="player-name">⭐ {{ p.name }} (Du)</span>
@@ -90,7 +86,7 @@
             {% endfor %}
             
             {% for p in players %}
-                {% if p.id != room.leader_id and p.id != session.player_id %}
+                {% if p.id != session.player_id %}
                 <div class="player-item {% if p.ready %}ready{% endif %}" id="player-{{ p.id }}">
                     <div>
                         <span class="player-name">{{ p.name }}</span>
@@ -113,6 +109,7 @@
 <div id="room-data" 
      data-room-id="{{ room.id }}"
      data-is-leader="{{ 'true' if is_leader else 'false' }}"
+     data-room-leader-id="{{ room.leader_id }}"
      style="display: none;">
 </div>
 
@@ -124,6 +121,7 @@
         const roomData = document.getElementById('room-data');
         const roomId = roomData.dataset.roomId;
         const isLeader = roomData.dataset.isLeader === 'true';
+        const roomLeaderId = roomData.dataset.roomLeaderId;
         
         // Prüfe Startbedingungen (nur für Leader)
         if (isLeader) {
@@ -212,6 +210,7 @@
     socket.on('player_ready_changed', function(data) {
         console.log('DEBUG: player_ready_changed Event empfangen:', data);
         
+        // Aktualisiere Spieler in der Liste
         const playerElement = document.getElementById(`player-${data.player_id}`);
         if (playerElement) {
             if (data.ready) {
@@ -276,10 +275,7 @@
         let playerClass = 'player-item';
         let playerName = playerData.name;
         
-        if (playerData.id === currentRoomLeaderId) { // Annahme: currentRoomLeaderId ist global verfügbar
-            playerClass += ' leader';
-            playerName = `👑 ${playerData.name} (Leader)`;
-        } else if (playerData.id === currentPlayerId) {
+        if (playerData.id === currentPlayerId) {
             playerClass += ' current-player';
             playerName = `⭐ ${playerData.name} (Du)`;
         }
@@ -305,16 +301,9 @@
         `;
         
         // Füge den Spieler an der richtigen Position ein
-        if (playerData.id === currentRoomLeaderId) {
+        if (playerData.id === currentPlayerId) {
+            // Füge den aktuellen Spieler an den Anfang
             container.prepend(playerElement);
-        } else if (playerData.id === currentPlayerId) {
-            // Finde den Leader und füge danach ein
-            const leaderElement = container.querySelector('.leader');
-            if (leaderElement) {
-                leaderElement.after(playerElement);
-            } else {
-                container.appendChild(playerElement);
-            }
         } else {
             container.appendChild(playerElement);
         }

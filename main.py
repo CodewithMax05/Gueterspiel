@@ -420,12 +420,14 @@ def create_game():
         leader_id = str(uuid.uuid4())
         
         # Leader als Spieler erstellen (für die Verwaltung)
-        leader = Player(leader_id, "Leader", is_leader=True)
+        leader_name = "Spielleiter"  # Fester Name für den Leader
+        leader = Player(leader_id, leader_name, is_leader=True)
         leader.room_id = room_id
         players[leader_id] = leader
         
-        # Raum erstellen
+        # Raum erstellen mit leader_name
         room = GameRoom(room_id, leader_id, settings)
+        room.leader_name = leader_name  # Wichtig: leader_name setzen
         rooms[room_id] = room
         
         # Leader-Session speichern
