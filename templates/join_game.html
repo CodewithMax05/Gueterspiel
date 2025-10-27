@@ -53,10 +53,14 @@
                 rooms.forEach(room => {
                     const roomElement = document.createElement('div');
                     roomElement.className = 'room-item';
+                    
+                    // Status anzeigen
+                    const statusText = room.status === 'ready' ? '🟢 Startbereit' : '🔴 Wartet auf Spieler';
+                    
                     roomElement.innerHTML = `
                         <div class="room-info">
                             <strong>Raum ${room.id}</strong>
-                            <p>Spieler: ${room.player_count} | Gruppengröße: ${room.settings.group_size}</p>
+                            <p>Spieler: ${room.player_count} | Gruppengröße: ${room.settings.group_size} | Status: ${statusText}</p>
                             <p>Startguthaben: ${parseFloat(room.settings.initial_coins).toFixed(2)} Coins | Multiplikator: ${room.settings.multiplier}×</p>
                         </div>
                         <button class="join-btn" onclick="joinRoom('${room.id}')">Beitreten</button>

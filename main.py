@@ -365,11 +365,11 @@ def check_room_access(room_id, redirect_on_fail=True):
                 return redirect(url_for('join_game'))
             return room, None
             
-        if room.status == "waiting":
+        if room.status in ["waiting", "ready"]:  # Geändert von nur "waiting"
             room.add_player(player_id)
             print(f"DEBUG: Spieler {player_id} (mit matching room_id) wieder zu Raum {room_id} hinzugefügt")
         else:
-            print(f"DEBUG: Spieler {player_id} nicht in Raum {room_id} und Raum nicht im 'waiting' Zustand")
+            print(f"DEBUG: Spieler {player_id} nicht in Raum {room_id} und Raum nicht im 'waiting' oder 'ready' Zustand")
             if redirect_on_fail:
                 return redirect(url_for('join_game'))
             return room, None
@@ -588,7 +588,7 @@ def api_rooms():
     available_rooms = []
     for room_id, room in rooms.items():
         # Zeige Räume an, die im Status "waiting" oder "ready" sind
-        if room.status in ["waiting", "ready"]:
+        if room.status in ["waiting", "ready"]:  # Beide Status anzeigen
             # Nur normale Spieler zählen (keine Leader)
             normal_players = [pid for pid in room.players if pid in players and not players[pid].is_leader]
             
@@ -596,7 +596,8 @@ def api_rooms():
                 'id': room_id,
                 'player_count': len(normal_players),
                 'current_round': room.current_round,
-                'settings': room.settings
+                'settings': room.settings,
+                'status': room.status  # Status mit zurückgeben
             })
     return jsonify(available_rooms)
 
@@ -785,7 +786,8 @@ def handle_join_room_reconnect(data):
         else:
             if player.room_id == room_id:
                 # Spieler war vorher Teil dieses Raums -> readd falls noch nicht vorhanden
-                if player_id not in room.players:
+                # ÄNDERUNG: Erlaube Reconnect in beiden Status "waiting" und "ready"
+                if player_id not in room.players and room.status in ["waiting", "ready"]:
                     room.add_player(player_id)
                 join_room(room_id)
                 print(f"DEBUG: Spieler {player_id} erneut Raum {room_id} beigetreten (validierte room_id)")
