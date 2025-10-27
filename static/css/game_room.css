@@ -14,6 +14,33 @@
     align-items: center;
 }
 
+.player-item.leader {
+    background: rgba(255, 193, 7, 0.15);
+    border-left: 4px solid #ffc107;
+}
+
+.player-item.current-player {
+    background: rgba(0, 123, 255, 0.15);
+    border-left: 4px solid #007bff;
+}
+
+.player-item.leader.current-player {
+    background: linear-gradient(90deg, rgba(255, 193, 7, 0.15), rgba(0, 123, 255, 0.15));
+    border-left: 4px solid #ffc107;
+}
+
+.action-buttons {
+    margin: 20px 0;
+    text-align: center;
+}
+
+.leader-actions, .player-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
 .player-item.ready { 
     background: rgba(40, 167, 69, 0.2); 
     border-color: #28a745;
@@ -30,8 +57,20 @@
     background: rgba(255, 193, 7, 0.2);
     padding: 15px;
     border-radius: 8px;
-    margin: 15px 0;
+    margin: 0;
     border-left: 4px solid #ffc107;
+    width: 100%;
+    max-width: 500px;
+}
+
+.requirements ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+.requirements li {
+    margin: 0;
 }
 
 .connection-status {
@@ -68,6 +107,8 @@
 
 /* Neue Styles für den Ready-Button */
 .ready-toggle {
+    min-width: 180px;
+    height: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
