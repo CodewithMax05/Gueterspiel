@@ -80,13 +80,16 @@
                         <span class="player-name">⭐ {{ p.name }} (Du)</span>
                         <span style="color: #666; margin-left: 10px;">({{ "%.2f"|format(p.coins) }} Coins)</span>
                     </div>
-                    <span class="player-status">
-                        {% if p.ready %}
-                        <span style="color: #28a745;">✅ Bereit</span>
-                        {% else %}
-                        <span style="color: #dc3545;">❌ Nicht bereit</span>
-                        {% endif %}
-                    </span>
+                    <div class="player-actions">
+                        <span class="player-status">
+                            {% if p.ready %}
+                            <span style="color: #28a745;">✅ Bereit</span>
+                            {% else %}
+                            <span style="color: #dc3545;">❌ Nicht bereit</span>
+                            {% endif %}
+                        </span>
+                        <!-- Kein Lösch-Symbol für sich selbst -->
+                    </div>
                 </div>
                 {% endif %}
             {% endfor %}
@@ -98,19 +101,26 @@
                         <span class="player-name">{{ p.name }}</span>
                         <span style="color: #666; margin-left: 10px;">({{ "%.2f"|format(p.coins) }} Coins)</span>
                     </div>
-                    <span class="player-status">
-                        {% if p.ready %}
-                        <span style="color: #28a745;">✅ Bereit</span>
-                        {% else %}
-                        <span style="color: #dc3545;">❌ Nicht bereit</span>
+                    <div class="player-actions">
+                        <span class="player-status">
+                            {% if p.ready %}
+                            <span style="color: #28a745;">✅ Bereit</span>
+                            {% else %}
+                            <span style="color: #dc3545;">❌ Nicht bereit</span>
+                            {% endif %}
+                        </span>
+                        {% if is_leader %}
+                        <button class="delete-player-btn" onclick="removePlayer('{{ p.id }}', '{{ p.name }}')" 
+                                title="Spieler entfernen">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
                         {% endif %}
-                    </span>
+                    </div>
                 </div>
                 {% endif %}
             {% endfor %}
         </div>
     </div>
-</div>
 
 <div id="room-data" 
      data-room-id="{{ room.id }}"
@@ -203,6 +213,14 @@
             });
     }
 
+    function removePlayer(playerId, playerName) {
+        if (confirm(`Möchten Sie wirklich den Spieler "${playerName}" aus dem Raum entfernen?`)) {
+            console.log('DEBUG: Entferne Spieler:', playerId);
+            socket.emit('remove_player', { player_id: playerId });
+        }
+    }
+
+
     function checkStartRequirements(roomId) {
         fetch(`/api/room/${roomId}/requirements`)
             .then(response => response.json())
@@ -287,6 +305,37 @@
         // Raumstatus aktualisieren
         updateRoomStatus(data.room_status);
     });
+
+    // WebSocket Event für entfernte Spieler
+    socket.on('player_removed', function(data) {
+        console.log('DEBUG: player_removed Event empfangen:', data);
+        
+        // Entferne Spieler aus der Liste
+        const playerElement = document.getElementById(`player-${data.player_id}`);
+        if (playerElement) {
+            playerElement.remove();
+        }
+        
+        // Aktualisiere Spieleranzahl
+        updatePlayerCount();
+        
+        // Zeige Benachrichtigung
+        if (data.removed_player_id === currentPlayerId) {
+            // Dieser Spieler wurde entfernt
+            showNotification('Sie wurden aus dem Raum entfernt.', 'error', 5000);
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 3000);
+        } else {
+            // Ein anderer Spieler wurde entfernt
+            showNotification(`Spieler ${data.player_name} wurde entfernt.`, 'info', 3000);
+        }
+        
+        // Prüfe Startbedingungen neu (für Leader)
+        if (isLeader) {
+            checkStartRequirements(roomId);
+        }
+    });
     
     socket.on('game_started', function(data) {
         console.log('DEBUG: game_started Event empfangen, leite weiter');
@@ -300,6 +349,11 @@
             window.location.href = `/game/${data.room_id}`;
         }
     });
+
+    socket.on('error', function(data) {
+        console.error('DEBUG: WebSocket Error:', data);
+        showNotification(data.message, 'error', 5000);
+    });
     
     function updatePlayerList(playerData) {
         const container = document.getElementById('playersContainer');
@@ -311,8 +365,9 @@
         // Bestimme die CSS-Klassen basierend auf der Rolle des Spielers
         let playerClass = 'player-item';
         let playerName = playerData.name;
+        let isCurrentPlayer = playerData.id === currentPlayerId;
         
-        if (playerData.id === currentPlayerId) {
+        if (isCurrentPlayer) {
             playerClass += ' current-player';
             playerName = `⭐ ${playerData.name} (Du)`;
         }
@@ -324,21 +379,36 @@
         const playerElement = document.createElement('div');
         playerElement.className = playerClass;
         playerElement.id = `player-${playerData.id}`;
+        
+        // Erstelle den HTML-Inhalt mit Lösch-Button für Leader (außer für sich selbst)
+        let actionsHtml = '';
+        if (isLeader && !isCurrentPlayer) {
+            actionsHtml = `
+                <button class="delete-player-btn" onclick="removePlayer('${playerData.id}', '${playerData.name}')" 
+                        title="Spieler entfernen">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            `;
+        }
+        
         playerElement.innerHTML = `
             <div>
                 <span class="player-name">${playerName}</span>
                 <span style="color: #666; margin-left: 10px;">(${playerData.coins} Coins)</span>
             </div>
-            <span class="player-status">
-                ${playerData.ready ? 
-                    '<span style="color: #28a745;">✅ Bereit</span>' : 
-                    '<span style="color: #dc3545;">❌ Nicht bereit</span>'
-                }
-            </span>
+            <div class="player-actions">
+                <span class="player-status">
+                    ${playerData.ready ? 
+                        '<span style="color: #28a745;">✅ Bereit</span>' : 
+                        '<span style="color: #dc3545;">❌ Nicht bereit</span>'
+                    }
+                </span>
+                ${actionsHtml}
+            </div>
         `;
         
         // Füge den Spieler an der richtigen Position ein
-        if (playerData.id === currentPlayerId) {
+        if (isCurrentPlayer) {
             // Füge den aktuellen Spieler an den Anfang
             container.prepend(playerElement);
         } else {

@@ -975,6 +975,64 @@ def handle_game_time_out(data=None):
         print(f"DEBUG: Timer abgelaufen für Raum {room_id}, beende Runde")
         finish_round(room_id)
 
+@socketio.on('remove_player')
+def handle_remove_player(data):
+    player_id = session.get('player_id')
+    if not player_id or player_id not in players:
+        return
+    
+    requesting_player = players[player_id]
+    room_id = requesting_player.room_id
+    
+    if not room_id or room_id not in rooms:
+        return
+    
+    room = rooms[room_id]
+    
+    # Nur der Leader kann Spieler entfernen
+    if not requesting_player.is_leader:
+        emit('error', {'message': 'Nur der Spielleiter kann Spieler entfernen'})
+        return
+    
+    target_player_id = data.get('player_id')
+    
+    # Prüfe ob der Ziel-Spieler existiert
+    if target_player_id not in players or target_player_id not in room.players:
+        emit('error', {'message': 'Spieler nicht gefunden'})
+        return
+    
+    target_player = players[target_player_id]
+    
+    # Leader kann sich nicht selbst entfernen
+    if target_player.is_leader:
+        emit('error', {'message': 'Der Spielleiter kann sich nicht selbst entfernen'})
+        return
+    
+    # Entferne Spieler aus dem Raum
+    room.remove_player(target_player_id)
+    
+    # Aktualisiere Raumstatus
+    room.update_status_based_on_conditions()
+    
+    # Benachrichtige alle im Raum
+    emit('player_removed', {
+        'player_id': target_player_id,
+        'player_name': target_player.name,
+        'removed_player_id': target_player_id,
+        'removed_by': requesting_player.name
+    }, room=room_id)
+    
+    # Separate Benachrichtigung an den entfernten Spieler
+    emit('player_removed', {
+        'player_id': target_player_id,
+        'player_name': target_player.name,
+        'removed_player_id': target_player_id,
+        'removed_by': requesting_player.name,
+        'message': 'Sie wurden aus dem Raum entfernt.'
+    }, room=target_player_id)
+    
+    print(f"Spieler {target_player.name} wurde von {requesting_player.name} aus Raum {room_id} entfernt")
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     
