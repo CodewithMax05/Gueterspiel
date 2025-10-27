@@ -103,25 +103,6 @@
     gap: 5px;
 }
 
-.leader-display {
-    margin: 20px 0;
-    padding: 20px;
-    background: rgba(255, 193, 7, 0.1);
-    border-radius: 12px;
-    border-left: 4px solid #ffc107;
-}
-
-.leader-display h3 {
-    margin-bottom: 15px;
-    color: #ffc107;
-    font-size: 1.3rem;
-}
-
-.leader-card {
-    display: flex;
-    justify-content: center;
-}
-
 .leader-item {
     display: flex;
     align-items: center;
@@ -131,6 +112,7 @@
     border-radius: 10px;
     border: 2px solid #ffc107;
     min-width: 250px;
+    margin-top: 0.7rem;
 }
 
 .leader-avatar {
@@ -141,7 +123,7 @@
 .leader-name {
     font-size: 1.2rem;
     font-weight: bold;
-    color: #ffc107;
+    color: #ffcc00;
 }
 
 .leader-stats {
@@ -152,7 +134,7 @@
 }
 
 .role {
-    color: #ffc107;
+    color: #c29304;
     font-weight: 600;
     font-style: italic;
 }

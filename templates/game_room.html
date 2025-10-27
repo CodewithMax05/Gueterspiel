@@ -7,15 +7,6 @@
 {% block body %}
 <div class="container">
     <h1>Spielraum: {{ room.id }}</h1>
-    
-    <!-- Einheitlicher Raum-Informationen Block -->
-    <div class="room-info">
-        <p><strong>Status:</strong> <span id="roomStatus">{{ room.status }}</span></p>
-        <p><strong>Aktive Spieler:</strong> <span id="totalPlayers">{{ players|length }}</span></p>
-        <p><strong>Bereite Spieler:</strong> <span id="readyCount">{{ ready_count }}</span></p>
-        <p><strong>Gruppengröße:</strong> <span id="groupSize">{{ room.settings.get('group_size', 4) }}</span> Spieler</p>
-        <p><strong>Erstellt von:</strong> {{ room.leader_name }}</p>
-    </div>
 
     <!-- Raumleiter Anzeige -->
     <div class="leader-item">
@@ -28,6 +19,15 @@
                 <span class="role">Spielleiter / Moderator</span>
             </span>
         </div>
+    </div>
+    
+    <!-- Einheitlicher Raum-Informationen Block -->
+    <div class="room-info">
+        <p><strong>Status:</strong> <span id="roomStatus">{{ room.status }}</span></p>
+        <p><strong>Aktive Spieler:</strong> <span id="totalPlayers">{{ players|length }}</span></p>
+        <p><strong>Bereite Spieler:</strong> <span id="readyCount">{{ ready_count }}</span></p>
+        <p><strong>Gruppengröße:</strong> <span id="groupSize">{{ room.settings.get('group_size', 4) }}</span> Spieler</p>
+        <p><strong>Erstellt von:</strong> {{ room.leader_name }}</p>
     </div>
 
     <!-- Buttons über den Spielern -->
