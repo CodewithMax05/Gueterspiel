@@ -40,11 +40,33 @@
     gap: 15px;
 }
 
-.leader-actions, .player-actions {
+.leader-actions,
+.action-buttons .player-actions {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 15px;
+}
+
+.player-item .player-actions {
+    display: flex;
+    flex-direction: row; /* nebeneinander */
+    align-items: center;
+    gap: 12px;
+}
+
+.player-item .player-status {
+    min-width: 120px;
+    text-align: left;    /* Status linksbündig innerhalb seines Bereichs */
+    font-weight: 600;
+}
+
+/* etwas Abstand zwischen Text und Icon, falls nötig */
+.player-item .delete-player-btn {
+    margin-left: 6px;
+    width: 36px;
+    height: 36px;
+    padding: 6px;
 }
 
 .player-item.ready { 

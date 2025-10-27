@@ -357,6 +357,14 @@ def check_room_access(room_id, redirect_on_fail=True):
     
     # Prüfe ob Spieler im Raum ist (außer für Leader)
     if not player.is_leader and player_id not in room.players:
+        # Wenn der Spieler eine room_id hat, die nicht dieser Raum-ID entspricht, 
+        # wurde er entfernt und sollte nicht wieder hinzugefügt werden
+        if player.room_id is not None and player.room_id != room_id:
+            print(f"DEBUG: Spieler {player_id} wurde aus Raum {room_id} entfernt (hat andere room_id: {player.room_id})")
+            if redirect_on_fail:
+                return redirect(url_for('join_game'))
+            return room, None
+            
         if room.status == "waiting":
             room.add_player(player_id)
             print(f"DEBUG: Spieler {player_id} wieder zu Raum {room_id} hinzugefügt")
@@ -716,7 +724,7 @@ def handle_join_room(data):
     # Neuen Spieler erstellen
     player_id = str(uuid.uuid4())
     player = Player(player_id, player_name)
-    player.room_id = room_id
+    player.room_id = room_id  # WICHTIG: Raum-ID setzen
     player.coins = room.settings['initial_coins']
     player.game_history['balances'].append(player.coins)
     
@@ -1008,8 +1016,9 @@ def handle_remove_player(data):
         emit('error', {'message': 'Der Spielleiter kann sich nicht selbst entfernen'})
         return
     
-    # Entferne Spieler aus dem Raum
+    # Entferne Spieler aus dem Raum UND setze room_id zurück
     room.remove_player(target_player_id)
+    target_player.room_id = None  # WICHTIG: Raum-ID zurücksetzen
     
     # Aktualisiere Raumstatus
     room.update_status_based_on_conditions()

@@ -382,7 +382,13 @@
         
         // Erstelle den HTML-Inhalt mit Lösch-Button für Leader (außer für sich selbst)
         let actionsHtml = '';
-        if (isLeader && !isCurrentPlayer) {
+        
+        // sichere, zuverlässige Abfrage, ob dieser Client Leader ist
+        const roomDataEl = document.getElementById('room-data');
+        const leaderFlag = roomDataEl ? roomDataEl.dataset.isLeader === 'true' : (typeof isLeader !== 'undefined' && isLeader);
+
+        // nur Leader (und nicht der aktuelle Spieler selbst) sehen den Lösch-Button
+        if (leaderFlag && !isCurrentPlayer) {
             actionsHtml = `
                 <button class="delete-player-btn" onclick="removePlayer('${playerData.id}', '${playerData.name}')" 
                         title="Spieler entfernen">
