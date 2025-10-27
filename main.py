@@ -136,23 +136,31 @@ class GameRoom:
     def calculate_round_results(self):
         results = []
         multiplier = self.settings.get('multiplier', 2)
-        
+
         for group in self.groups:
+            # 1) Zuerst gesamte Gruppensumme berechnen
             total_contribution = 0
+            for player_id in group['player_ids']:
+                total_contribution += players[player_id].current_contribution
+
+            # Payout pro Spieler (basierend auf vollständiger Gruppensumme)
+            payout_per_player = (total_contribution * multiplier) / len(group['player_ids']) if len(group['player_ids']) > 0 else 0
+
             group_players = []
-            
+            # 2) Jetzt für jeden Spieler Auszahlung berechnen und Guthaben aktualisieren
             for player_id in group['player_ids']:
                 player = players[player_id]
                 contribution = player.current_contribution
-                total_contribution += contribution
-                
+
                 # Guthaben vor der Runde speichern
                 old_balance = player.coins
-                
-                # Auszahlung berechnen
-                payout = (total_contribution * multiplier) / len(group['player_ids'])
+
+                # Auszahlung (für diesen Spieler gleich payout_per_player)
+                payout = payout_per_player
+
+                # Neues Guthaben = (altes Guthaben - eigener Beitrag) + Auszahlung
                 player.coins = round((old_balance - contribution) + payout, 2)
-                
+
                 # Spieler-Daten für Ergebnisse
                 group_players.append({
                     'id': player_id,
@@ -162,19 +170,19 @@ class GameRoom:
                     'new_balance': round(player.coins, 2),
                     'profit': round(payout - contribution, 2)
                 })
-                
+
                 # Spielverlauf aktualisieren
                 player.game_history['balances'].append(round(player.coins, 2))
                 player.game_history['contributions'].append(round(contribution, 2))
-            
+
             results.append({
                 'group_number': group['group_number'],
                 'total_contribution': round(total_contribution, 2),
                 'total_pool': round(total_contribution * multiplier, 2),
-                'payout_per_player': round((total_contribution * multiplier) / len(group['player_ids']), 2),
+                'payout_per_player': round(payout_per_player, 2),
                 'players': group_players
             })
-        
+
         self.round_results = results
         return results
 
