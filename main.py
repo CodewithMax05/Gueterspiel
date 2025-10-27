@@ -370,6 +370,7 @@ def create_game():
     if request.method == 'POST':
         # Einstellungen aus dem Formular verarbeiten
         end_mode = request.form.get('end_mode', 'fixed_rounds')
+        leader_name = request.form.get('leader_name', 'Prof Maeß').strip()
 
         try:
             initial_coins = float(request.form.get('initial_coins', '10').replace(',', '.'))
@@ -420,7 +421,6 @@ def create_game():
         leader_id = str(uuid.uuid4())
         
         # Leader als Spieler erstellen (für die Verwaltung)
-        leader_name = "Prof Maeß"  # Fester Name für den Leader
         leader = Player(leader_id, leader_name, is_leader=True)
         leader.room_id = room_id
         players[leader_id] = leader

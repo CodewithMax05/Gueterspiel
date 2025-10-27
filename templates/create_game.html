@@ -10,6 +10,17 @@
         <h1 style="text-align: center; margin-bottom: 30px;">🎮 Spiel erstellen</h1>
         
         <form id="gameSettings">
+            <!-- Leader-Name Eingabe -->
+            <div class="settings-section">
+                <h3>👑 Spielleiter</h3>
+                
+                <div class="form-group">
+                    <label>Name des Spielleiters</label>
+                    <input type="text" name="leader_name" value="Prof Maeß" required>
+                    <small>Dein Name als Spielleiter/Moderator</small>
+                </div>
+            </div>
+            
             <!-- Grundeinstellungen -->
             <div class="settings-section">
                 <h3>💰 Grundeinstellungen</h3>
@@ -201,7 +212,19 @@
         const form = document.getElementById('gameSettings');
         const formData = new FormData(form);
         
-        // Validiere Eingaben
+        // Validiere Leader-Name
+        const leaderName = formData.get('leader_name').trim();
+        if (!leaderName) {
+            showNotification('Bitte gib einen Namen für den Spielleiter ein', 'error');
+            return;
+        }
+        
+        if (leaderName.length > 20) {
+            showNotification('Der Spielleiter-Name darf maximal 20 Zeichen lang sein', 'error');
+            return;
+        }
+        
+        // Validiere andere Eingaben
         const initialCoinsStr = formData.get('initial_coins');
         const maxContributionStr = formData.get('max_contribution');
         const multiplierStr = formData.get('multiplier');
