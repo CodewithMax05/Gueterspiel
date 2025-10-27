@@ -39,13 +39,21 @@ class GameRoom:
         self.leader_id = leader_id
         self.settings = settings
         self.players = []
-        self.status = "waiting"  # waiting, playing, round_results, finished
+        self.status = "waiting"  # waiting, ready, playing, round_results, finished
         self.current_round = 0
         self.groups = []
         self.round_start_time = None
         self.submitted_players = set()
         self.round_results = None
         self.leader_name = "Leader"  # Füge leader_name hinzu
+
+    def update_status_based_on_conditions(self):
+        """Aktualisiert den Status basierend auf den aktuellen Bedingungen"""
+        if self.status in ["waiting", "ready"]:
+            if self.can_start_game():
+                self.status = "ready"
+            else:
+                self.status = "waiting"
         
     def add_player(self, player_id):
         if player_id not in self.players:
@@ -61,10 +69,11 @@ class GameRoom:
     
     def can_start_game(self):
         group_size = self.settings.get('group_size', 4)
-        has_correct_player_count = len(self.players) >= group_size and len(self.players) % group_size == 0
+        # Nur normale Spieler zählen (keine Leader)
+        normal_players = [pid for pid in self.players if pid in players and not players[pid].is_leader]
         
-        # Prüfe ob alle Spieler ready sind
-        all_players_ready = all(players[pid].ready for pid in self.players)
+        has_correct_player_count = len(normal_players) >= group_size and len(normal_players) % group_size == 0
+        all_players_ready = all(players[pid].ready for pid in normal_players)
         
         return has_correct_player_count and all_players_ready
     
@@ -570,7 +579,8 @@ def evaluation(room_id):
 def api_rooms():
     available_rooms = []
     for room_id, room in rooms.items():
-        if room.status == "waiting":
+        # Zeige Räume an, die im Status "waiting" oder "ready" sind
+        if room.status in ["waiting", "ready"]:
             # Nur normale Spieler zählen (keine Leader)
             normal_players = [pid for pid in room.players if pid in players and not players[pid].is_leader]
             
@@ -623,6 +633,11 @@ def api_room_status(room_id):
         return jsonify({'error': 'Raum nicht gefunden'}), 404
     
     room = rooms[room_id]
+    
+    # Status automatisch aktualisieren bevor gesendet wird
+    if room.status in ["waiting", "ready"]:
+        room.update_status_based_on_conditions()
+    
     return jsonify({
         'status': room.status,
         'current_round': room.current_round
@@ -710,6 +725,7 @@ def handle_join_room(data):
     # Spieler zum Raum hinzufügen
     if room.add_player(player_id):
         join_room(room_id)
+        room.update_status_based_on_conditions()
         
         with game_timer_lock:
             timer = game_timers.get(room_id)
@@ -767,30 +783,27 @@ def handle_join_room_reconnect(data):
 
 @socketio.on('player_ready')
 def handle_player_ready():
-    """Handler für Ready-Status ohne data Parameter"""
     player_id = session.get('player_id')
     if not player_id or player_id not in players:
-        print(f"DEBUG: player_ready - Spieler nicht gefunden: {player_id}")
         return
     
     player = players[player_id]
     room_id = player.room_id
     
     if room_id and room_id in rooms and not player.is_leader:
-        player.ready = not player.ready  # Toggle ready status
+        player.ready = not player.ready
         
         room = rooms[room_id]
-        ready_count = sum(1 for pid in room.players if players[pid].ready and not players[pid].is_leader)
+        room.update_status_based_on_conditions()  # Status aktualisieren
         
-        print(f"DEBUG: player_ready - Spieler {player.name} ready: {player.ready}, Count: {ready_count}")
+        ready_count = sum(1 for pid in room.players if players[pid].ready and not players[pid].is_leader)
         
         emit('player_ready_changed', {
             'player_id': player_id,
             'ready': player.ready,
-            'ready_count': ready_count
+            'ready_count': ready_count,
+            'room_status': room.status  # Neuen Status mitsenden
         }, room=room_id)
-    else:
-        print(f"DEBUG: player_ready - Ungültiger Zustand: room_id={room_id}, is_leader={player.is_leader}")
 
 @socketio.on('start_game')
 def handle_start_game():

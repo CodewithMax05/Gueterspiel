@@ -83,6 +83,9 @@
     z-index: 999;
 }
 
+.status-waiting { color: #dc3545; } 
+.status-ready { color: #28a745; font-weight: bold; } 
+
 .connection-status.connected {
     background: rgba(40, 167, 69, 0.3);
     border: 1px solid #28a745;

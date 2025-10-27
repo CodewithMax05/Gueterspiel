@@ -23,7 +23,13 @@
     
     <!-- Einheitlicher Raum-Informationen Block -->
     <div class="room-info">
-        <p><strong>Status:</strong> <span id="roomStatus">{{ room.status }}</span></p>
+        <p><strong>Status:</strong> 
+            <span id="roomStatus" class="status-{{ room.status }}">
+                {% if room.status == 'waiting' %}🔴 Wartet auf Spieler
+                {% elif room.status == 'ready' %}🟢 Startbereit
+                {% else %}{{ room.status }}{% endif %}
+            </span>
+        </p>
         <p><strong>Aktive Spieler:</strong> <span id="totalPlayers">{{ players|length }}</span></p>
         <p><strong>Bereite Spieler:</strong> <span id="readyCount">{{ ready_count }}</span></p>
         <p><strong>Gruppengröße:</strong> <span id="groupSize">{{ room.settings.get('group_size', 4) }}</span> Spieler</p>
@@ -171,6 +177,32 @@
         }
     });
 
+    function updateRoomStatus(status) {
+        const statusElement = document.getElementById('roomStatus');
+        if (statusElement) {
+            // Entferne alle Status-Klassen
+            statusElement.className = 'status-' + status;
+            
+            // Text basierend auf Status setzen
+            const statusTexts = {
+                'waiting': '🔴 Wartet auf Spieler',
+                'ready': '🟢 Startbereit'
+            };
+            
+            // Falls ein unbekannter Status kommt, zeige den Statuscode an
+            statusElement.textContent = statusTexts[status] || status;
+        }
+    }
+
+    function checkRoomStatus() {
+        // API-Aufruf um Status zu prüfen
+        fetch(`/api/room/${roomId}/status`)
+            .then(response => response.json())
+            .then(data => {
+                updateRoomStatus(data.status);
+            });
+    }
+
     function checkStartRequirements(roomId) {
         fetch(`/api/room/${roomId}/requirements`)
             .then(response => response.json())
@@ -197,6 +229,8 @@
     socket.on('player_joined', function(data) {
         updatePlayerList(data);
         updatePlayerCount();
+        // Status neu prüfen
+        checkRoomStatus();
     });
     
     socket.on('player_left', function(data) {
@@ -249,6 +283,9 @@
             readyBtn.classList.remove('loading');
             readyBtn.disabled = false;
         }
+
+        // Raumstatus aktualisieren
+        updateRoomStatus(data.room_status);
     });
     
     socket.on('game_started', function(data) {
