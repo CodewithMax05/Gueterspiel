@@ -68,7 +68,7 @@
         </button>
         
         <div style="text-align: center; margin-top: 15px; color: #aaa; font-size: 14px;">
-            Wähle einen Betrag zwischen 0 und <span id="maxAmount">{{ room.settings.max_contribution }}</span> Coins
+            Wähle einen Betrag zwischen 0 und deinem aktuellen Guthaben (<span id="currentBalanceText">{{ "%.2f"|format(player.coins) }}</span> Coins)
         </div>
     </div>
 </div>
@@ -87,7 +87,6 @@
 
 <div id="game-data" 
      data-round-duration="{{ room.settings.round_duration }}"
-     data-max-contribution="{{ room.settings.max_contribution }}"
      data-initial-balance="{{ player.coins }}"
      data-total-players="{{ room.players|length }}"
      style="display: none;">
@@ -105,7 +104,6 @@
 
     document.addEventListener('DOMContentLoaded', function() {
         const gameData = document.getElementById('game-data');
-        const maxContribution = parseInt(gameData.dataset.maxContribution);
         const initialBalance = parseFloat(gameData.dataset.initialBalance);
         const totalPlayers = parseInt(gameData.dataset.totalPlayers);
         roundDuration = parseInt(gameData.dataset.roundDuration);
@@ -121,9 +119,9 @@
         }
 
         // UI initialisieren
-        generateCoinOptions(maxContribution, initialBalance);
-        const maxAmountElement = document.getElementById('maxAmount');
-        if (maxAmountElement) maxAmountElement.textContent = maxContribution;
+        generateCoinOptions(initialBalance);
+        const currentBalanceText = document.getElementById('currentBalanceText');
+        if (currentBalanceText) currentBalanceText.textContent = initialBalance.toFixed(2);
 
         const totalPlayersElement = document.getElementById('totalPlayers');
         if (totalPlayersElement) totalPlayersElement.textContent = totalPlayers;
@@ -144,11 +142,14 @@
         }
     });
 
-    function generateCoinOptions(maxAmount, currentBalance) {
+    function generateCoinOptions(currentBalance) {
         const container = document.getElementById('coinOptions');
         if (!container) return;
 
         container.innerHTML = '';
+
+        // Maximum ist jetzt das aktuelle Guthaben (abgerundet)
+        const maxAmount = Math.floor(currentBalance);
 
         for (let i = 0; i <= maxAmount; i++) {
             const option = document.createElement('div');
@@ -156,14 +157,11 @@
             option.textContent = i;
             option.dataset.value = i;
 
-            if (i > currentBalance) {
-                option.classList.add('disabled');
-            } else {
-                option.addEventListener('click', function() {
-                    if (hasSubmitted) return; // nach Abgabe keine Auswahl mehr
-                    selectContribution(i, option);
-                });
-            }
+            // Alle Optionen sind verfügbar, da wir nur bis zum Guthaben gehen
+            option.addEventListener('click', function() {
+                if (hasSubmitted) return;
+                selectContribution(i, option);
+            });
 
             container.appendChild(option);
         }

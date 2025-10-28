@@ -441,13 +441,12 @@ def create_game():
 
         try:
             initial_coins = float(request.form.get('initial_coins', '10').replace(',', '.'))
-            max_contribution = float(request.form.get('max_contribution', '10').replace(',', '.'))
             multiplier = float(request.form.get('multiplier', '2').replace(',', '.'))
         except ValueError:
             # Fallback zu Standardwerten bei Parse-Fehlern
             initial_coins = 10.0
-            max_contribution = 10.0
             multiplier = 2.0
+        
         
         # Validierung für Multiplikator
         if multiplier <= 0:
@@ -456,7 +455,6 @@ def create_game():
         # Basis-Einstellungen
         settings = {
             'initial_coins': initial_coins,
-            'max_contribution': max_contribution,
             'group_size': int(request.form.get('group_size', 4)),
             'multiplier': multiplier,
             'round_duration': int(request.form.get('round_duration', 60)),

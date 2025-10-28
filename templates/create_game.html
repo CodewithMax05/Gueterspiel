@@ -30,18 +30,19 @@
                         <label>Startguthaben pro Spieler</label>
                         <div class="input-with-unit">
                             <input type="number" name="initial_coins" min="1" step="any" value="10" required>
-                            <span class="unit-label">Coins</span>
                         </div>
                         <small>Wie viele Coins erhält jeder Spieler zu Beginn? (Mindestens 1, Kommazahlen erlaubt)</small>
                     </div>
                     
-                    <div class="form-group">
-                        <label>Maximale Einzahlung</label>
+                    <!-- ENTFERNT: Maximale Einzahlung Eingabe -->
+                    <div class="form-group" style="visibility: hidden;">
+                        <!-- Platzhalter für Layout -->
+                        <label>Platzhalter</label>
                         <div class="input-with-unit">
-                            <input type="number" name="max_contribution" min="1" step="any" value="10" required>
-                            <span class="unit-label">Coins</span>
+                            <input type="number" disabled style="visibility: hidden;">
+                            <span class="unit-label"></span>
                         </div>
-                        <small>Maximaler Betrag pro Runde (Mindestens 1, Kommazahlen erlaubt)</small>
+                        <small></small>
                     </div>
                 </div>
                 
@@ -226,14 +227,12 @@
         
         // Validiere andere Eingaben
         const initialCoinsStr = formData.get('initial_coins');
-        const maxContributionStr = formData.get('max_contribution');
         const multiplierStr = formData.get('multiplier');
         const endMode = formData.get('end_mode');
         const roundDuration = parseFloat(formData.get('round_duration'));
         
-        // Parse Startguthaben, maximale Einzahlung und Multiplikator
+        // Parse Startguthaben und Multiplikator
         const initialCoins = parseNumber(initialCoinsStr);
-        const maxContribution = parseNumber(maxContributionStr);
         const multiplier = parseNumber(multiplierStr);
         
         // Validierung für Startguthaben
@@ -244,22 +243,6 @@
         
         if (initialCoins < 1) {
             showNotification('Startguthaben muss mindestens 1 Coin betragen', 'error');
-            return;
-        }
-        
-        // Validierung für maximale Einzahlung
-        if (maxContribution === null) {
-            showNotification('Maximale Einzahlung muss eine gültige Zahl sein (z.B. 10, 10.5, 7.25)', 'error');
-            return;
-        }
-        
-        if (maxContribution < 1) {
-            showNotification('Maximale Einzahlung muss mindestens 1 Coin betragen', 'error');
-            return;
-        }
-        
-        if (maxContribution > initialCoins) {
-            showNotification('Maximale Einzahlung darf nicht größer als Startguthaben sein', 'error');
             return;
         }
         
