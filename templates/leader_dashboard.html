@@ -141,16 +141,22 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // WICHTIG: Server-Werte direkt übernehmen
+                    // Server-Werte übernehmen
                     serverTimeLeft = data.time_left;
                     submittedCount = data.submitted_count;
                     totalPlayers = data.total_players;
-                    
+
+                    // Absicherung: Wenn Timer nicht läuft und der Raum im 'round_results' Status ist,
+                    // dann ist die Zeit 0 (Runde beendet). Manchmal steht time_left noch auf default.
+                    if (data.timer_running === false && data.status === 'round_results') {
+                        serverTimeLeft = 0;
+                    }
+
                     // JETZT erst den Timer mit den Server-Daten initialisieren
                     updateTimerDisplay();
                     updateButtonState();
                     updateProgress();
-                    
+
                     console.log('DEBUG: Geladener Status - Zeit:', serverTimeLeft, 
                             'Eingereicht:', submittedCount, 'von', totalPlayers);
                 }

@@ -268,39 +268,44 @@ class GameTimer:
                         # Runde automatisch beenden
                         print(f"DEBUG: Timer abgelaufen für Raum {self.room_id}, runde finish_round auf")
                         self.socketio.emit('game_time_out', room=self.room_id)
-                        
+
                         # Runde direkt beenden (kein Event-Handler nötig)
                         if self.room_id in rooms:
                             room = rooms[self.room_id]
-                            
+
                             # Für Spieler die nicht eingereicht haben, setze Beitrag auf 0
                             for pid in room.players:
                                 if pid not in room.submitted_players and not players[pid].is_leader:
                                     players[pid].current_contribution = 0
                                     room.submitted_players.add(pid)
-                            
+
                             # Berechne Ergebnisse
                             results = room.calculate_round_results()
                             room.status = "round_results"
                             room.submitted_players.clear()
-                            
+
+                            # **WICHTIG:** Timer-Status serverseitig konsistent setzen
+                            room.timer_remaining = 0
+                            room.timer_running = False
+
                             self.socketio.emit('round_finished', {
                                 'results': results,
                                 'current_round': room.current_round,
                                 'room_id': self.room_id
                             }, room=self.room_id)
-                            
+
                             # Leite Spieler automatisch zu round_results weiter
                             for pid in room.players:
                                 if pid in players and not players[pid].is_leader:
                                     self.socketio.emit('redirect_to_results', {
                                         'room_id': self.room_id
                                     }, room=pid)
-                            
+
                             print(f"Runde {room.current_round} automatisch beendet (Timer abgelaufen)")
-                            
+
                     except Exception as e:
                         print(f"Fehler beim automatischen Rundenende: {e}")
+                    # Timer stoppen / markieren
                     self.is_running = False
                     break
             
@@ -336,6 +341,13 @@ def stop_game_timer(room_id):
         if room_id in game_timers:
             game_timers[room_id].stop()
             del game_timers[room_id]
+            # Falls Raum noch existiert: Timer-Status im Raum setzen
+            if room_id in rooms:
+                room = rooms[room_id]
+                room.timer_running = False
+                # Setze verbleibende Zeit auf 0 wenn Runde bereits in Ergebnissen ist
+                if room.status == "round_results":
+                    room.timer_remaining = 0
             print(f"Game-Timer für Raum {room_id} gestoppt")
 
 def get_or_create_game_timer(room_id, duration=60):
@@ -694,15 +706,16 @@ def api_room_status(room_id):
 def api_room_dashboard_status(room_id):
     if room_id not in rooms:
         return jsonify({'error': 'Raum nicht gefunden'}), 404
-    
+
     room = rooms[room_id]
-    
+
     return jsonify({
         'success': True,
         'time_left': room.timer_remaining,
         'submitted_count': len(room.submitted_players),
         'total_players': len([pid for pid in room.players if not players[pid].is_leader]),
-        'timer_running': room.timer_running
+        'timer_running': room.timer_running,
+        'status': room.status   # neu: Raum-Status
     })
 
 @app.route('/api/room/<room_id>/can_continue')
@@ -981,6 +994,9 @@ def finish_round(room_id):
     results = room.calculate_round_results()
     room.status = "round_results"
     room.submitted_players.clear()
+
+    room.timer_remaining = 0
+    room.timer_running = False
     
     # Sende Event an alle im Raum
     socketio.emit('round_finished', {

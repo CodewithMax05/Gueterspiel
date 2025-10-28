@@ -83,8 +83,10 @@
 {% block scripts %}
 <script>
     let selectedContribution = null;
-    let serverTimeLeft;
-    
+    let serverTimeLeft = null;
+    let localCountdownInterval = null;
+    let hasSubmitted = false;
+
     document.addEventListener('DOMContentLoaded', function() {
         const gameData = document.getElementById('game-data');
         const maxContribution = parseInt(gameData.dataset.maxContribution);
@@ -92,78 +94,66 @@
         const totalPlayers = parseInt(gameData.dataset.totalPlayers);
         const roundDuration = parseInt(gameData.dataset.roundDuration);
 
-        // Timer initialisieren (wird vom Server überschrieben)
-        initializeTimer();
-
-        // Lade aktuellen Timer-Status vom Server
-        loadTimerStatus();
-        
-        // Setze maximale Einzahlung im Text
-        const maxAmountElement = document.getElementById('maxAmount');
-        if (maxAmountElement) {
-            maxAmountElement.textContent = maxContribution;
-        }
-        
-        // Setze Gesamtspieler im Warte-Overlay
-        const totalPlayersElement = document.getElementById('totalPlayers');
-        if (totalPlayersElement) {
-            totalPlayersElement.textContent = totalPlayers;
-        }
-        
+        // UI initialisieren
         generateCoinOptions(maxContribution, initialBalance);
-        
+        const maxAmountElement = document.getElementById('maxAmount');
+        if (maxAmountElement) maxAmountElement.textContent = maxContribution;
+
+        const totalPlayersElement = document.getElementById('totalPlayers');
+        if (totalPlayersElement) totalPlayersElement.textContent = totalPlayers;
+
+        // Verhindere Mehrfach-Submits
+        hasSubmitted = false;
+
+        // Raum betreten (wichtig vor möglichen Auto-Submits)
+        socket.emit('join_game_room', { room_id: currentRoomId });
+
+        // Lade den aktuellen Timer-Status vom Server (authoritative)
+        loadTimerStatus();
+
         // Submit Button Event
         const submitBtn = document.getElementById('submitBtn');
         if (submitBtn) {
             submitBtn.addEventListener('click', submitContribution);
         }
     });
-    
+
     function generateCoinOptions(maxAmount, currentBalance) {
         const container = document.getElementById('coinOptions');
         if (!container) return;
-        
+
         container.innerHTML = '';
-        
+
         for (let i = 0; i <= maxAmount; i++) {
             const option = document.createElement('div');
             option.className = 'coin-option';
             option.textContent = i;
             option.dataset.value = i;
-            
-            // Deaktiviere Optionen die über aktuellem Guthaben liegen
+
             if (i > currentBalance) {
                 option.classList.add('disabled');
             } else {
                 option.addEventListener('click', function() {
+                    if (hasSubmitted) return; // nach Abgabe keine Auswahl mehr
                     selectContribution(i, option);
                 });
             }
-            
+
             container.appendChild(option);
         }
     }
-    
+
     function selectContribution(amount, element) {
         selectedContribution = amount;
-        
-        // Entferne Auswahl von allen Optionen
+
         document.querySelectorAll('.coin-option').forEach(opt => {
             opt.classList.remove('selected');
         });
-        
-        // Markiere ausgewählte Option
-        element.classList.add('selected');
-        
-        const submitBtn = document.getElementById('submitBtn');
-        if (submitBtn) {
-            submitBtn.disabled = false;
-        }
-    }
 
-    function initializeTimer() {
-        serverTimeLeft = 60; // Default, wird vom Server überschrieben
-        updateTimerDisplay();
+        element.classList.add('selected');
+
+        const submitBtn = document.getElementById('submitBtn');
+        if (submitBtn) submitBtn.disabled = false;
     }
 
     function loadTimerStatus() {
@@ -171,31 +161,41 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    serverTimeLeft = data.time_left;
+                    serverTimeLeft = parseInt(data.time_left);
                     updateTimerDisplay();
-                    
+
                     console.log('DEBUG: Geladener Timer-Status:', serverTimeLeft, 'Sekunden');
+
+                    // Wenn der Server sagt: Zeit ist 0 und noch nicht abgegeben => handle expiration
+                    if (serverTimeLeft <= 0) {
+                        // kurze Verzögerung, damit join_game_room zuvor verarbeitet wird
+                        setTimeout(() => {
+                            handleTimeExpiredOnce();
+                        }, 100); 
+                    } else {
+                        // Starte lokalen Countdown (falls noch nicht aktiv)
+                        startLocalCountdown();
+                    }
                 }
             })
             .catch(error => {
                 console.error('Fehler beim Laden des Timer-Status:', error);
             });
     }
-    
+
     function updateTimerDisplay() {
         const timerElement = document.getElementById('timer');
         if (!timerElement) return;
-        
-        timerElement.textContent = serverTimeLeft;
+        timerElement.textContent = (serverTimeLeft !== null) ? serverTimeLeft : '--';
         updateTimerWarnings();
     }
 
     function updateTimerWarnings() {
         const timerElement = document.getElementById('timer');
         if (!timerElement) return;
-        
+
         timerElement.classList.remove('warning', 'danger', 'critical');
-        
+
         if (serverTimeLeft <= 5) {
             timerElement.classList.add('critical');
         } else if (serverTimeLeft <= 15) {
@@ -204,99 +204,137 @@
             timerElement.classList.add('warning');
         }
     }
-    
+
+    function startLocalCountdown() {
+        // stoppe evtl. existierenden Intervall
+        stopLocalCountdown();
+
+        localCountdownInterval = setInterval(() => {
+            if (serverTimeLeft === null) return;
+            if (serverTimeLeft <= 0) {
+                stopLocalCountdown();
+                handleTimeExpiredOnce();
+                return;
+            }
+            serverTimeLeft -= 1;
+            updateTimerDisplay();
+        }, 1000);
+    }
+
+    function stopLocalCountdown() {
+        if (localCountdownInterval) {
+            clearInterval(localCountdownInterval);
+            localCountdownInterval = null;
+        }
+    }
+
+    function handleTimeExpiredOnce() {
+        // Wenn schon abgegeben, nichts tun
+        if (hasSubmitted) return;
+
+        // Falls der Spieler noch nichts gewählt hat, setze 0 und reiche ein
+        if (selectedContribution === null) {
+            console.log('DEBUG: Zeit abgelaufen (client side), reiche 0 Coins ein');
+            selectedContribution = 0;
+        }
+        submitContribution();
+    }
+
     function submitContribution() {
+        if (hasSubmitted) {
+            console.log('DEBUG: bereits eingereicht, Ignoriere weiteren Submit');
+            return;
+        }
         if (selectedContribution === null) {
             showNotification('Bitte wähle einen Betrag aus', 'error');
             return;
         }
-        
-        const currentBalanceElement = document.getElementById('currentBalance');
-        const currentBalance = currentBalanceElement ? parseFloat(currentBalanceElement.textContent) : 0;
-        
-        if (selectedContribution > currentBalance) {
-            showNotification('Nicht genügend Coins verfügbar', 'error');
-            return;
-        }
-        
+
+        // UI: disable interaktion
+        disableInteractionAfterSubmit();
+
+        // Markiere als abgegeben (verhindert doppelte submits)
+        hasSubmitted = true;
+
         // Beitrag an Server senden
         socket.emit('submit_contribution', {
             contribution: selectedContribution
         });
-        
-        // Warte-Overlay anzeigen
-        const waitingOverlay = document.getElementById('waitingOverlay');
-        if (waitingOverlay) {
-            waitingOverlay.style.display = 'flex';
-        }
-        
-        const submitBtn = document.getElementById('submitBtn');
-        if (submitBtn) {
-            submitBtn.disabled = true;
-        }
     }
-    
+
+    function disableInteractionAfterSubmit() {
+        // Disable Button und Optionen, zeige Overlay
+        const submitBtn = document.getElementById('submitBtn');
+        if (submitBtn) submitBtn.disabled = true;
+
+        document.querySelectorAll('.coin-option').forEach(opt => {
+            opt.classList.add('disabled');
+            opt.removeEventListener('click', () => {});
+        });
+
+        const waitingOverlay = document.getElementById('waitingOverlay');
+        if (waitingOverlay) waitingOverlay.style.display = 'flex';
+    }
+
     // WebSocket Events für game.html
     socket.on('contribution_submitted', function(data) {
         const submittedNumber = document.getElementById('submittedNumber');
-        const totalPlayers = document.getElementById('totalPlayers');
-        
+        const totalPlayersEl = document.getElementById('totalPlayers');
+
         if (submittedNumber) {
             submittedNumber.textContent = data.submitted_count;
         }
-        if (totalPlayers) {
-            totalPlayers.textContent = data.total_players;
+        if (totalPlayersEl) {
+            totalPlayersEl.textContent = data.total_players;
         }
     });
 
     socket.on('game_timer_update', function(data) {
-        serverTimeLeft = data.time_left;
+        // Server ist authoritative
+        serverTimeLeft = parseInt(data.time_left);
         updateTimerDisplay();
-        
-        // Automatisches Einreichen bei Zeitablauf
-        if (serverTimeLeft <= 0 && selectedContribution === null) {
-            console.log('DEBUG: Zeit abgelaufen, reiche 0 Coins ein');
-            selectedContribution = 0;
-            submitContribution();
+
+        // Wenn Server 0 sendet: local countdown stoppen & auto-submit falls nötig
+        if (serverTimeLeft <= 0) {
+            stopLocalCountdown();
+            handleTimeExpiredOnce();
+        } else {
+            // starte/aktualisiere lokalen Countdown
+            startLocalCountdown();
         }
     });
 
     socket.on('game_time_out', function() {
-        console.log('DEBUG: game_time_out received, handling time expiration');
+        console.log('DEBUG: game_time_out received');
         showNotification('Zeit abgelaufen! Beiträge werden automatisch eingereicht.', 'warning');
-        
-        // Automatisch 0 Coins einreichen wenn noch nichts ausgewählt
-        if (selectedContribution === null) {
-            selectedContribution = 0;
-            submitContribution();
-        }
+
+        // Server hat Timeout – sichere clientseitige Auto-Submit
+        stopLocalCountdown();
+        handleTimeExpiredOnce();
     });
-    
-    // Beim Beitreten des Spielraums
-    socket.emit('join_game_room', { room_id: currentRoomId });
 
     socket.on('round_finished', function(data) {
-        // Fallback - falls redirect_to_results nicht funktioniert
         console.log('DEBUG: round_finished received, redirecting to round results');
         showNotification('Runde beendet! Zeige Ergebnisse...', 'success');
+        // kleine Verzögerung damit UI Meldung wahrnehmbar ist
         setTimeout(() => {
             window.location.href = `/round_results/${data.room_id}`;
-        }, 1500);
+        }, 800);
     });
-    
+
     socket.on('redirect_to_results', function(data) {
-        console.log('DEBUG: redirect_to_results received, redirecting to round results');
+        console.log('DEBUG: redirect_to_results received');
         showNotification('Runde beendet! Zeige Ergebnisse...', 'success');
         setTimeout(() => {
             window.location.href = `/round_results/${data.room_id}`;
-        }, 1000);
+        }, 600);
     });
 
     socket.on('game_finished', function(data) {
         showNotification('Spiel beendet! Zeige Auswertung...', 'success');
         setTimeout(() => {
             window.location.href = `/evaluation/${data.room_id}`;
-        }, 1000);
+        }, 800);
     });
 </script>
 {% endblock %}
