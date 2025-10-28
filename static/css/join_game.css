@@ -46,27 +46,6 @@
     color: rgba(255, 255, 255, 0.6);
 }
 
-.room-type-badge {
-    display: inline-block;
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    margin-left: 10px;
-}
-
-.room-type-badge.private {
-    background: rgba(220, 53, 69, 0.2);
-    color: #ff6b6b;
-    border: 1px solid rgba(220, 53, 69, 0.3);
-}
-
-.room-type-badge.public {
-    background: rgba(40, 167, 69, 0.2);
-    color: #51cf66;
-    border: 1px solid rgba(40, 167, 69, 0.3);
-}
-
 .room-list {
     margin: 0;
 }
@@ -100,9 +79,16 @@
     margin-bottom: 8px;
 }
 
-.room-info p {
+.room-meta-primary {
+    margin: 8px 0 4px 0;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.room-meta-secondary {
     margin: 4px 0;
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.7);
     font-size: 0.9rem;
 }
 

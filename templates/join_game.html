@@ -124,9 +124,12 @@
                     roomElement.innerHTML = `
                         <div class="room-info">
                             <strong>Raum ${room.id}</strong>
-                            <span class="room-type-badge ${room.room_type}">${roomTypeBadge}</span>
-                            <p>Spieler: ${room.player_count} | Gruppengröße: ${room.settings.group_size} | Status: ${statusText}</p>
-                            <p>Startguthaben: ${parseFloat(room.settings.initial_coins).toFixed(2)} Coins | Multiplikator: ${room.settings.multiplier}×</p>
+                            <p class="room-meta-primary">
+                                ${room.player_count} Spieler | ${statusText} | ${roomTypeBadge}
+                            </p>
+                            <p class="room-meta-secondary">
+                                Gruppengröße: ${room.settings.group_size} | Multiplikator: ${room.settings.multiplier}×
+                            </p>
                         </div>
                         <button class="join-btn" onclick="openNameModal('${room.id}', '${room.room_type}', '')">Beitreten</button>
                     `;
