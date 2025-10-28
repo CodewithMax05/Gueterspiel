@@ -147,14 +147,14 @@
                 </div>
             </div>
             
-            <button type="button" class="btn btn-create" onclick="createGame()">
-                🎮 Spiel mit diesen Einstellungen erstellen
-            </button>
+            <!-- Buttons nebeneinander -->
+            <div class="button-row">
+                <button type="button" class="btn btn-create" onclick="createGame()">
+                    Spiel erstellen
+                </button>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">Zurück</a>
+            </div>
         </form>
-        
-        <div style="text-align: center; margin-top: 20px;">
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">Zurück</a>
-        </div>
     </div>
 </div>
 {% endblock %}

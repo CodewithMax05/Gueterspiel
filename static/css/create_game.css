@@ -70,15 +70,48 @@
     to { opacity: 1; transform: translateY(0); }
 }
 
-.btn-create {
-    width: 100%;
-    padding: 15px;
-    font-size: 18px;
+/* Button Layout - GEÄNDERT */
+.button-row {
+    display: flex;
+    gap: 20px;
     margin-top: 30px;
+    align-items: stretch; /* Stellt sicher, dass beide Buttons gleich hoch sind */
+}
+
+.button-row .btn {
+    flex: 1;
+    text-align: center;
+    padding: 15px; /* Gleiches Padding für beide Buttons */
+    font-size: 16px; /* Gleiche Schriftgröße für beide Buttons */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 54px; /* Minimale Höhe für Konsistenz */
+}
+
+/* Spezifische Stile für den Erstellen-Button */
+.button-row .btn-create {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    font-weight: 600;
+}
+
+/* Spezifische Stile für den Zurück-Button */
+.button-row .btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 @media (max-width: 768px) {
     .form-row {
         grid-template-columns: 1fr;
+    }
+    
+    .button-row {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .button-row .btn {
+        width: 100%;
     }
 }
