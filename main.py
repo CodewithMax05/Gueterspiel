@@ -46,6 +46,16 @@ class GameRoom:
         self.submitted_players = set()
         self.round_results = None
         self.leader_name = "Leader"  # Füge leader_name hinzu
+        self.timer_remaining = settings.get('round_duration', 60)
+        self.submitted_count = 0
+        self.total_players = 0
+        self.timer_running = False
+
+    def update_timer_status(self, time_left, submitted_count, total_players, timer_running):
+        self.timer_remaining = time_left
+        self.submitted_count = submitted_count
+        self.total_players = total_players
+        self.timer_running = timer_running
 
     def update_status_based_on_conditions(self):
         """Aktualisiert den Status basierend auf den aktuellen Bedingungen"""
@@ -132,6 +142,11 @@ class GameRoom:
         
         self.submitted_players.clear()
         self.round_results = None
+        
+        # Setze Timer-Status für neue Runde
+        self.timer_remaining = self.settings.get('round_duration', 60)
+        self.submitted_count = 0
+        self.timer_running = True
     
     def calculate_round_results(self):
         results = []
@@ -231,6 +246,13 @@ class GameTimer:
                 # Berechne verbleibende Zeit genau
                 elapsed = time.time() - start_time
                 self.time_left = max(0, self.duration - int(elapsed))
+
+                 # Speichere Timer-Status im Raum
+                if self.room_id in rooms:
+                    room = rooms[self.room_id]
+                    submitted_count = len(room.submitted_players)
+                    total_players = len([pid for pid in room.players if not players[pid].is_leader])
+                    room.update_timer_status(self.time_left, submitted_count, total_players, self.is_running)
                 
                 # Sende Update an den Raum
                 try:
@@ -327,6 +349,14 @@ def get_or_create_game_timer(room_id, duration=60):
         # Erstelle neuen Timer
         timer = GameTimer(socketio, room_id, duration)
         game_timers[room_id] = timer
+        
+        # Initialisiere Timer-Status im Raum
+        if room_id in rooms:
+            room = rooms[room_id]
+            room.update_timer_status(duration, 0, 
+                                   len([pid for pid in room.players if not players[pid].is_leader]), 
+                                   True)
+        
         timer.start()
         print(f"Neuer Game-Timer für Raum {room_id} gestartet (Dauer: {duration}s)")
         return timer
@@ -660,6 +690,21 @@ def api_room_status(room_id):
         'current_round': room.current_round
     })
 
+@app.route('/api/room/<room_id>/dashboard_status')
+def api_room_dashboard_status(room_id):
+    if room_id not in rooms:
+        return jsonify({'error': 'Raum nicht gefunden'}), 404
+    
+    room = rooms[room_id]
+    
+    return jsonify({
+        'success': True,
+        'time_left': room.timer_remaining,
+        'submitted_count': len(room.submitted_players),
+        'total_players': len([pid for pid in room.players if not players[pid].is_leader]),
+        'timer_running': room.timer_running
+    })
+
 @app.route('/api/room/<room_id>/can_continue')
 def api_room_can_continue(room_id):
     """Prüft ob das Spiel weitergehen kann"""
@@ -899,10 +944,16 @@ def handle_submit_contribution(data):
         player.current_contribution = contribution
         room.submitted_players.add(player_id)
         
-        # Benachrichtige andere Spieler
+        # Speichere Fortschritt im Raum
         submitted_count = len(room.submitted_players)
         total_players = len([pid for pid in room.players if not players[pid].is_leader])
         
+        # Aktualisiere Timer-Status mit aktuellen Werten
+        if room_id in game_timers:
+            timer = game_timers[room_id]
+            room.update_timer_status(timer.get_time_left(), submitted_count, total_players, timer.is_running)
+        
+        # Benachrichtige andere Spieler
         emit('contribution_submitted', {
             'submitted_count': submitted_count,
             'total_players': total_players
