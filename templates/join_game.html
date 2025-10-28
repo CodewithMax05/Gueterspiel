@@ -20,22 +20,83 @@
         <p>Lade verfügbare Räume...</p>
     </div>
 </div>
+
+<!-- Name Eingabe Modal -->
+<div class="modal-overlay" id="nameModal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Spielernamen eingeben</h3>
+            <button class="modal-close" onclick="closeNameModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-form-group">
+                <label for="playerNameInput">Dein Name:</label>
+                <input type="text" id="playerNameInput" placeholder="Gib deinen Namen ein" maxlength="20" autocomplete="off">
+                <small class="modal-form-hint">Maximal 20 Zeichen</small>
+            </div>
+            <!-- Zugangscode Eingabe für private Räume -->
+            <div class="modal-form-group" id="accessCodeGroup" style="display: none;">
+                <label for="modalAccessCode">Zugangscode:</label>
+                <input type="text" id="modalAccessCode" placeholder="Zugangscode für privaten Raum" autocomplete="off">
+                <small class="modal-form-hint">Dieser Raum ist privat. Bitte gib den Zugangscode ein.</small>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeNameModal()">Abbrechen</button>
+            <button class="btn btn-success" onclick="submitPlayerName()">Beitreten</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal für Raum-Informationen -->
+<div id="modalData" 
+     data-room-id=""
+     data-access-code=""
+     data-room-type=""
+     style="display: none;">
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    let currentRoomData = {
+        roomId: '',
+        accessCode: '',
+        roomType: ''
+    };
+
     document.addEventListener('DOMContentLoaded', function() {
+        const roomCodeInput = document.getElementById('roomCode');
+        if (roomCodeInput) {
+            roomCodeInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    joinByCode();
+                }
+            });
+        }
+        
+        // Enter-Taste im Namens-Input
+        const playerNameInput = document.getElementById('playerNameInput');
+        if (playerNameInput) {
+            playerNameInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    submitPlayerName();
+                }
+            });
+        }
+        
+        // Enter-Taste im Zugangscode-Input
+        const accessCodeInput = document.getElementById('modalAccessCode');
+        if (accessCodeInput) {
+            accessCodeInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    submitPlayerName();
+                }
+            });
+        }
+        
         loadAvailableRooms();
-        
-        // Aktualisiere Raumliste alle 5 Sekunden
         setInterval(loadAvailableRooms, 5000);
-        
-        // Enter-Taste für direkten Beitritt
-        document.getElementById('roomCode').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                joinByCode();
-            }
-        });
     });
     
     function loadAvailableRooms() {
@@ -57,13 +118,17 @@
                     // Status anzeigen
                     const statusText = room.status === 'ready' ? '🟢 Startbereit' : '🔴 Wartet auf Spieler';
                     
+                    // Raumtyp anzeigen
+                    const roomTypeBadge = room.room_type === 'private' ? '🔒 Privat' : '🌐 Öffentlich';
+                    
                     roomElement.innerHTML = `
                         <div class="room-info">
                             <strong>Raum ${room.id}</strong>
+                            <span class="room-type-badge ${room.room_type}">${roomTypeBadge}</span>
                             <p>Spieler: ${room.player_count} | Gruppengröße: ${room.settings.group_size} | Status: ${statusText}</p>
                             <p>Startguthaben: ${parseFloat(room.settings.initial_coins).toFixed(2)} Coins | Multiplikator: ${room.settings.multiplier}×</p>
                         </div>
-                        <button class="join-btn" onclick="joinRoom('${room.id}')">Beitreten</button>
+                        <button class="join-btn" onclick="openNameModal('${room.id}', '${room.room_type}', '')">Beitreten</button>
                     `;
                     roomList.appendChild(roomElement);
                 });
@@ -73,27 +138,102 @@
                 showNotification('Fehler beim Laden der Räume', 'error');
             });
     }
-    
-    function joinRoom(roomId) {
-        const playerName = prompt('Bitte gib deinen Namen ein:');
+
+    function openNameModal(roomId, roomType = 'public', accessCode = '') {
+        currentRoomData = {
+            roomId: roomId,
+            roomType: roomType,
+            accessCode: accessCode
+        };
         
-        if (!playerName || playerName.trim() === '') {
-            showNotification('Bitte gib einen gültigen Namen ein', 'error');
+        // Zeige/Verstecke das Zugangscode-Feld basierend auf dem Raumtyp
+        const accessCodeGroup = document.getElementById('accessCodeGroup');
+        if (accessCodeGroup) {
+            if (roomType === 'private') {
+                accessCodeGroup.style.display = 'block';
+            } else {
+                accessCodeGroup.style.display = 'none';
+            }
+        }
+        
+        // Modal anzeigen
+        const modal = document.getElementById('nameModal');
+        if (modal) {
+            modal.style.display = 'flex';
+            
+            // Input fokussieren
+            const nameInput = document.getElementById('playerNameInput');
+            if (nameInput) {
+                nameInput.value = '';
+                nameInput.focus();
+            }
+            
+            // Zugangscode-Feld leeren
+            const accessCodeInput = document.getElementById('modalAccessCode');
+            if (accessCodeInput) {
+                accessCodeInput.value = '';
+            }
+        }
+    }
+    
+    function closeNameModal() {
+        const modal = document.getElementById('nameModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        currentRoomData = {
+            roomId: '',
+            accessCode: '',
+            roomType: ''
+        };
+    }
+    
+    function submitPlayerName() {
+        const playerNameInput = document.getElementById('playerNameInput');
+        if (!playerNameInput) return;
+        
+        const playerName = playerNameInput.value.trim();
+        
+        if (!playerName) {
+            showNotification('Bitte gib einen Namen ein', 'error');
+            playerNameInput.focus();
             return;
         }
         
         if (playerName.length > 20) {
             showNotification('Name darf maximal 20 Zeichen lang sein', 'error');
+            playerNameInput.focus();
             return;
         }
         
-        console.log('DEBUG: Sende join_room Event für Raum', roomId);
+        // Lies den Zugangscode aus, wenn der Raum privat ist
+        let accessCode = '';
+        if (currentRoomData.roomType === 'private') {
+            const accessCodeInput = document.getElementById('modalAccessCode');
+            if (accessCodeInput) {
+                accessCode = accessCodeInput.value.trim();
+                if (!accessCode) {
+                    showNotification('Bitte gib den Zugangscode für den privaten Raum ein', 'error');
+                    accessCodeInput.focus();
+                    return;
+                }
+            }
+        }
+        
+        console.log('DEBUG: Sende join_room Event für Raum', currentRoomData.roomId);
         
         // Dem Raum per WebSocket beitreten
         socket.emit('join_room', {
-            room_id: roomId,
-            player_name: playerName.trim()
+            room_id: currentRoomData.roomId,
+            player_name: playerName,
+            access_code: accessCode
         });
+        
+        // Modal schließen
+        closeNameModal();
+        
+        // Ladeanimation anzeigen
+        showNotification('Trete Raum bei...', 'info');
     }
     
     function joinByCode() {
@@ -104,7 +244,21 @@
             return;
         }
         
-        joinRoom(roomCode);
+        // Prüfe den Raumtyp, um zu wissen, ob ein Zugangscode benötigt wird
+        fetch(`/api/room/${roomCode}/check_access`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.exists) {
+                    // Öffne das Modal mit dem Raumtyp
+                    openNameModal(roomCode, data.room_type, '');
+                } else {
+                    showNotification('Raum nicht gefunden', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Fehler beim Prüfen des Raumtyps:', error);
+                showNotification('Fehler beim Prüfen des Raumtyps', 'error');
+            });
     }
     
     // WebSocket Events für join_game.html

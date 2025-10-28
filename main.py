@@ -5,6 +5,8 @@ import os
 import random
 import uuid
 import time
+import secrets
+import string
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -51,6 +53,9 @@ class GameRoom:
         self.total_players = 0
         self.timer_running = False
         self.incognito_mode = settings.get('incognito_mode', False)
+        self.room_type = settings.get('room_type', 'public')  # 'public' oder 'private'
+        self.access_code = settings.get('access_code')  # 6-stelliger Code für private Räume
+        self.chat_enabled = settings.get('chat_enabled', True)  # Platzhalter für Chat-Funktion
 
     def get_visible_players_for_player(self, player_id):
         """Gibt sichtbare Spieler für einen bestimmten Spieler zurück"""
@@ -465,7 +470,7 @@ def index():
 @app.route('/create_game', methods=['GET', 'POST'])
 def create_game():
     if request.method == 'POST':
-        # Einstellungen aus dem Formular verarbeiten
+        # Bestehende Einstellungen verarbeiten
         end_mode = request.form.get('end_mode', 'fixed_rounds')
         leader_name = request.form.get('leader_name', 'Prof Maeß').strip()
 
@@ -473,12 +478,9 @@ def create_game():
             initial_coins = float(request.form.get('initial_coins', '10').replace(',', '.'))
             multiplier = float(request.form.get('multiplier', '2').replace(',', '.'))
         except ValueError:
-            # Fallback zu Standardwerten bei Parse-Fehlern
             initial_coins = 10.0
             multiplier = 2.0
         
-        
-        # Validierung für Multiplikator
         if multiplier <= 0:
             return "Multiplikator muss größer als 0 sein", 400
         
@@ -490,25 +492,25 @@ def create_game():
             'round_duration': int(request.form.get('round_duration', 60)),
             'fixed_groups': request.form.get('fixed_groups') == 'true',
             'end_mode': end_mode,
-            'incognito_mode': request.form.get('incognito_mode') == 'true'
+            'incognito_mode': request.form.get('incognito_mode') == 'true',
+            
+            # NEUE EINSTELLUNGEN
+            'room_type': request.form.get('room_type', 'public'),
+            'chat_enabled': request.form.get('chat_enabled') == 'true'
         }
         
-        # Modus-spezifische Einstellungen
+        # Zugangscode für private Räume generieren
+        if settings['room_type'] == 'private':
+            settings['access_code'] = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
+        
+        # Modus-spezifische Einstellungen (bestehend)
         if end_mode == 'fixed_rounds':
-            max_rounds = int(request.form.get('max_rounds', 5))
-            # Stelle sicher, dass max_rounds nicht über 20 liegt
-            settings['max_rounds'] = min(max_rounds, 20)
+            settings['max_rounds'] = min(int(request.form.get('max_rounds', 5)), 20)
         elif end_mode == 'probability':
-            min_rounds = int(request.form.get('min_rounds', 1))
-            max_rounds_probability = int(request.form.get('max_rounds_probability', 10))
-            continue_probability = float(request.form.get('continue_probability', 0.5))
+            settings['min_rounds'] = min(int(request.form.get('min_rounds', 1)), 20)
+            settings['max_rounds_probability'] = min(int(request.form.get('max_rounds_probability', 10)), 20)
+            settings['continue_probability'] = float(request.form.get('continue_probability', 0.5))
             
-            # Stelle sicher, dass Rundenanzahlen nicht über 20 liegen
-            settings['min_rounds'] = min(min_rounds, 20)
-            settings['max_rounds_probability'] = min(max_rounds_probability, 20)
-            settings['continue_probability'] = continue_probability
-            
-            # Korrigiere falls min_rounds > max_rounds_probability
             if settings['min_rounds'] > settings['max_rounds_probability']:
                 settings['min_rounds'] = settings['max_rounds_probability']
         
@@ -516,14 +518,14 @@ def create_game():
         room_id = str(uuid.uuid4())[:8]
         leader_id = str(uuid.uuid4())
         
-        # Leader als Spieler erstellen (für die Verwaltung)
+        # Leader als Spieler erstellen
         leader = Player(leader_id, leader_name, is_leader=True)
         leader.room_id = room_id
         players[leader_id] = leader
         
-        # Raum erstellen mit leader_name
+        # Raum erstellen
         room = GameRoom(room_id, leader_id, settings)
-        room.leader_name = leader_name  # Wichtig: leader_name setzen
+        room.leader_name = leader_name
         rooms[room_id] = room
         
         # Leader-Session speichern
@@ -540,7 +542,7 @@ def create_game():
             player.room_id = room_id
             player.coins = room.settings['initial_coins']
             player.game_history['balances'].append(player.coins)
-            player.ready = True  # Als bereit markieren
+            player.ready = True
             
             players[player_id] = player
             room.add_player(player_id)
@@ -666,8 +668,8 @@ def evaluation(room_id):
 def api_rooms():
     available_rooms = []
     for room_id, room in rooms.items():
-        # Zeige Räume an, die im Status "waiting" oder "ready" sind
-        if room.status in ["waiting", "ready"]:  # Beide Status anzeigen
+        # Zeige ALLE Räume an, nicht nur öffentliche
+        if room.status in ["waiting", "ready"]:
             # Nur normale Spieler zählen (keine Leader)
             normal_players = [pid for pid in room.players if pid in players and not players[pid].is_leader]
             
@@ -676,9 +678,21 @@ def api_rooms():
                 'player_count': len(normal_players),
                 'current_round': room.current_round,
                 'settings': room.settings,
-                'status': room.status  # Status mit zurückgeben
+                'status': room.status,
+                'room_type': room.room_type  # Füge Raumtyp hinzu für die Anzeige
             })
     return jsonify(available_rooms)
+
+@app.route('/api/room/<room_id>/check_access')
+def api_room_check_access(room_id):
+    if room_id not in rooms:
+        return jsonify({'error': 'Raum nicht gefunden'}), 404
+    
+    room = rooms[room_id]
+    return jsonify({
+        'room_type': room.room_type,
+        'exists': True
+    })
 
 @app.route('/api/room/<room_id>/requirements')
 def api_room_requirements(room_id):
@@ -798,6 +812,7 @@ def handle_disconnect():
 def handle_join_room(data):
     room_id = data.get('room_id')
     player_name = data.get('player_name')
+    access_code = data.get('access_code', '')
     
     print(f"DEBUG: join_room aufgerufen - Raum: {room_id}, Spieler: {player_name}")
     
@@ -810,6 +825,12 @@ def handle_join_room(data):
         return
     
     room = rooms[room_id]
+
+    # Prüfe Zugangscode für private Räume
+    if room.room_type == 'private':
+        if not access_code or access_code != room.access_code:
+            emit('error', {'message': 'Ungültiger Zugangscode für privaten Raum'})
+            return
     
     # Prüfe ob Spielername bereits im Raum existiert
     existing_names = [players[pid].name for pid in room.players if pid in players and not players[pid].is_leader]

@@ -21,6 +21,31 @@
                 </div>
             </div>
             
+            <!-- NEUE SECTIONS: Raumtyp und Chat -->
+            <div class="settings-section">
+                <h3>🔒 Raum-Einstellungen</h3>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Raumtyp</label>
+                        <select name="room_type" id="roomType" required>
+                            <option value="public" selected>Öffentlich</option>
+                            <option value="private">Privat</option>
+                        </select>
+                        <small>Öffentliche Räume erscheinen in der Raumliste. Private Räume sind nur mit Code beitretbar.</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Chat-Funktion</label>
+                        <select name="chat_enabled" required>
+                            <option value="true" selected>Aktiviert</option>
+                            <option value="false">Deaktiviert</option>
+                        </select>
+                        <small>Spieler können während des Spiels Nachrichten senden.</small>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Grundeinstellungen -->
             <div class="settings-section">
                 <h3>💰 Grundeinstellungen</h3>
@@ -223,7 +248,7 @@
             return;
         }
         
-        // Validiere andere Eingaben
+        // Validiere andere Eingaben (bestehende Logik)
         const initialCoinsStr = formData.get('initial_coins');
         const multiplierStr = formData.get('multiplier');
         const endMode = formData.get('end_mode');
