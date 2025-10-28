@@ -83,7 +83,6 @@
 {% block scripts %}
 <script>
     let selectedContribution = null;
-    let gameTimerInterval;
     let serverTimeLeft;
     
     document.addEventListener('DOMContentLoaded', function() {
@@ -93,8 +92,11 @@
         const totalPlayers = parseInt(gameData.dataset.totalPlayers);
         const roundDuration = parseInt(gameData.dataset.roundDuration);
 
-        // Timer initialisieren (wird vom Server gestartet)
-        initializeTimer(roundDuration);
+        // Timer initialisieren (wird vom Server überschrieben)
+        initializeTimer();
+
+        // Lade aktuellen Timer-Status vom Server
+        loadTimerStatus();
         
         // Setze maximale Einzahlung im Text
         const maxAmountElement = document.getElementById('maxAmount');
@@ -159,14 +161,25 @@
         }
     }
 
-    function initializeTimer(initialTime) {
-        serverTimeLeft = initialTime;
+    function initializeTimer() {
+        serverTimeLeft = 60; // Default, wird vom Server überschrieben
         updateTimerDisplay();
     }
-    
-    function startGameTimer(initialTime) {
-        serverTimeLeft = initialTime;
-        updateTimerDisplay();
+
+    function loadTimerStatus() {
+        fetch(`/api/room/${currentRoomId}/dashboard_status`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    serverTimeLeft = data.time_left;
+                    updateTimerDisplay();
+                    
+                    console.log('DEBUG: Geladener Timer-Status:', serverTimeLeft, 'Sekunden');
+                }
+            })
+            .catch(error => {
+                console.error('Fehler beim Laden des Timer-Status:', error);
+            });
     }
     
     function updateTimerDisplay() {
@@ -174,8 +187,6 @@
         if (!timerElement) return;
         
         timerElement.textContent = serverTimeLeft;
-        
-        // Farb- und Warnzustände aktualisieren
         updateTimerWarnings();
     }
 
@@ -241,7 +252,13 @@
     socket.on('game_timer_update', function(data) {
         serverTimeLeft = data.time_left;
         updateTimerDisplay();
-        updateTimerWarnings();
+        
+        // Automatisches Einreichen bei Zeitablauf
+        if (serverTimeLeft <= 0 && selectedContribution === null) {
+            console.log('DEBUG: Zeit abgelaufen, reiche 0 Coins ein');
+            selectedContribution = 0;
+            submitContribution();
+        }
     });
 
     socket.on('game_time_out', function() {
