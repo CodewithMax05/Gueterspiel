@@ -5,61 +5,158 @@
     padding: 20px;
 }
 
-.round-header {
-    text-align: center;
+/* Überarbeitete Top-Info-Row mit gleichmäßiger Verteilung */
+.top-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
     margin-bottom: 30px;
+    gap: 15px;
 }
 
-.round-number {
-    font-size: 36px;
-    font-weight: bold;
-    color: #667eea;
-}
-
-.balance-display {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.info-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     border-radius: 12px;
-    padding: 20px;
-    text-align: center;
-    margin: 20px 0;
-    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+    padding: 20px 15px;
+    min-height: 140px;
 }
 
-.balance-amount {
-    font-size: 48px;
-    font-weight: bold;
-    margin: 10px 0;
+.section-label {
+    font-size: 14px;
+    opacity: 0.8;
+    margin-bottom: 12px;
+    text-align: center;
+    color: #aaa;
 }
 
-.timer-display {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    padding: 20px;
+/* Timer Section */
+.timer-circle {
+    position: relative;
+    width: 80px;
+    height: 80px;
+}
+
+.progress-ring {
+    transform: rotate(-90deg);
+}
+
+.progress-ring-background {
+    fill: transparent;
+    stroke: rgba(255, 255, 255, 0.1);
+}
+
+.progress-ring-circle {
+    fill: transparent;
+    stroke: #28a745;
+    transition: stroke-dashoffset 0.35s, stroke 0.3s;
+}
+
+.timer-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     text-align: center;
-    margin: 20px 0;
-    border: 2px solid rgba(255, 255, 255, 0.1);
+    width: 100%;
 }
 
 .timer-time {
-    font-size: 48px;
+    font-size: 18px;
     font-weight: bold;
     color: #28a745;
 }
 
+/* Runden Section */
+.round-number {
+    font-size: 42px;
+    font-weight: bold;
+    color: #667eea;
+    text-align: center;
+}
+
+/* Balance Section */
+.balance-section {
+    position: relative;
+}
+
+.balance-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+}
+
+.coin-stack {
+    position: relative;
+    width: 60px;
+    height: 60px;
+}
+
+.coin {
+    position: absolute;
+    font-size: 40px;
+    opacity: 0.9;
+}
+
+.coin-1 {
+    top: 0;
+    left: 0;
+    transform: rotate(-5deg);
+}
+
+.coin-2 {
+    top: 5px;
+    left: 8px;
+    transform: rotate(5deg);
+    opacity: 0.7;
+}
+
+.coin-3 {
+    top: 10px;
+    left: 16px;
+    transform: rotate(-8deg);
+    opacity: 0.5;
+}
+
+.balance-amount {
+    font-size: 32px;
+    font-weight: bold;
+    color: #ffd700;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Timer Warnungen */
 .timer-time.warning {
     color: #ffc107;
 }
 
 .timer-time.danger {
-    color: #dc3545;
+    color: #ffc107;
     animation: pulse 1s infinite;
 }
 
-@keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.8; transform: scale(1.05); }
+.timer-time.critical {
+    color: #dc3545;
+    animation: blink 0.5s infinite alternate;
 }
 
+.progress-ring-circle.warning {
+    stroke: #ffc107;
+}
+
+.progress-ring-circle.danger {
+    stroke: #ffc107;
+}
+
+.progress-ring-circle.critical {
+    stroke: #dc3545;
+}
+
+/* Gruppeninformation */
 .group-info {
     background: rgba(255, 255, 255, 0.05);
     border-radius: 12px;
@@ -89,6 +186,7 @@
     border: 2px solid #667eea;
 }
 
+/* Einzahlungsbereich */
 .contribution-section {
     background: rgba(255, 255, 255, 0.05);
     border-radius: 12px;
@@ -139,6 +237,7 @@
     margin-top: 20px;
 }
 
+/* Warte-Overlay */
 .waiting-overlay {
     position: fixed;
     top: 0;
@@ -184,20 +283,7 @@
     border: 1px solid #28a745;
 }
 
-.timer-time.critical {
-    color: #dc3545;
-    animation: blink 0.5s infinite alternate;
-}
-
-.timer-time.danger {
-    color: #ffc107;
-    animation: pulse 1s infinite;
-}
-
-.timer-time.warning {
-    color: #ffc107;
-}
-
+/* Animationen */
 @keyframes blink {
     from { opacity: 1; }
     to { opacity: 0.5; }
@@ -208,16 +294,50 @@
     50% { transform: scale(1.05); }
 }
 
+/* Responsive Design */
 @media (max-width: 768px) {
-    .balance-amount {
+    .game-container {
+        padding: 15px;
+    }
+    
+    .top-info-row {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .info-section {
+        min-height: 120px;
+        padding: 15px 10px;
+    }
+    
+    .round-number {
         font-size: 36px;
     }
     
-    .timer-time {
-        font-size: 36px;
+    .balance-amount {
+        font-size: 28px;
+    }
+    
+    .timer-circle {
+        width: 70px;
+        height: 70px;
+    }
+    
+    .coin-stack {
+        width: 50px;
+        height: 50px;
+    }
+    
+    .coin {
+        font-size: 32px;
     }
     
     .contribution-options {
         grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+    }
+    
+    .waiting-content {
+        padding: 30px 20px;
+        margin: 20px;
     }
 }
