@@ -40,7 +40,7 @@
     </div>
     
     <!-- Gruppeninformation -->
-    {% if player_group %}
+    {% if player_group and not room.incognito_mode %}
     <div class="group-info">
         <h3>👥 Deine Gruppe {{ player_group.group_number }}</h3>
         <div class="group-members">
@@ -50,6 +50,23 @@
             </div>
             {% endfor %}
         </div>
+    </div>
+    {% elif player_group and room.incognito_mode %}
+    <div class="group-info">
+        <h3>👥 Deine Gruppe</h3>
+        <div class="group-members">
+            <div class="member-badge you">
+                {{ player.name }} (Du)
+            </div>
+            {% for i in range(player_group.members|length - 1) %}
+            <div class="member-badge anonymous">
+                Spieler {{ i + 2 }}
+            </div>
+            {% endfor %}
+        </div>
+        <p style="color: #aaa; font-size: 12px; margin-top: 10px;">
+            💡 Inkognito-Modus: Sie sehen nur Ihren eigenen Namen
+        </p>
     </div>
     {% endif %}
     

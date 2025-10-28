@@ -68,14 +68,40 @@
                     {% for p in group.players %}
                     <div class="player-row {% if p.id == player.id %}current-player{% endif %}">
                         <div data-label="Spieler:">
-                            {{ p.name }}
-                            {% if p.id == player.id %}<strong>(Du)</strong>{% endif %}
+                            {% if not room.incognito_mode or player.is_leader or p.id == player.id %}
+                                {{ p.name }}
+                                {% if p.id == player.id %}<strong>(Du)</strong>{% endif %}
+                            {% else %}
+                                Spieler {{ loop.index }}
+                            {% endif %}
                         </div>
-                        <div data-label="Eingezahlt:">{{ "%.2f"|format(p.contribution) }}</div>
-                        <div data-label="Ausgezahlt:">{{ "%.2f"|format(p.payout) }}</div>
-                        <div data-label="Guthaben:">{{ "%.2f"|format(p.new_balance) }}</div>
+                        <div data-label="Eingezahlt:">
+                            {% if not room.incognito_mode or player.is_leader or p.id == player.id %}
+                                {{ "%.2f"|format(p.contribution) }}
+                            {% else %}
+                                ???
+                            {% endif %}
+                        </div>
+                        <div data-label="Ausgezahlt:">
+                            {% if not room.incognito_mode or player.is_leader or p.id == player.id %}
+                                {{ "%.2f"|format(p.payout) }}
+                            {% else %}
+                                ???
+                            {% endif %}
+                        </div>
+                        <div data-label="Guthaben:">
+                            {% if not room.incognito_mode or player.is_leader or p.id == player.id %}
+                                {{ "%.2f"|format(p.new_balance) }}
+                            {% else %}
+                                ???
+                            {% endif %}
+                        </div>
                         <div data-label="Gewinn/Verlust:" class="profit-indicator {% if p.profit > 0 %}positive{% elif p.profit < 0 %}negative{% endif %}">
-                            {% if p.profit > 0 %}+{% endif %}{{ "%.2f"|format(p.profit) }}
+                            {% if not room.incognito_mode or player.is_leader or p.id == player.id %}
+                                {% if p.profit > 0 %}+{% endif %}{{ "%.2f"|format(p.profit) }}
+                            {% else %}
+                                ???
+                            {% endif %}
                         </div>
                     </div>
                     {% endfor %}

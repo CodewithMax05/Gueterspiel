@@ -72,9 +72,16 @@
     <!-- Spielerliste -->
     <div class="player-list">
         <h3>Aktive Spieler:</h3>
+        {% if room.incognito_mode and not is_leader %}
+        <div style="text-align: center; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 8px; margin: 10px 0;">
+            <p>🔒 Inkognito-Modus aktiv</p>
+            <p style="font-size: 14px; color: #aaa;">Namen anderer Spieler werden nicht angezeigt</p>
+        </div>
+        {% endif %}
         <div id="playersContainer">
             {% for p in players %}
                 {% if p.id == session.player_id %}
+                <!-- Eigenen Spieler immer anzeigen -->
                 <div class="player-item current-player {% if p.ready %}ready{% endif %}" id="player-{{ p.id }}">
                     <div>
                         <span class="player-name">⭐ {{ p.name }} (Du)</span>
@@ -88,18 +95,16 @@
                             <span style="color: #dc3545;">❌ Nicht bereit</span>
                             {% endif %}
                         </span>
-                        <!-- Kein Lösch-Symbol für sich selbst -->
                     </div>
                 </div>
-                {% endif %}
-            {% endfor %}
-            
-            {% for p in players %}
-                {% if p.id != session.player_id %}
+                {% elif not room.incognito_mode or is_leader %}
+                <!-- Andere Spieler nur anzeigen wenn nicht Inkognito oder Leader -->
                 <div class="player-item {% if p.ready %}ready{% endif %}" id="player-{{ p.id }}">
                     <div>
                         <span class="player-name">{{ p.name }}</span>
+                        {% if not room.incognito_mode or is_leader %}
                         <span style="color: #666; margin-left: 10px;">({{ "%.2f"|format(p.coins) }} Coins)</span>
+                        {% endif %}
                     </div>
                     <div class="player-actions">
                         <span class="player-status">

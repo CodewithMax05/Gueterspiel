@@ -181,6 +181,12 @@
     border: 1px solid #667eea;
 }
 
+.member-badge.anonymous {
+    background: rgba(128, 128, 128, 0.2);
+    border: 1px solid #666;
+    color: #999;
+}
+
 .member-badge.you {
     background: rgba(102, 126, 234, 0.4);
     font-weight: bold;

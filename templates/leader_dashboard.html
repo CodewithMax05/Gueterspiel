@@ -11,6 +11,12 @@
         <div class="round-number">Runde <span id="currentRound">{{ room.current_round }}</span> - Leader Dashboard</div>
         <p style="opacity: 0.8; margin-top: 10px;">Übersicht aller Gruppen und Spieler</p>
     </div>
+
+    {% if room.incognito_mode %}
+    <div style="text-align: center; background: rgba(255,193,7,0.2); padding: 10px; border-radius: 8px; margin: 10px 0;">
+        🔒 Inkognito-Modus aktiv - Spieler sehen nur ihre eigenen Daten
+    </div>
+    {% endif %}
     
     <!-- Timer -->
     <div class="timer-display">

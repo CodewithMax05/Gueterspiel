@@ -50,6 +50,36 @@ class GameRoom:
         self.submitted_count = 0
         self.total_players = 0
         self.timer_running = False
+        self.incognito_mode = settings.get('incognito_mode', False)
+
+    def get_visible_players_for_player(self, player_id):
+        """Gibt sichtbare Spieler für einen bestimmten Spieler zurück"""
+        if not self.incognito_mode:
+            return self.players  # Alle Spieler sind sichtbar
+        
+        # Im Inkognito-Modus: Leader sieht alles, Spieler nur sich selbst
+        if player_id == self.leader_id:
+            return self.players  # Leader sieht alle
+        
+        # Normale Spieler sehen nur sich selbst
+        return [player_id] if player_id in self.players else []
+    
+    def get_visible_name(self, player_id, requesting_player_id):
+        """Gibt den sichtbaren Namen für einen Spieler zurück"""
+        if not self.incognito_mode:
+            return players[player_id].name  # Normaler Modus: echter Name
+        
+        # Im Inkognito-Modus
+        if requesting_player_id == self.leader_id:
+            return players[player_id].name  # Leader sieht echte Namen
+        
+        # Spieler sehen andere Spieler als "Spieler X"
+        if player_id == requesting_player_id:
+            return players[player_id].name  # Eigener Name wird angezeigt
+        
+        # Andere Spieler werden anonymisiert
+        player_index = self.players.index(player_id) + 1
+        return f"Spieler {player_index}"
 
     def update_timer_status(self, time_left, submitted_count, total_players, timer_running):
         self.timer_remaining = time_left
@@ -460,6 +490,7 @@ def create_game():
             'round_duration': int(request.form.get('round_duration', 60)),
             'fixed_groups': request.form.get('fixed_groups') == 'true',
             'end_mode': end_mode,
+            'incognito_mode': request.form.get('incognito_mode') == 'true'
         }
         
         # Modus-spezifische Einstellungen

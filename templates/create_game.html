@@ -34,15 +34,13 @@
                         <small>Wie viele Coins erhält jeder Spieler zu Beginn? (Mindestens 1, Kommazahlen erlaubt)</small>
                     </div>
                     
-                    <!-- ENTFERNT: Maximale Einzahlung Eingabe -->
-                    <div class="form-group" style="visibility: hidden;">
-                        <!-- Platzhalter für Layout -->
-                        <label>Platzhalter</label>
-                        <div class="input-with-unit">
-                            <input type="number" disabled style="visibility: hidden;">
-                            <span class="unit-label"></span>
-                        </div>
-                        <small></small>
+                    <div class="form-group">
+                        <label>Inkognito-Modus</label>
+                        <select name="incognito_mode" required>
+                            <option value="false" selected>Nein (Standard) - Alle Spieler sehen alle Namen und Beiträge</option>
+                            <option value="true">Ja - Spieler sehen nur eigene Daten, Leader sieht alles</option>
+                        </select>
+                        <small>Im Inkognito-Modus sehen Spieler nur ihre eigenen Namen und Beiträge, nicht die der anderen Spieler.</small>
                     </div>
                 </div>
                 
