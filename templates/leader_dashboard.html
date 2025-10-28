@@ -110,9 +110,6 @@
         roomId = dashboardData.dataset.roomId;
         totalPlayers = parseInt(dashboardData.dataset.totalPlayers);
         
-        // Timer initialisieren
-        initializeTimer();
-        
         // Prüfe ob letzte Runde
         checkIfLastRound();
         
@@ -126,12 +123,12 @@
                 socket.emit('next_round');
             });
         }
-        
-        // Prüfe alle 3 Sekunden den Spielstatus
-        setInterval(() => checkGameStatus(roomId), 3000);
 
         // Lade gespeicherten Status beim Initialisieren
         loadSavedStatus();
+
+        // Prüfe alle 3 Sekunden den Spielstatus
+        setInterval(() => checkGameStatus(roomId), 3000);
     });
 
     function loadSavedStatus() {
@@ -144,10 +141,12 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
+                    // WICHTIG: Server-Werte direkt übernehmen
                     serverTimeLeft = data.time_left;
                     submittedCount = data.submitted_count;
                     totalPlayers = data.total_players;
                     
+                    // JETZT erst den Timer mit den Server-Daten initialisieren
                     updateTimerDisplay();
                     updateButtonState();
                     updateProgress();
@@ -158,11 +157,17 @@
             })
             .catch(error => {
                 console.error('Fehler beim Laden des Dashboard-Status:', error);
+                // Fallback: Timer mit Standardwerten initialisieren
+                initializeTimer();
             });
     }
-    
+
+    // Vereinfache initializeTimer - nur für Fallback
     function initializeTimer() {
-        serverTimeLeft = 60; // Default, wird vom Server überschrieben
+        // Nur als Fallback, wenn Server-Antwort fehlschlägt
+        if (typeof serverTimeLeft === 'undefined') {
+            serverTimeLeft = 60;
+        }
         updateTimerDisplay();
         updateButtonState();
     }
