@@ -79,9 +79,9 @@
         </div>
         {% endif %}
         <div id="playersContainer">
+            <!-- Eigenen Spieler ZUERST anzeigen -->
             {% for p in players %}
                 {% if p.id == session.player_id %}
-                <!-- Eigenen Spieler immer anzeigen -->
                 <div class="player-item current-player {% if p.ready %}ready{% endif %}" id="player-{{ p.id }}">
                     <div>
                         <span class="player-name">⭐ {{ p.name }} (Du)</span>
@@ -97,8 +97,12 @@
                         </span>
                     </div>
                 </div>
-                {% elif not room.incognito_mode or is_leader %}
-                <!-- Andere Spieler nur anzeigen wenn nicht Inkognito oder Leader -->
+                {% endif %}
+            {% endfor %}
+            
+            <!-- Dann andere Spieler anzeigen -->
+            {% for p in players %}
+                {% if p.id != session.player_id and (not room.incognito_mode or is_leader) %}
                 <div class="player-item {% if p.ready %}ready{% endif %}" id="player-{{ p.id }}">
                     <div>
                         <span class="player-name">{{ p.name }}</span>
@@ -420,10 +424,16 @@
         
         // Füge den Spieler an der richtigen Position ein
         if (isCurrentPlayer) {
-            // Füge den aktuellen Spieler an den Anfang
+            // Füge den aktuellen Spieler immer an den ANFANG der Liste
             container.prepend(playerElement);
         } else {
-            container.appendChild(playerElement);
+            // Füge andere Spieler nach dem eigenen Spieler ein (aber vor anderen Spielern)
+            const currentPlayerElement = document.querySelector('.player-item.current-player');
+            if (currentPlayerElement && currentPlayerElement.nextSibling) {
+                container.insertBefore(playerElement, currentPlayerElement.nextSibling);
+            } else {
+                container.appendChild(playerElement);
+            }
         }
     }
     

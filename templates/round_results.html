@@ -96,7 +96,11 @@
                                 ???
                             {% endif %}
                         </div>
-                        <div data-label="Gewinn/Verlust:" class="profit-indicator {% if p.profit > 0 %}positive{% elif p.profit < 0 %}negative{% endif %}">
+                        <div data-label="Gewinn/Verlust:" 
+                             class="profit-indicator 
+                                    {% if not room.incognito_mode or player.is_leader or p.id == player.id %}
+                                        {% if p.profit > 0 %}positive{% elif p.profit < 0 %}negative{% endif %}
+                                    {% endif %}">
                             {% if not room.incognito_mode or player.is_leader or p.id == player.id %}
                                 {% if p.profit > 0 %}+{% endif %}{{ "%.2f"|format(p.profit) }}
                             {% else %}
