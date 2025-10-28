@@ -38,17 +38,10 @@
             {% endif %}
         </p>
         {% if room.room_type == 'private' %}
-        <p><strong>Zugangscode:</strong> <code style="font-size: 18px; background: rgba(255,255,255,0.1); padding: 5px 10px; border-radius: 4px;">{{ room.access_code }}</code></p>
+        <p><strong>Zugangscode: </strong>{{ room.access_code }}</p>
         {% endif %}
-        <p><strong>Chat:</strong> 
-            {% if room.chat_enabled %}
-                ✅ Aktiviert
-            {% else %}
-                ❌ Deaktiviert
-            {% endif %}
-        </p>
-        <p><strong>Aktive Spieler:</strong> <span id="totalPlayers">{{ players|length }}</span></p>
-        <p><strong>Bereite Spieler:</strong> <span id="readyCount">{{ ready_count }}</span></p>
+        <p><strong>Spieler:</strong> <span id="totalPlayers">{{ players|length }}</span></p>
+        <p><strong>Bereit:</strong> <span id="readyCount">{{ ready_count }} / {{ players|length }}</span></p>
         <p><strong>Gruppengröße:</strong> <span id="groupSize">{{ room.settings.get('group_size', 4) }}</span> Spieler</p>
         <p><strong>Erstellt von:</strong> {{ room.leader_name }}</p>
     </div>
