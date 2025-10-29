@@ -1042,14 +1042,13 @@ def finish_round(room_id):
     if room_id not in rooms:
         return
 
-    # Verhindere doppelte Ausführung
     with finish_round_lock:
         room = rooms.get(room_id)
         if not room:
             return
 
+        # Falls bereits in Ergebnissen, nichts tun
         if room.status == "round_results":
-            # Bereits fertig - nichts tun
             return
 
         # 1) Fehlende Beiträge auf 0 setzen und submitted_players ergänzen
@@ -1058,16 +1057,32 @@ def finish_round(room_id):
                 players[pid].current_contribution = 0
                 room.submitted_players.add(pid)
 
-        # 2) Sende finalen Submit-Status an alle Clients im Raum (wichtig, bevor wir clear machen)
+        # 2) Formuliere payload (einmal) und sende finalen Submit-Status
         submitted_count = len(room.submitted_players)
         total_players = len([pid for pid in room.players if pid in players and not players[pid].is_leader])
+        payload = {
+            'submitted_count': submitted_count,
+            'total_players': total_players
+        }
+
         try:
-            socketio.emit('contribution_submitted', {
-                'submitted_count': submitted_count,
-                'total_players': total_players
-            }, room=room_id)
+            # Emit an den Raum (alle Sockets, die im Raum sind)
+            socketio.emit('contribution_submitted', payload, room=room_id)
         except Exception as e:
-            print(f"Fehler beim Senden des finalen contribution_submitted für Raum {room_id}: {e}")
+            print(f"Fehler beim Senden des finalen contribution_submitted an room {room_id}: {e}")
+
+        try:
+            # Zusätzlich: Emit an die persönlichen Rooms der Spieler (Fallback falls jemand nicht im room_id ist)
+            for pid in room.players:
+                # nur normale Spieler (kein Leader)
+                if pid in players and not players[pid].is_leader:
+                    try:
+                        socketio.emit('contribution_submitted', payload, room=pid)
+                    except Exception:
+                        pass
+        except Exception:
+            # robuste Fehlerbehandlung: falls eine einzelne Emit-Schleife fehlschlägt, trotzdem weiter machen
+            pass
 
         # 3) Berechne Ergebnisse
         try:
@@ -1081,7 +1096,7 @@ def finish_round(room_id):
         room.timer_remaining = 0
         room.timer_running = False
 
-        # 5) History update & reset temporäre contribution
+        # 5) History update & reset temporäre contribution (safety)
         for pid in room.players:
             if pid in players:
                 p = players[pid]
@@ -1092,9 +1107,10 @@ def finish_round(room_id):
                     p.game_history.setdefault('balances', []).append(p.coins)
                 except Exception:
                     pass
+                # setze auf None, wie zuvor (wird in reset_for_next_round wieder auf 0 gesetzt)
                 p.current_contribution = None
 
-        # 6) Sende Ergebnisse
+        # 6) Sende Ergebnisse an den Raum
         try:
             socketio.emit('round_finished', {
                 'results': results,
@@ -1104,7 +1120,7 @@ def finish_round(room_id):
         except Exception as e:
             print(f"Fehler beim Senden von round_finished für Raum {room_id}: {e}")
 
-        # 7) Redirect für Nicht-Leader an deren persönliche Rooms
+        # 7) Redirect für Nicht-Leader an deren persönliche Rooms (wie vorher)
         for player_id in room.players:
             if player_id in players and not players[player_id].is_leader:
                 try:
