@@ -998,42 +998,73 @@ def handle_submit_contribution(data):
     player_id = session.get('player_id')
     if not player_id or player_id not in players:
         return
-    
+
     contribution = int(data.get('contribution', 0))
     player = players[player_id]
     room_id = player.room_id
-    
-    if room_id and room_id in rooms and not player.is_leader:
-        room = rooms[room_id]
-        
-        # Prüfe ob der Spieler genug Coins hat
-        if contribution > player.coins:
-            emit('error', {'message': 'Nicht genügend Coins verfügbar'})
+
+    if not (room_id and room_id in rooms and not player.is_leader):
+        return
+
+    room = rooms[room_id]
+
+    # Wir wollen race-conditions mit finish_round vermeiden.
+    need_finish = False
+
+    with finish_round_lock:
+        # Falls die Runde bereits in Ergebnissen ist, IGNORIERE dieses Submit (zu spät)
+        if room.status == "round_results":
+            # optional: sende ein kurzes Feedback an den Client
+            try:
+                emit('error', {'message': 'Runde bereits beendet — Einreichung nicht mehr möglich'}, room=request.sid)
+            except Exception:
+                pass
             return
-        
-        # Beitrag speichern
+
+        # Prüfe ob genügend Coins vorhanden sind
+        if contribution > player.coins:
+            emit('error', {'message': 'Nicht genügend Coins verfügbar'}, room=request.sid)
+            return
+
+        # Beitrag speichern (atomar)
         player.current_contribution = contribution
         room.submitted_players.add(player_id)
-        
-        # Speichere Fortschritt im Raum
+
+        # Aktuelle Zähler ermitteln
         submitted_count = len(room.submitted_players)
-        total_players = len([pid for pid in room.players if not players[pid].is_leader])
-        
-        # Aktualisiere Timer-Status mit aktuellen Werten
+        total_players = len([pid for pid in room.players if not players.get(pid, Player(pid, '')).is_leader])
+
+        # Aktiviere Timer-Status Update
         if room_id in game_timers:
             timer = game_timers[room_id]
-            room.update_timer_status(timer.get_time_left(), submitted_count, total_players, timer.is_running)
-        
-        # Benachrichtige andere Spieler
-        emit('contribution_submitted', {
-            'submitted_count': submitted_count,
-            'total_players': total_players
-        }, room=room_id)
-        
-        # Prüfe ob alle Spieler eingezahlt haben
+            try:
+                room.update_timer_status(timer.get_time_left(), submitted_count, total_players, timer.is_running)
+            except Exception:
+                pass
+
+        # Sende Zwischenstand an den Raum
+        try:
+            emit('contribution_submitted', {
+                'submitted_count': submitted_count,
+                'total_players': total_players
+            }, room=room_id)
+        except Exception:
+            pass
+
+        # Falls alle eingereicht haben -> Runde beenden (außerhalb des Locks)
         if submitted_count == total_players:
+            need_finish = True
+
+    # Achtung: finish_round kann die gleiche Lock benutzen - rufe es *außerhalb* des Locks auf
+    if need_finish:
+        try:
             stop_game_timer(room_id)
+        except Exception:
+            pass
+        try:
             finish_round(room_id)
+        except Exception as e:
+            print(f"Fehler beim Beenden der Runde nach vollem Submit: {e}")
 
 def finish_round(room_id):
     """Beendet die Runde sicher: fehlende Beiträge auf 0 setzen, finale Submit-Status senden,
@@ -1057,16 +1088,21 @@ def finish_round(room_id):
                 players[pid].current_contribution = 0
                 room.submitted_players.add(pid)
 
+        # Setze Status *so früh wie möglich*, damit keine späteren submits mehr akzeptiert werden
+        room.status = "round_results"
+        room.timer_running = False
+        room.timer_remaining = 0
+
         # 2) Formuliere payload (einmal) und sende finalen Submit-Status
         submitted_count = len(room.submitted_players)
         total_players = len([pid for pid in room.players if pid in players and not players[pid].is_leader])
         payload = {
             'submitted_count': submitted_count,
-            'total_players': total_players
+            'total_players': total_players,
+            'final': True   # optionales Flag, Clients können es nutzen
         }
 
         try:
-            # Emit an den Raum (alle Sockets, die im Raum sind)
             socketio.emit('contribution_submitted', payload, room=room_id)
         except Exception as e:
             print(f"Fehler beim Senden des finalen contribution_submitted an room {room_id}: {e}")

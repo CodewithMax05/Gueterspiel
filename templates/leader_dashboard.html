@@ -305,13 +305,28 @@
         console.log('DEBUG: round_finished received on dashboard');
         showNotification('Runde beendet! Alle Spieler haben eingereicht.', 'success');
         
-        // Fortschrittsanzeige auf Vollständigkeit setzen
-        submittedCount = totalPlayers;
-        updateProgress();
+        // Setze Timer & Fortschritt auf finalen Zustand (sofort UI-updates)
+        serverTimeLeft = 0;
 
-        // Button sollte jetzt enabled sein (Zeit abgelaufen)
+        // Wenn wir totalPlayers kennen, setze submittedCount vollständig.
+        // Falls totalPlayers noch 0 (noch nicht gesetzt), versuche es aus data oder dem DOM:
+        if (!totalPlayers || totalPlayers === 0) {
+            // data kann room_id/current_round/results enthalten; fallback auf DOM
+            const dashboardData = document.getElementById('dashboard-data');
+            if (dashboardData && dashboardData.dataset.totalPlayers) {
+                totalPlayers = parseInt(dashboardData.dataset.totalPlayers);
+            } else if (data && data.room_id) {
+                // optional: könntest fetch(/api/room/...) probieren, aber vermeide Wartezeiten
+            }
+        }
+
+        // Wenn möglich, setze submittedCount auf den vollen Wert
+        submittedCount = totalPlayers || submittedCount;
+
+        updateProgress();
+        updateTimerDisplay();
         updateButtonState();
-        
+
         // Prüfe ob letzte Runde
         checkIfLastRound();
     });
