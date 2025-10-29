@@ -305,6 +305,10 @@
         console.log('DEBUG: round_finished received on dashboard');
         showNotification('Runde beendet! Alle Spieler haben eingereicht.', 'success');
         
+        // Fortschrittsanzeige auf Vollständigkeit setzen
+        submittedCount = totalPlayers;
+        updateProgress();
+
         // Button sollte jetzt enabled sein (Zeit abgelaufen)
         updateButtonState();
         
