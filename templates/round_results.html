@@ -8,22 +8,8 @@
 <div class="results-container">
     <h1 style="text-align: center;">📊 Ergebnisse Runde {{ room.current_round }}</h1>
     
-    <!-- Persönliche Zusammenfassung -->
-    <div class="player-summary">
-        <h2>Dein Ergebnis</h2>
-        {% set player_profit = player.coins - player.game_history.balances[-2] if player.game_history.balances|length > 1 else 0 %}
-        <div class="balance-change {% if player_profit > 0 %}positive{% elif player_profit < 0 %}negative{% else %}neutral{% endif %}">
-            {% if player_profit > 0 %}+{% endif %}{{ "%.2f"|format(player_profit) }} Coins
-        </div>
-        <p style="font-size: 20px;">
-            Neues Guthaben: <strong>{{ "%.2f"|format(player.coins) }} Coins</strong>
-        </p>
-    </div>
-    
     <!-- Gruppenergebnisse - Nur die eigene Gruppe -->
-    <div class="group-results">
-        <h2 style="text-align: center; margin-bottom: 30px;">Deine Gruppe</h2>
-        
+    <div class="group-results">        
         {% for group in results %}
             {% set ns = namespace(found=false) %}
             {% for p in group.players %}
