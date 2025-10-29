@@ -41,7 +41,7 @@
         <p><strong>Zugangscode: </strong>{{ room.access_code }}</p>
         {% endif %}
         <p><strong>Spieler:</strong> <span id="totalPlayers">{{ players|length }}</span></p>
-        <p><strong>Bereit:</strong> <span id="readyCount">{{ ready_count }} / {{ players|length }}</span></p>
+        <p><strong>Bereit:</strong> <span id="readyCount">{{ ready_count }}</span></p>
         <p><strong>Gruppengröße:</strong> <span id="groupSize">{{ room.settings.get('group_size', 4) }}</span> Spieler</p>
         <p><strong>Erstellt von:</strong> {{ room.leader_name }}</p>
     </div>
