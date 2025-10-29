@@ -42,7 +42,7 @@
     <!-- Gruppeninformation -->
     {% if player_group and not room.incognito_mode %}
     <div class="group-info">
-        <h3>👥 Deine Gruppe {{ player_group.group_number }}</h3>
+        <h3 class="group-title">👥 Deine Gruppe {{ player_group.group_number }}</h3>
         <div class="group-members">
             {% for member in player_group.members %}
             <div class="member-badge {% if member == player.name %}you{% endif %}">
@@ -53,7 +53,7 @@
     </div>
     {% elif player_group and room.incognito_mode %}
     <div class="group-info">
-        <h3>👥 Deine Gruppe</h3>
+        <h3 class="group-title">👥 Deine Gruppe</h3>
         <div class="group-members">
             <div class="member-badge you">
                 {{ player.name }} (Du)
@@ -64,7 +64,7 @@
             </div>
             {% endfor %}
         </div>
-        <p style="color: #aaa; font-size: 12px; margin-top: 10px;">
+        <p class="incognito-hint">
             💡 Inkognito-Modus: Sie sehen nur Ihren eigenen Namen
         </p>
     </div>
@@ -72,7 +72,7 @@
     
     <!-- Einzahlungsbereich -->
     <div class="contribution-section">
-        <h3 style="text-align: center; margin-bottom: 20px;">
+        <h3 class="contribution-title">
             💰 Wie viel möchtest du einzahlen?
         </h3>
         
@@ -84,7 +84,7 @@
             Beitrag einreichen
         </button>
         
-        <div style="text-align: center; margin-top: 15px; color: #aaa; font-size: 14px;">
+        <div class="contribution-hint">
             Wähle einen Betrag zwischen 0 und deinem aktuellen Guthaben (<span id="currentBalanceText">{{ "%.2f"|format(player.coins) }}</span> Coins)
         </div>
     </div>
@@ -106,7 +106,7 @@
      data-round-duration="{{ room.settings.round_duration }}"
      data-initial-balance="{{ player.coins }}"
      data-total-players="{{ room.players|length }}"
-     style="display: none;">
+     class="hidden">
 </div>
 {% endblock %}
 

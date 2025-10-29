@@ -166,6 +166,10 @@
     border-left: 4px solid #667eea;
 }
 
+.group-title {
+    margin-bottom: 15px;
+}
+
 .group-members {
     display: flex;
     flex-wrap: wrap;
@@ -193,12 +197,23 @@
     border: 2px solid #667eea;
 }
 
+.incognito-hint {
+    color: #aaa;
+    font-size: 12px;
+    margin-top: 10px;
+}
+
 /* Einzahlungsbereich */
 .contribution-section {
     background: rgba(255, 255, 255, 0.05);
     border-radius: 12px;
     padding: 25px;
     margin: 20px 0;
+}
+
+.contribution-title {
+    text-align: center;
+    margin-bottom: 20px;
 }
 
 .contribution-options {
@@ -244,6 +259,13 @@
     margin-top: 20px;
 }
 
+.contribution-hint {
+    text-align: center;
+    margin-top: 15px;
+    color: #aaa;
+    font-size: 14px;
+}
+
 /* Warte-Overlay */
 .waiting-overlay {
     position: fixed;
@@ -277,11 +299,6 @@
     margin: 20px auto;
 }
 
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
 .submitted-count {
     background: rgba(40, 167, 69, 0.2);
     padding: 10px 20px;
@@ -290,7 +307,17 @@
     border: 1px solid #28a745;
 }
 
+/* Hidden Elements */
+.hidden {
+    display: none;
+}
+
 /* Animationen */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
 @keyframes blink {
     from { opacity: 1; }
     to { opacity: 0.5; }
