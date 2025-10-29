@@ -13,6 +13,8 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 from collections import defaultdict
 from threading import Lock 
 
+finish_round_lock = Lock()
+
 app = Flask(__name__)
 is_production = os.environ.get('FLASK_ENV') == 'production'
 
@@ -271,83 +273,49 @@ class GameTimer:
             self.greenlet = spawn(self._run_timer)
 
     def _run_timer(self):
-        """Läuft in einem eigenen Greenlet und sendet Timer-Updates"""
         start_time = time.time()
+        end_time = start_time + self.duration
+
         while self.is_running:
             with self.lock:
-                if not self.is_running:
-                    break
-                    
-                # Berechne verbleibende Zeit genau
-                elapsed = time.time() - start_time
-                self.time_left = max(0, self.duration - int(elapsed))
+                now = time.time()
+                self.time_left = int(max(0, end_time - now))
 
-                 # Speichere Timer-Status im Raum
                 if self.room_id in rooms:
                     room = rooms[self.room_id]
                     submitted_count = len(room.submitted_players)
-                    total_players = len([pid for pid in room.players if not players[pid].is_leader])
-                    room.update_timer_status(self.time_left, submitted_count, total_players, self.is_running)
-                
-                # Sende Update an den Raum
-                try:
-                    self.socketio.emit('game_timer_update', 
-                                    {'time_left': self.time_left}, 
-                                    room=self.room_id)
-                except Exception as e:
-                    print(f"Fehler beim Senden des Timer-Updates: {e}")
-                
-                # Zeit abgelaufen?
+                    total_players = len([pid for pid in room.players if not players.get(pid, Player(pid,'')).is_leader])
+                    try:
+                        room.update_timer_status(self.time_left, submitted_count, total_players, True)
+                    except Exception:
+                        pass
+                    try:
+                        self.socketio.emit('game_timer_update', {'time_left': self.time_left}, room=self.room_id)
+                    except Exception as e:
+                        print(f"Fehler beim Senden des Timer-Updates für Raum {self.room_id}: {e}")
+
                 if self.time_left <= 0:
                     try:
-                        # Runde automatisch beenden
-                        print(f"DEBUG: Timer abgelaufen für Raum {self.room_id}, runde finish_round auf")
                         self.socketio.emit('game_time_out', room=self.room_id)
+                    except Exception:
+                        pass
 
-                        # Runde direkt beenden (kein Event-Handler nötig)
-                        if self.room_id in rooms:
-                            room = rooms[self.room_id]
-
-                            # Für Spieler die nicht eingereicht haben, setze Beitrag auf 0
-                            for pid in room.players:
-                                if pid not in room.submitted_players and not players[pid].is_leader:
-                                    players[pid].current_contribution = 0
-                                    room.submitted_players.add(pid)
-
-                            # Berechne Ergebnisse
-                            results = room.calculate_round_results()
-                            room.status = "round_results"
-                            room.submitted_players.clear()
-
-                            # **WICHTIG:** Timer-Status serverseitig konsistent setzen
-                            room.timer_remaining = 0
-                            room.timer_running = False
-
-                            self.socketio.emit('round_finished', {
-                                'results': results,
-                                'current_round': room.current_round,
-                                'room_id': self.room_id
-                            }, room=self.room_id)
-
-                            # Leite Spieler automatisch zu round_results weiter
-                            for pid in room.players:
-                                if pid in players and not players[pid].is_leader:
-                                    self.socketio.emit('redirect_to_results', {
-                                        'room_id': self.room_id
-                                    }, room=pid)
-
-                            print(f"Runde {room.current_round} automatisch beendet (Timer abgelaufen)")
-
+                    # zentrale Runde beenden
+                    try:
+                        finish_round(self.room_id)
                     except Exception as e:
-                        print(f"Fehler beim automatischen Rundenende: {e}")
-                    # Timer stoppen / markieren
-                    self.is_running = False
-                    break
-            
-            # Exakt 1 Sekunde warten
-            next_update = start_time + (self.duration - self.time_left + 1)
-            sleep_time = max(0, next_update - time.time())
-            sleep(sleep_time)
+                        print(f"Fehler beim automatischen Beenden der Runde für Raum {self.room_id}: {e}")
+                    finally:
+                        self.is_running = False
+                        if self.room_id in rooms:
+                            try:
+                                rooms[self.room_id].timer_running = False
+                                rooms[self.room_id].timer_remaining = 0
+                            except Exception:
+                                pass
+                        break
+
+            sleep(1)
 
     def stop(self):
         with self.lock:
@@ -844,6 +812,8 @@ def handle_join_room(data):
     player.room_id = room_id  # WICHTIG: Raum-ID setzen
     player.coins = room.settings['initial_coins']
     player.game_history['balances'].append(player.coins)
+
+    session['player_id'] = player_id
     
     players[player_id] = player
     
@@ -876,6 +846,44 @@ def handle_join_room(data):
         })
         
         print(f"DEBUG: room_joined Event gesendet für Raum {room_id} mit player_id {player_id}")
+
+@socketio.on('join_game_room')
+def handle_join_game_room(data):
+    """
+    Client sendet beim Laden der Spielseite: { room_id: ... }.
+    Wir lesen player_id aus session (gesetzt beim ursprünglichen join_room),
+    tragen den socket in die persönlichen- und Raum-Rooms ein und senden initialen Status.
+    """
+    room_id = data.get('room_id')
+    player_id = session.get('player_id')
+
+    if not player_id or player_id not in players:
+        # Kein gültiger Spieler in Session — nichts tun
+        return
+
+    # Join personal room (damit emits an room=player_id beim Server beim Client landen)
+    try:
+        join_room(player_id)
+    except Exception as e:
+        print(f"DEBUG: join_room(player) failed: {e}")
+
+    # Join game room (falls vorhanden)
+    if room_id and room_id in rooms:
+        try:
+            join_room(room_id)
+        except Exception as e:
+            print(f"DEBUG: join_room(room) failed: {e}")
+
+        room = rooms[room_id]
+        submitted_count = len(room.submitted_players)
+        total_players = len([pid for pid in room.players if not players[pid].is_leader])
+
+        # Sende initialen Timer-Status / Submit-Status direkt an diesen Socket
+        emit('game_timer_update', {'time_left': room.timer_remaining}, room=request.sid)
+        emit('contribution_submitted', {
+            'submitted_count': submitted_count,
+            'total_players': total_players
+        }, room=request.sid)
 
 @socketio.on('join_room_reconnect')
 def handle_join_room_reconnect(data):
@@ -1028,42 +1036,89 @@ def handle_submit_contribution(data):
             finish_round(room_id)
 
 def finish_round(room_id):
-    """Beendet die aktuelle Runde und berechnet Ergebnisse"""
+    """Beendet die Runde sicher: fehlende Beiträge auf 0 setzen, finale Submit-Status senden,
+    Ergebnisse berechnen, Ergebnisse senden und erst danach aufräumen.
+    Geschützt durch finish_round_lock, damit nicht mehrfach parallel ausgeführt wird."""
     if room_id not in rooms:
         return
-    
-    room = rooms[room_id]
-    
-    # Für Spieler die nicht eingereicht haben, setze Beitrag auf 0
-    for pid in room.players:
-        if pid not in room.submitted_players and not players[pid].is_leader:
-            players[pid].current_contribution = 0
-            room.submitted_players.add(pid)
-    
-    # Berechne Ergebnisse
-    results = room.calculate_round_results()
-    room.status = "round_results"
-    room.submitted_players.clear()
 
-    room.timer_remaining = 0
-    room.timer_running = False
-    
-    # Sende Event an alle im Raum
-    socketio.emit('round_finished', {
-        'results': results,
-        'current_round': room.current_round,
-        'room_id': room_id
-    }, room=room_id)
-    
-    # Leite Spieler automatisch zu round_results weiter
-    for player_id in room.players:
-        if player_id in players and not players[player_id].is_leader:
-            # Für normale Spieler: Weiterleitung zu round_results
-            socketio.emit('redirect_to_results', {
+    # Verhindere doppelte Ausführung
+    with finish_round_lock:
+        room = rooms.get(room_id)
+        if not room:
+            return
+
+        if room.status == "round_results":
+            # Bereits fertig - nichts tun
+            return
+
+        # 1) Fehlende Beiträge auf 0 setzen und submitted_players ergänzen
+        for pid in list(room.players):
+            if pid not in room.submitted_players and pid in players and not players[pid].is_leader:
+                players[pid].current_contribution = 0
+                room.submitted_players.add(pid)
+
+        # 2) Sende finalen Submit-Status an alle Clients im Raum (wichtig, bevor wir clear machen)
+        submitted_count = len(room.submitted_players)
+        total_players = len([pid for pid in room.players if pid in players and not players[pid].is_leader])
+        try:
+            socketio.emit('contribution_submitted', {
+                'submitted_count': submitted_count,
+                'total_players': total_players
+            }, room=room_id)
+        except Exception as e:
+            print(f"Fehler beim Senden des finalen contribution_submitted für Raum {room_id}: {e}")
+
+        # 3) Berechne Ergebnisse
+        try:
+            results = room.calculate_round_results()
+        except Exception as e:
+            print(f"Fehler beim Berechnen der Ergebnisse für Raum {room_id}: {e}")
+            results = {}
+
+        # 4) Status-Flags setzen
+        room.status = "round_results"
+        room.timer_remaining = 0
+        room.timer_running = False
+
+        # 5) History update & reset temporäre contribution
+        for pid in room.players:
+            if pid in players:
+                p = players[pid]
+                try:
+                    p.game_history.setdefault('contributions', []).append(
+                        p.current_contribution if p.current_contribution is not None else 0
+                    )
+                    p.game_history.setdefault('balances', []).append(p.coins)
+                except Exception:
+                    pass
+                p.current_contribution = None
+
+        # 6) Sende Ergebnisse
+        try:
+            socketio.emit('round_finished', {
+                'results': results,
+                'current_round': room.current_round,
                 'room_id': room_id
-            }, room=player_id)
-    
-    print(f"Runde {room.current_round} abgeschlossen, Spieler werden zu Ergebnissen weitergeleitet")
+            }, room=room_id)
+        except Exception as e:
+            print(f"Fehler beim Senden von round_finished für Raum {room_id}: {e}")
+
+        # 7) Redirect für Nicht-Leader an deren persönliche Rooms
+        for player_id in room.players:
+            if player_id in players and not players[player_id].is_leader:
+                try:
+                    socketio.emit('redirect_to_results', {'room_id': room_id}, room=player_id)
+                except Exception:
+                    pass
+
+        # 8) Aufräumen: submitted_players erst jetzt leeren
+        try:
+            room.submitted_players.clear()
+        except Exception:
+            pass
+
+        print(f"DEBUG: finish_round completed for room {room_id} (round {room.current_round})")
 
 @socketio.on('next_round')
 def handle_next_round():
@@ -1104,20 +1159,6 @@ def handle_next_round():
             emit('game_finished', {
                 'room_id': room_id
             }, room=room_id)
-
-@socketio.on('game_time_out')
-def handle_game_time_out(data=None):
-    """Wird aufgerufen wenn der Timer abläuft - mit optionalem data Parameter"""
-    player_id = session.get('player_id')
-    if not player_id or player_id not in players:
-        return
-    
-    player = players[player_id]
-    room_id = player.room_id
-    
-    if room_id and room_id in rooms:
-        print(f"DEBUG: Timer abgelaufen für Raum {room_id}, beende Runde")
-        finish_round(room_id)
 
 @socketio.on('remove_player')
 def handle_remove_player(data):
