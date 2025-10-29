@@ -114,6 +114,9 @@
         const dashboardData = document.getElementById('dashboard-data');
         roomId = dashboardData.dataset.roomId;
         totalPlayers = parseInt(dashboardData.dataset.totalPlayers);
+
+        // Leader dem Raum beitreten, um Beitrags-Events zu erhalten
+        socket.emit('join_game_room', { room_id: roomId });
         
         // Prüfe ob letzte Runde
         checkIfLastRound();
