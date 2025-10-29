@@ -720,13 +720,21 @@ def api_room_dashboard_status(room_id):
 
     room = rooms[room_id]
 
+    # Wenn die Runde bereits in 'round_results' ist, benutze den gespeicherten finalen Zähler.
+    if room.status == 'round_results':
+        submitted = getattr(room, 'submitted_count', len(room.submitted_players))
+        total = getattr(room, 'total_players', len([pid for pid in room.players if not players[pid].is_leader]))
+    else:
+        submitted = len(room.submitted_players)
+        total = len([pid for pid in room.players if not players[pid].is_leader])
+
     return jsonify({
         'success': True,
         'time_left': room.timer_remaining,
-        'submitted_count': len(room.submitted_players),
-        'total_players': len([pid for pid in room.players if not players[pid].is_leader]),
+        'submitted_count': submitted,
+        'total_players': total,
         'timer_running': room.timer_running,
-        'status': room.status   # neu: Raum-Status
+        'status': room.status
     })
 
 @app.route('/api/room/<room_id>/can_continue')
@@ -1098,9 +1106,15 @@ def finish_round(room_id):
         total_players = len([pid for pid in room.players if pid in players and not players[pid].is_leader])
         payload = {
             'submitted_count': submitted_count,
-            'total_players': total_players,
-            'final': True   # optionales Flag, Clients können es nutzen
+            'total_players': total_players
         }
+
+        # Speichere die finalen Werte im Room, damit sie nach einem Reload sichtbar bleiben
+        try:
+            room.submitted_count = submitted_count
+            room.total_players = total_players
+        except Exception:
+            pass
 
         try:
             socketio.emit('contribution_submitted', payload, room=room_id)
