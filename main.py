@@ -502,18 +502,18 @@ def create_game():
         session['is_leader'] = True
         
         # TEST: 7 Test-Spieler mit Ready-Status erstellen
-        test_names = ["Test-Spieler 1", "Test-Spieler 2", "Test-Spieler 3", "Test-Spieler 4", 
-                     "Test-Spieler 5", "Test-Spieler 6"]
-        for name in test_names:
-            player_id = str(uuid.uuid4())
-            player = Player(player_id, name)
-            player.room_id = room_id
-            player.coins = room.settings['initial_coins']
-            player.game_history['balances'].append(player.coins)
-            player.ready = True
+        # test_names = ["Test-Spieler 1", "Test-Spieler 2", "Test-Spieler 3", "Test-Spieler 4", 
+        #              "Test-Spieler 5", "Test-Spieler 6"]
+        # for name in test_names:
+        #     player_id = str(uuid.uuid4())
+        #     player = Player(player_id, name)
+        #     player.room_id = room_id
+        #     player.coins = room.settings['initial_coins']
+        #     player.game_history['balances'].append(player.coins)
+        #     player.ready = True
             
-            players[player_id] = player
-            room.add_player(player_id)
+        #     players[player_id] = player
+        #     room.add_player(player_id)
         
         return redirect(url_for('game_room', room_id=room_id))
     
