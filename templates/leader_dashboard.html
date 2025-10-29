@@ -103,27 +103,41 @@
 
 {% block scripts %}
 <script>
-    let serverTimeLeft;
+    let serverTimeLeft = undefined;
     let submittedCount = 0;
     let totalPlayers = 0;
     let roomId = '';
     let isLastRound = false;
-    
+    // Flag: true, wenn der initiale Status (fetch /api/room/.../dashboard_status) verarbeitet wurde
+    let initialStatusLoaded = false;
+
     document.addEventListener('DOMContentLoaded', function() {
         // Daten aus HTML data attributes lesen
         const dashboardData = document.getElementById('dashboard-data');
         roomId = dashboardData.dataset.roomId;
-        totalPlayers = parseInt(dashboardData.dataset.totalPlayers);
+        totalPlayers = parseInt(dashboardData.dataset.totalPlayers) || 0;
+
+        // Sofort sichere UI-Defaults setzen (vermeidet Flash)
+        const progressFill = document.getElementById('progressFill');
+        if (progressFill) {
+            progressFill.style.width = '0%';
+            progressFill.style.transition = progressFill.style.transition || 'width 300ms ease';
+        }
+        const nextRoundBtn = document.getElementById('nextRoundBtn');
+        if (nextRoundBtn) {
+            nextRoundBtn.disabled = true;
+            nextRoundBtn.textContent = '⏳ Lade Status...';
+            nextRoundBtn.classList.add('btn-disabled');
+            nextRoundBtn.classList.remove('btn-pulse');
+        }
 
         // Leader dem Raum beitreten, um Beitrags-Events zu erhalten
         socket.emit('join_game_room', { room_id: roomId });
-        
+
         // Prüfe ob letzte Runde
         checkIfLastRound();
-        
-        // Event Listeners
-        const nextRoundBtn = document.getElementById('nextRoundBtn');
-        
+
+        // Event Listener
         if (nextRoundBtn) {
             nextRoundBtn.addEventListener('click', function() {
                 this.disabled = true;
@@ -132,7 +146,7 @@
             });
         }
 
-        // Lade gespeicherten Status beim Initialisieren
+        // Lade gespeicherten Status beim Initialisieren (authoritative)
         loadSavedStatus();
 
         // Prüfe alle 3 Sekunden den Spielstatus
@@ -140,43 +154,48 @@
     });
 
     function loadSavedStatus() {
-        // Verwende die serverseitig gespeicherten Werte
         const dashboardData = document.getElementById('dashboard-data');
-        const roomId = dashboardData.dataset.roomId;
-        
-        // Frage den aktuellen Raumstatus vom Server ab
-        fetch(`/api/room/${roomId}/dashboard_status`)
+        const roomIdLocal = dashboardData.dataset.roomId;
+
+        fetch(`/api/room/${roomIdLocal}/dashboard_status`)
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // Server-Werte übernehmen
-                    serverTimeLeft = data.time_left;
-                    submittedCount = data.submitted_count;
-                    totalPlayers = data.total_players;
+                    // Server-Werte übernehmen (authoritative)
+                    serverTimeLeft = Number(data.time_left);
+                    submittedCount = Number(data.submitted_count) || 0;
+                    totalPlayers = Number(data.total_players) || totalPlayers;
 
                     // Absicherung: Wenn Timer nicht läuft und der Raum im 'round_results' Status ist,
-                    // dann ist die Zeit 0 (Runde beendet). Manchmal steht time_left noch auf default.
+                    // dann ist die Zeit 0 (Runde beendet).
                     if (data.timer_running === false && data.status === 'round_results') {
                         serverTimeLeft = 0;
                     }
 
-                    // JETZT erst den Timer mit den Server-Daten initialisieren
+                    // Aktualisiere UI (JETZT)
                     updateTimerDisplay();
                     updateButtonState();
                     updateProgress();
 
-                    console.log('DEBUG: Geladener Status - Zeit:', serverTimeLeft, 
-                            'Eingereicht:', submittedCount, 'von', totalPlayers);
+                    // Markiere: initialer Status ist geladen — ab jetzt dürfen socket-Events die UI verändern
+                    initialStatusLoaded = true;
+
+                    console.log('DEBUG: Geladener Status - Zeit:', serverTimeLeft,
+                        'Eingereicht:', submittedCount, 'von', totalPlayers);
+                } else {
+                    // Fallback-Initialisierung
+                    initializeTimer();
+                    initialStatusLoaded = true;
                 }
             })
             .catch(error => {
                 console.error('Fehler beim Laden des Dashboard-Status:', error);
                 // Fallback: Timer mit Standardwerten initialisieren
                 initializeTimer();
+                initialStatusLoaded = true;
             });
     }
 
-    // Vereinfache initializeTimer - nur für Fallback
     function initializeTimer() {
         // Nur als Fallback, wenn Server-Antwort fehlschlägt
         if (typeof serverTimeLeft === 'undefined') {
@@ -185,51 +204,64 @@
         updateTimerDisplay();
         updateButtonState();
     }
-    
+
     function updateTimerDisplay() {
         const timerElement = document.getElementById('timer');
         if (!timerElement) return;
-        
-        timerElement.textContent = serverTimeLeft;
-        
+
+        timerElement.textContent = (typeof serverTimeLeft === 'number') ? serverTimeLeft : '--';
+
         // Farb- und Warnzustände aktualisieren
         updateTimerWarnings();
     }
-    
+
     function updateTimerWarnings() {
         const timerElement = document.getElementById('timer');
         if (!timerElement) return;
-        
+
         timerElement.classList.remove('warning', 'danger');
-        
-        if (serverTimeLeft <= 10) {
-            timerElement.classList.add('danger');
-        } else if (serverTimeLeft <= 30) {
-            timerElement.classList.add('warning');
+
+        if (typeof serverTimeLeft === 'number') {
+            if (serverTimeLeft <= 10) {
+                timerElement.classList.add('danger');
+            } else if (serverTimeLeft <= 30) {
+                timerElement.classList.add('warning');
+            }
         }
     }
-    
+
     function updateProgress() {
         const progressFill = document.getElementById('progressFill');
         const progressText = document.getElementById('progressText');
         const submittedCountElement = document.getElementById('submittedCount');
-        
+
         if (progressFill && progressText && submittedCountElement) {
             const percentage = totalPlayers > 0 ? (submittedCount / totalPlayers) * 100 : 0;
-            progressFill.style.width = percentage + '%';
+            // Clamp 0..100 um visuelle Glitches zu vermeiden
+            const clamped = Math.min(100, Math.max(0, Math.round(percentage * 100) / 100));
+            progressFill.style.width = clamped + '%';
             progressText.textContent = submittedCount + ' von ' + totalPlayers + ' Spielern haben eingereicht';
             submittedCountElement.textContent = submittedCount;
         }
     }
-    
+
     function updateButtonState() {
         const nextRoundBtn = document.getElementById('nextRoundBtn');
         if (!nextRoundBtn) return;
-        
+
+        // Solange wir keine numerische serverTimeLeft haben, Button im Loading-/Disabled-Zustand lassen.
+        if (typeof serverTimeLeft !== 'number' || isNaN(serverTimeLeft)) {
+            nextRoundBtn.disabled = true;
+            nextRoundBtn.textContent = '⏳ Lade Status...';
+            nextRoundBtn.classList.add('btn-disabled');
+            nextRoundBtn.classList.remove('btn-pulse');
+            return;
+        }
+
         // Button nur enabled wenn Zeit abgelaufen ist
         const timeExpired = serverTimeLeft <= 0;
         nextRoundBtn.disabled = !timeExpired;
-        
+
         if (timeExpired) {
             if (isLastRound) {
                 nextRoundBtn.textContent = '📊 Auswertung anzeigen';
@@ -244,7 +276,7 @@
             nextRoundBtn.classList.remove('btn-pulse');
         }
     }
-    
+
     function checkIfLastRound() {
         fetch(`/api/room/${roomId}/can_continue`)
             .then(response => response.json())
@@ -256,18 +288,16 @@
                 console.error('Fehler beim Prüfen der Rundenfortsetzung:', error);
             });
     }
-    
-    function checkGameStatus(roomId) {
-        fetch(`/api/room/${roomId}/status`)
+
+    function checkGameStatus(roomIdLocal) {
+        fetch(`/api/room/${roomIdLocal}/status`)
             .then(response => response.json())
             .then(data => {
-                // Aktualisiere Rundenanzahl
                 const currentRoundElement = document.getElementById('currentRound');
                 if (currentRoundElement && data.current_round) {
                     currentRoundElement.textContent = data.current_round;
                 }
-                
-                // Prüfe erneut ob letzte Runde bei Statusänderung
+
                 if (data.status === 'round_results') {
                     checkIfLastRound();
                 }
@@ -276,67 +306,66 @@
                 console.error('Fehler beim Prüfen des Spielstatus:', error);
             });
     }
-    
-    // WebSocket Events für leader_dashboard.html
+
+    // SOCKET EVENTS
+    // Wichtig: Ignoriere socket->timer updates *bis* initialStatusLoaded==true (sonst Race)
     socket.on('game_timer_update', function(data) {
-        serverTimeLeft = data.time_left;
+        if (!initialStatusLoaded) {
+            // debug: wir haben noch nicht die fetch-Antwort erhalten -> ignorieren
+            console.log('IGNORING socket game_timer_update until initial status loaded');
+            return;
+        }
+        serverTimeLeft = Number(data.time_left);
         updateTimerDisplay();
         updateButtonState();
     });
-    
+
     socket.on('contribution_submitted', function(data) {
-        submittedCount = data.submitted_count;
-        totalPlayers = data.total_players;
+        // contribution_submitted kann relevant sein, auch vor initialStatusLoaded:
+        // Wir akzeptieren contribution_submitted immer, aber wenn initialStatusLoaded==false,
+        // dann übernehmen wir die Werte in die lokale store (nicht überschreiben).
+        submittedCount = Number(data.submitted_count) || submittedCount;
+        totalPlayers = Number(data.total_players) || totalPlayers;
         updateProgress();
     });
 
-    socket.on('redirect_to_results', function(data) {
-        // Leader bleibt auf dem Dashboard - keine Weiterleitung
-        console.log('DEBUG: Spieler wurden zu Ergebnissen weitergeleitet');
-        showNotification('Runde beendet! Spieler sehen jetzt die Ergebnisse.', 'info');
-    });
-    
-    socket.on('redirect_to_game', function(data) {
-        // Wird nicht für Leader aufgerufen
-        console.log('DEBUG: Spieler wurden zum Spiel weitergeleitet');
-    });
-
     socket.on('round_finished', function(data) {
+        // round_finished ist ein finales Event — sollte immer verarbeitet werden
         console.log('DEBUG: round_finished received on dashboard');
         showNotification('Runde beendet! Alle Spieler haben eingereicht.', 'success');
-        
-        // Setze Timer & Fortschritt auf finalen Zustand (sofort UI-updates)
+
+        // Setze Timer & Fortschritt auf finalen Zustand
         serverTimeLeft = 0;
 
-        // Wenn wir totalPlayers kennen, setze submittedCount vollständig.
-        // Falls totalPlayers noch 0 (noch nicht gesetzt), versuche es aus data oder dem DOM:
+        // Falls totalPlayers noch 0, versuche es aus DOM oder Payload
         if (!totalPlayers || totalPlayers === 0) {
-            // data kann room_id/current_round/results enthalten; fallback auf DOM
             const dashboardData = document.getElementById('dashboard-data');
             if (dashboardData && dashboardData.dataset.totalPlayers) {
                 totalPlayers = parseInt(dashboardData.dataset.totalPlayers);
             } else if (data && data.room_id) {
-                // optional: könntest fetch(/api/room/...) probieren, aber vermeide Wartezeiten
+                // optional: könntest fetch(/api/room/...) probieren
             }
         }
 
-        // Wenn möglich, setze submittedCount auf den vollen Wert
+        // Set submittedCount vollständig (sicherer Fallback)
         submittedCount = totalPlayers || submittedCount;
 
         updateProgress();
         updateTimerDisplay();
         updateButtonState();
 
+        // Jetzt ist initial state definitiv geladen (falls vorher nicht)
+        initialStatusLoaded = true;
+
         // Prüfe ob letzte Runde
         checkIfLastRound();
     });
-    
+
     socket.on('next_round_started', function(data) {
         showNotification('Nächste Runde startet!', 'success');
         submittedCount = 0;
         updateProgress();
-        
-        // Button zurücksetzen
+
         const nextRoundBtn = document.getElementById('nextRoundBtn');
         if (nextRoundBtn) {
             nextRoundBtn.disabled = true;
@@ -344,13 +373,11 @@
             nextRoundBtn.classList.add('btn-disabled');
             nextRoundBtn.classList.remove('btn-pulse');
         }
-        
-        // Prüfe erneut ob letzte Runde
-        setTimeout(() => {
-            checkIfLastRound();
-        }, 500);
+
+        // Prüfe erneut ob letzte Runde (kleine Verzögerung)
+        setTimeout(() => checkIfLastRound(), 500);
     });
-    
+
     socket.on('game_finished', function(data) {
         showNotification('Spiel beendet!', 'info');
         setTimeout(() => {
