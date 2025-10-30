@@ -5,37 +5,179 @@
 {% endblock %}
 
 {% block body %}
-<div class="container">
-    <h1>Spielauswertung</h1>
+<div class="evaluation-container">
+    <h1 class="evaluation-title">📊 Spielauswertung</h1>
     
-    <div class="summary">
-        <h3>Dein Endergebnis:</h3>
-        <p>Endguthaben: <strong>{{ "%.2f"|format(player.coins) }} Coins</strong></p>
-        <p>Startguthaben: {{ "%.2f"|format(initial_coins) }} Coins</p>
-        <p>Gewinn/Verlust: <strong>{{ "%.2f"|format(player.coins - initial_coins) }} Coins</strong></p>
+    <!-- Persönliche Zusammenfassung -->
+    <div class="summary-section">
+        <h2>Dein persönliches Ergebnis</h2>
+        <div class="personal-stats">
+            <div class="stat-card">
+                <div class="stat-icon">💰</div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ "%.2f"|format(player.coins) }}</div>
+                    <div class="stat-label">Endguthaben</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📈</div>
+                <div class="stat-info">
+                    <div class="stat-value {% if (player.coins - initial_coins) > 0 %}positive{% elif (player.coins - initial_coins) < 0 %}negative{% endif %}">
+                        {{ "%+.2f"|format(player.coins - initial_coins) }}
+                    </div>
+                    <div class="stat-label">Gewinn/Verlust</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🎯</div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ player.game_history.contributions|sum if player.game_history.contributions else 0 | round(2) }}</div>
+                    <div class="stat-label">Gesamteinzahlung</div>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <!-- Gruppenvergleich -->
+    <div class="groups-comparison">
+        <h2>🏆 Gruppenvergleich</h2>
         
-    <div class="balance-history">
-        <h3>Guthabenverlauf:</h3>
-        <ul class="history-list">
-            {% for balance in player.game_history.balances %}
-            <li>Runde {{ loop.index }}: {{ "%.2f"|format(balance) }} Coins</li>
+        <div class="groups-ranking">
+            {% for group in room.groups %}
+            {% set group_total = [] %}
+            {% for player_id in group.player_ids %}
+                {% if player_id in players %}
+                    {% set _ = group_total.append(players[player_id].coins) %}
+                {% endif %}
             {% endfor %}
-        </ul>
+            {% set avg_balance = (group_total|sum / group_total|length) if group_total|length > 0 else 0 %}
+            
+            <div class="group-rank-item {% if player.id in group.player_ids %}your-group{% endif %}">
+                <div class="rank-position">#{{ loop.index }}</div>
+                <div class="group-info">
+                    <h3>Gruppe {{ group.group_number }}</h3>
+                    <div class="group-members">
+                        {% for member in group.members %}
+                        <span class="member-tag {% if member == player.name %}you{% endif %}">
+                            {% if not room.incognito_mode or player.is_leader or member == player.name %}
+                                {{ member }}{% if member == player.name %} (Du){% endif %}
+                            {% else %}
+                                Spieler {{ loop.index }}
+                            {% endif %}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="group-stats">
+                    <div class="group-stat">
+                        <span class="stat-label">Durchschn. Guthaben:</span>
+                        <span class="stat-value">{{ "%.2f"|format(avg_balance) }}</span>
+                    </div>
+                    <div class="group-stat">
+                        <span class="stat-label">Mitglieder:</span>
+                        <span class="stat-value">{{ group.members|length }}</span>
+                    </div>
+                </div>
+                {% if player.id in group.player_ids %}
+                <div class="your-group-badge">Deine Gruppe</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
     </div>
-    
-    <div style="margin-top: 30px; text-align: center;">
-        <a href="{{ url_for('index') }}" class="btn">Zurück zur Startseite</a>
+
+    <!-- Detaillierte Gruppenstatistiken -->
+    <div class="detailed-stats">
+        <h2>📈 Detaillierte Statistiken</h2>
+        
+        <div class="stats-grid">
+            <!-- Einzahlungsverlauf -->
+            <div class="stat-chart">
+                <h3>📊 Einzahlungsverlauf deiner Gruppe</h3>
+                <div class="chart-container">
+                    <canvas id="contributionChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+            
+            <!-- Guthabenverlauf -->
+            <div class="stat-chart">
+                <h3>💰 Guthabenverlauf</h3>
+                <div class="chart-container">
+                    <canvas id="balanceChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Vergleichstabelle -->
+        <div class="comparison-table">
+            <h3>📋 Gruppenvergleich - Detailliert</h3>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Gruppe</th>
+                            <th>Durchschn. Guthaben</th>
+                            <th>Durchschn. Einzahlung</th>
+                            <th>Gesamtgewinn</th>
+                            <th>Kooperationsrate</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for group in room.groups %}
+                        {% set group_balances = [] %}
+                        {% set group_contributions = [] %}
+                        {% for player_id in group.player_ids %}
+                            {% if player_id in players %}
+                                {% set p = players[player_id] %}
+                                {% set _ = group_balances.append(p.coins) %}
+                                {% set _ = group_contributions.extend(p.game_history.contributions) %}
+                            {% endif %}
+                        {% endfor %}
+                        {% set avg_balance = (group_balances|sum / group_balances|length) if group_balances|length > 0 else 0 %}
+                        {% set avg_contribution = (group_contributions|sum / group_contributions|length) if group_contributions|length > 0 else 0 %}
+                        {% set total_profit = group_balances|sum - (initial_coins * group_balances|length) %}
+                        {% set cooperation_rate = ((group_contributions|select('gt', 0)|list|length / group_contributions|length * 100) if group_contributions|length > 0 else 0) %}
+                        
+                        <tr class="{% if player.id in group.player_ids %}highlight-row{% endif %}">
+                            <td>
+                                <strong>Gruppe {{ group.group_number }}</strong>
+                                {% if player.id in group.player_ids %}<span class="you-indicator">(Deine Gruppe)</span>{% endif %}
+                            </td>
+                            <td>{{ "%.2f"|format(avg_balance) }}</td>
+                            <td>{{ "%.2f"|format(avg_contribution) }}</td>
+                            <td class="{% if total_profit > 0 %}positive{% elif total_profit < 0 %}negative{% endif %}">
+                                {{ "%+.2f"|format(total_profit) }}
+                            </td>
+                            <td>
+                                <div class="cooperation-bar" data-rate="{{ cooperation_rate }}">
+                                    <div class="cooperation-fill"></div>
+                                    <span class="cooperation-text">{{ "%.1f"|format(cooperation_rate) }}%</span>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aktionsbuttons -->
+    <div class="action-buttons">
+        <a href="{{ url_for('index') }}" class="btn btn-large">🏠 Zurück zur Startseite</a>
         {% if is_leader %}
-        <a href="#" class="btn btn-secondary">Detaillierte Auswertung (Leader)</a>
+        <button class="btn btn-large btn-secondary" onclick="exportData()">📥 Daten exportieren</button>
         {% endif %}
     </div>
 </div>
 
+<!-- Versteckte Daten für JavaScript -->
 <div id="evaluation-data" 
      data-initial-coins="{{ initial_coins }}"
      data-is-leader="{{ 'true' if is_leader else 'false' }}"
      data-balances="{{ player.game_history.balances | tojson | safe }}"
+     data-contributions="{{ player.game_history.contributions | tojson | safe }}"
+     data-rounds="{{ room.current_round }}"
      style="display: none;">
 </div>
 {% endblock %}
@@ -44,87 +186,237 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const evaluationData = document.getElementById('evaluation-data');
-        const balancesJson = evaluationData.dataset.balances;
+        const balances = JSON.parse(evaluationData.dataset.balances || '[]');
+        const contributions = JSON.parse(evaluationData.dataset.contributions || '[]');
+        const rounds = parseInt(evaluationData.dataset.rounds) || 1;
         
-        if (balancesJson) {
-            try {
-                const balances = JSON.parse(balancesJson);
-                renderBalanceChart(balances);
-            } catch (error) {
-                console.error('Fehler beim Parsen der Balance-Daten:', error);
-            }
-        }
+        // Rendere Charts
+        renderContributionChart(contributions);
+        renderBalanceChart(balances);
+        
+        // Animierte Zahlen für Statistiken
+        animateStatistics();
+        
+        // Kooperations-Balken initialisieren
+        initCooperationBars();
     });
     
+    function renderContributionChart(contributions) {
+        const canvas = document.getElementById('contributionChart');
+        if (!canvas || !contributions.length) return;
+        
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        const padding = 40;
+        
+        // Chart-Hintergrund
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Raster zeichnen
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        
+        // Horizontale Linien
+        for (let i = 0; i <= 5; i++) {
+            const y = padding + (i * (height - 2 * padding) / 5);
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(width - padding, y);
+            ctx.stroke();
+        }
+        
+        // Daten normalisieren
+        const maxContribution = Math.max(...contributions, 1);
+        const dataPoints = contributions.map((value, index) => ({
+            x: padding + (index / (contributions.length - 1 || 1)) * (width - 2 * padding),
+            y: height - padding - (value / maxContribution) * (height - 2 * padding)
+        }));
+        
+        // Linie zeichnen
+        ctx.strokeStyle = '#667eea';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        
+        dataPoints.forEach((point, index) => {
+            if (index === 0) {
+                ctx.moveTo(point.x, point.y);
+            } else {
+                ctx.lineTo(point.x, point.y);
+            }
+        });
+        ctx.stroke();
+        
+        // Punkte zeichnen
+        ctx.fillStyle = '#667eea';
+        dataPoints.forEach(point => {
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
+            ctx.fill();
+        });
+        
+        // Beschriftungen
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        
+        // X-Achse (Runden)
+        contributions.forEach((_, index) => {
+            const x = padding + (index / (contributions.length - 1 || 1)) * (width - 2 * padding);
+            ctx.fillText(`R${index + 1}`, x, height - padding + 20);
+        });
+        
+        // Y-Achse (Coins)
+        ctx.textAlign = 'right';
+        for (let i = 0; i <= 5; i++) {
+            const value = (i / 5) * maxContribution;
+            const y = height - padding - (i / 5) * (height - 2 * padding);
+            ctx.fillText(value.toFixed(1), padding - 5, y + 3);
+        }
+        
+        // Titel
+        ctx.textAlign = 'center';
+        ctx.fillText('Einzahlungen pro Runde', width / 2, 20);
+    }
+    
     function renderBalanceChart(balances) {
-        if (!balances || balances.length < 2) return;
+        const canvas = document.getElementById('balanceChart');
+        if (!canvas || !balances.length) return;
         
-        const container = document.querySelector('.balance-history');
-        if (!container) return;
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        const padding = 40;
         
-        // Einfaches Chart mit Canvas
-        const canvas = document.createElement('canvas');
-        canvas.width = 400;
-        canvas.height = 200;
-        canvas.className = 'balance-chart';
+        // Chart-Hintergrund
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.fillRect(0, 0, width, height);
         
-        container.appendChild(canvas);
+        // Raster zeichnen
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
         
-        const context = canvas.getContext('2d');
-        if (!context) return;
+        // Horizontale Linien
+        for (let i = 0; i <= 5; i++) {
+            const y = padding + (i * (height - 2 * padding) / 5);
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(width - padding, y);
+            ctx.stroke();
+        }
         
-        // Zeichne einfachen Linienchart
-        context.strokeStyle = '#667eea';
-        context.lineWidth = 3;
-        context.beginPath();
-        
+        // Daten normalisieren
         const maxBalance = Math.max(...balances);
         const minBalance = Math.min(...balances);
-        const range = maxBalance - minBalance || 1;
+        const range = Math.max(maxBalance - minBalance, 1);
         
-        const padding = 20;
-        const chartWidth = canvas.width - 2 * padding;
-        const chartHeight = canvas.height - 2 * padding;
+        const dataPoints = balances.map((value, index) => ({
+            x: padding + (index / (balances.length - 1 || 1)) * (width - 2 * padding),
+            y: height - padding - ((value - minBalance) / range) * (height - 2 * padding)
+        }));
         
-        balances.forEach((balance, index) => {
-            const x = padding + (index / (balances.length - 1)) * chartWidth;
-            const y = canvas.height - padding - ((balance - minBalance) / range) * chartHeight;
-            
+        // Linie zeichnen
+        ctx.strokeStyle = '#28a745';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        
+        dataPoints.forEach((point, index) => {
             if (index === 0) {
-                context.moveTo(x, y);
+                ctx.moveTo(point.x, point.y);
             } else {
-                context.lineTo(x, y);
+                ctx.lineTo(point.x, point.y);
             }
-            
-            // Punkte zeichnen
-            context.fillStyle = '#667eea';
-            context.beginPath();
-            context.arc(x, y, 4, 0, 2 * Math.PI);
-            context.fill();
+        });
+        ctx.stroke();
+        
+        // Punkte zeichnen
+        ctx.fillStyle = '#28a745';
+        dataPoints.forEach(point => {
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
+            ctx.fill();
         });
         
-        context.stroke();
+        // Beschriftungen
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
         
-        // Beschriftungen hinzufügen
-        context.fillStyle = '#ffffff';
-        context.font = '12px Arial';
-        context.textAlign = 'center';
-        
-        // X-Achse Beschriftung (Runden)
-        balances.forEach((balance, index) => {
-            const x = padding + (index / (balances.length - 1)) * chartWidth;
-            const y = canvas.height - 5;
-            context.fillText(`R${index + 1}`, x, y);
+        // X-Achse (Runden)
+        balances.forEach((_, index) => {
+            const x = padding + (index / (balances.length - 1 || 1)) * (width - 2 * padding);
+            ctx.fillText(`R${index + 1}`, x, height - padding + 20);
         });
         
-        // Y-Achse Beschriftung (Coins)
-        context.textAlign = 'right';
-        const steps = 5;
-        for (let i = 0; i <= steps; i++) {
-            const value = minBalance + (i / steps) * range;
-            const y = canvas.height - padding - (i / steps) * chartHeight;
-            context.fillText(value.toFixed(1), padding - 5, y + 3);
+        // Y-Achse (Coins)
+        ctx.textAlign = 'right';
+        for (let i = 0; i <= 5; i++) {
+            const value = minBalance + (i / 5) * range;
+            const y = height - padding - (i / 5) * (height - 2 * padding);
+            ctx.fillText(value.toFixed(1), padding - 5, y + 3);
         }
+        
+        // Titel
+        ctx.textAlign = 'center';
+        ctx.fillText('Guthabenverlauf', width / 2, 20);
+    }
+    
+    function animateStatistics() {
+        // Einfache Animation für die Statistik-Karten
+        const statCards = document.querySelectorAll('.stat-card .stat-value');
+        statCards.forEach(card => {
+            const originalText = card.textContent;
+            card.textContent = '0';
+            
+            let counter = 0;
+            const target = parseFloat(originalText.replace(/[^\d.-]/g, ''));
+            const increment = target / 50;
+            const duration = 1500;
+            const stepTime = duration / 50;
+            
+            const timer = setInterval(() => {
+                counter += increment;
+                if (counter >= target) {
+                    card.textContent = originalText;
+                    clearInterval(timer);
+                } else {
+                    if (originalText.includes('+') || originalText.includes('-')) {
+                        const sign = originalText.charAt(0);
+                        card.textContent = sign + Math.abs(counter).toFixed(2);
+                    } else {
+                        card.textContent = counter.toFixed(2);
+                    }
+                }
+            }, stepTime);
+        });
+    }
+    
+    function initCooperationBars() {
+        // Initialisiere Kooperations-Balken basierend auf data-Attributen
+        document.querySelectorAll('.cooperation-bar').forEach(bar => {
+            const rate = parseFloat(bar.getAttribute('data-rate'));
+            const fill = bar.querySelector('.cooperation-fill');
+            if (fill && !isNaN(rate)) {
+                fill.style.width = rate + '%';
+            }
+        });
+    }
+    
+    function exportData() {
+        // Einfacher Export (könnte erweitert werden für CSV/PDF)
+        const evaluationData = document.querySelector('.evaluation-container').innerHTML;
+        const blob = new Blob([evaluationData], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `spielauswertung_raum_{{ room.id }}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showNotification('Auswertung wurde heruntergeladen!', 'success');
     }
 </script>
 {% endblock %}
