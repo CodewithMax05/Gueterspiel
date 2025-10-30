@@ -103,6 +103,16 @@ class GameRoom:
                 self.status = "ready"
             else:
                 self.status = "waiting"
+
+        # Sende Status-Update an alle Clients
+        try:
+            socketio.emit('room_status_updated', {
+                'status': self.status,
+                'ready_count': sum(1 for pid in self.players if players[pid].ready and not players[pid].is_leader),
+                'total_players': len([pid for pid in self.players if not players[pid].is_leader])
+            }, room=self.id)
+        except Exception as e:
+            print(f"Fehler beim Senden des Status-Updates: {e}")
         
     def add_player(self, player_id):
         if player_id not in self.players:
@@ -854,6 +864,9 @@ def handle_join_room(data):
         sid_to_player[request.sid] = player_id
         player_sids[player_id].add(request.sid)
         room.update_status_based_on_conditions()
+
+        # Status aktualisieren und an alle senden
+        room.update_status_based_on_conditions()
         
         with game_timer_lock:
             timer = game_timers.get(room_id)
@@ -981,7 +994,7 @@ def handle_player_ready():
             'player_id': player_id,
             'ready': player.ready,
             'ready_count': ready_count,
-            'room_status': room.status  # Neuen Status mitsenden
+            'room_status': room.status
         }, room=room_id)
 
 @socketio.on('start_game')

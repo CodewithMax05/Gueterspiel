@@ -245,7 +245,6 @@
         }
     }
 
-
     function checkStartRequirements(roomId) {
         fetch(`/api/room/${roomId}/requirements`)
             .then(response => response.json())
@@ -267,13 +266,23 @@
                 console.error('Fehler beim Prüfen der Startvoraussetzungen:', error);
             });
     }
+
+    function checkRequirementsOnEvents() {
+        const roomData = document.getElementById('room-data');
+        const roomId = roomData.dataset.roomId;
+        const isLeader = roomData.dataset.isLeader === 'true';
+        
+        if (isLeader) {
+            checkStartRequirements(roomId);
+        }
+    }
     
     // WebSocket Events für game_room.html
     socket.on('player_joined', function(data) {
         updatePlayerList(data);
         updatePlayerCount();
-        // Status neu prüfen
         checkRoomStatus();
+        checkRequirementsOnEvents();
     });
     
     socket.on('player_left', function(data) {
@@ -281,7 +290,9 @@
         if (playerElement) {
             playerElement.remove();
         }
+
         updatePlayerCount();
+        checkRequirementsOnEvents();
     });
     
     socket.on('player_ready_changed', function(data) {
@@ -329,6 +340,8 @@
 
         // Raumstatus aktualisieren
         updateRoomStatus(data.room_status);
+
+        checkRequirementsOnEvents();
     });
 
     // WebSocket Event für entfernte Spieler
@@ -356,10 +369,20 @@
             showNotification(`Spieler ${data.player_name} wurde entfernt.`, 'info', 3000);
         }
         
-        // Prüfe Startbedingungen neu (für Leader)
-        if (isLeader) {
-            checkStartRequirements(roomId);
+        checkRequirementsOnEvents();
+    });
+
+    socket.on('room_status_updated', function(data) {
+        console.log('DEBUG: Raumstatus aktualisiert:', data);
+        updateRoomStatus(data.status);
+        
+        // Ready-Count aktualisieren
+        const readyCountElement = document.getElementById('readyCount');
+        if (readyCountElement) {
+            readyCountElement.textContent = data.ready_count;
         }
+        
+        checkRequirementsOnEvents();
     });
     
     socket.on('game_started', function(data) {
