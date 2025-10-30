@@ -147,6 +147,75 @@
             // Initialisiere Verbindungsstatus
             updateConnectionStatus(socket.connected);
         });
+
+        /* --- Gemeinsame Timer-Utilities (für game.html + leader_dashboard.html) --- */
+
+        // Globale Variablen für shared countdown (kann pro-Seite überschrieben werden)
+        window.sharedLocalInterval = null;
+
+        /**
+         * Berechnet verbleibende Sekunden anhand von server-seitiger start_time (ms) und duration (s).
+         * Wenn start_time fehlt, kann time_left (s) verwendet werden.
+         */
+        function computeServerTimeLeftFromServerTimer(timer) {
+            if (!timer) return null;
+            if (typeof timer.start_time !== 'undefined' && typeof timer.duration !== 'undefined') {
+                const nowMs = Date.now();
+                const endTimeMs = Number(timer.start_time) + Number(timer.duration) * 1000;
+                const remainingMs = endTimeMs - nowMs;
+                // Math.ceil: verhindert zu frühes Absinken der Anzeige
+                return Math.max(0, Math.ceil(remainingMs / 1000));
+            }
+            if (typeof timer.time_left !== 'undefined') {
+                return Number(timer.time_left);
+            }
+            return null;
+        }
+
+        /**
+         * Startet einen lokalen Countdown, der auf dem übergebenen serverSeconds basiert.
+         * - updateCb(seconds) wird bei jeder UI-Aktualisierung (mind. 200ms) gerufen.
+         * - expireCb() wird genau einmal beim Ablauf aufgerufen.
+         * Rückgabe: Objekt mit stop()-Methode.
+         */
+        function startSharedLocalCountdown(serverSeconds, updateCb, expireCb, tickMs = 200) {
+            if (window.sharedLocalInterval) {
+                clearInterval(window.sharedLocalInterval);
+                window.sharedLocalInterval = null;
+            }
+            const startMs = Date.now();
+            const startMsTotal = serverSeconds * 1000;
+
+            window.sharedLocalInterval = setInterval(() => {
+                const elapsed = Date.now() - startMs;
+                const remainingMs = startMsTotal - elapsed;
+                const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
+
+                if (typeof updateCb === 'function') updateCb(remainingSec, remainingMs);
+
+                if (remainingMs <= 0) {
+                    clearInterval(window.sharedLocalInterval);
+                    window.sharedLocalInterval = null;
+                    if (typeof expireCb === 'function') expireCb();
+                }
+            }, tickMs);
+
+            return {
+                stop: () => {
+                    if (window.sharedLocalInterval) {
+                        clearInterval(window.sharedLocalInterval);
+                        window.sharedLocalInterval = null;
+                    }
+                }
+            };
+        }
+
+        function stopSharedLocalCountdown() {
+            if (window.sharedLocalInterval) {
+                clearInterval(window.sharedLocalInterval);
+                window.sharedLocalInterval = null;
+            }
+        }
     </script>
     
     {% block scripts %}{% endblock %}

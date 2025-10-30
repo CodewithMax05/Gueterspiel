@@ -255,47 +255,12 @@
                         setTimeout(() => {
                             handleTimeExpiredOnce();
                         }, 100); 
-                    } else {
-                        // Starte lokalen Countdown (falls noch nicht aktiv)
-                        startLocalCountdown();
                     }
                 }
             })
             .catch(error => {
                 console.error('Fehler beim Laden des Timer-Status:', error);
             });
-    }
-
-    function startLocalCountdown() {
-        // stoppe evtl. existierenden Intervall
-        stopLocalCountdown();
-
-        // Speichere den Startwert für präzisere Berechnung
-        const countdownStartTime = Date.now();
-        const countdownStartValue = serverTimeLeft;
-
-        localCountdownInterval = setInterval(() => {
-            if (serverTimeLeft === null) return;
-            
-            // Berechne wie viel Zeit seit Start des Countdowns vergangen ist
-            const elapsedSinceStart = Math.floor((Date.now() - countdownStartTime) / 1000);
-            serverTimeLeft = Math.max(0, countdownStartValue - elapsedSinceStart);
-            
-            updateTimerDisplay();
-            
-            if (serverTimeLeft <= 0) {
-                stopLocalCountdown();
-                handleTimeExpiredOnce();
-                return;
-            }
-        }, 1000);
-    }
-
-    function stopLocalCountdown() {
-        if (localCountdownInterval) {
-            clearInterval(localCountdownInterval);
-            localCountdownInterval = null;
-        }
     }
 
     function handleTimeExpiredOnce() {
@@ -349,32 +314,36 @@
     // WebSocket Events für game.html
     socket.on('room_state_update', function(data) {
         console.log('DEBUG: room_state_update empfangen:', data);
-        
-        // Timer-Status verarbeiten
+
         if (data.timer) {
-            if (data.timer.start_time && data.timer.duration) {
-                // Berechne aktuelle Zeit basierend auf start_time
-                const nowMs = Date.now();
-                const elapsedSec = Math.floor((nowMs - Number(data.timer.start_time)) / 1000);
-                serverTimeLeft = Math.max(0, Number(data.timer.duration) - elapsedSec);
-            } else {
-                serverTimeLeft = Number(data.timer.time_left);
-            }
-            
+            // Nutze die zentrale Funktion
+            const computed = computeServerTimeLeftFromServerTimer(data.timer);
+            serverTimeLeft = computed;
             updateTimerDisplay();
-            
-            // Starte lokalen Countdown nur wenn Timer läuft und Zeit > 0
-            stopLocalCountdown();
+
+            // Stoppe alten lokalen Countdown
+            stopSharedLocalCountdown();
+
             if (data.timer.timer_running && serverTimeLeft > 0) {
-                startLocalCountdown();
+                // Starte lokalen Countdown und sorge dafür, dass handleTimeExpiredOnce() genau einmal ausgeführt wird
+                startSharedLocalCountdown(serverTimeLeft,
+                    (sec, ms) => {
+                        serverTimeLeft = sec;
+                        updateTimerDisplay();
+                    },
+                    () => {
+                        // Ablauf: nur einmal ausführen
+                        serverTimeLeft = 0;
+                        updateTimerDisplay();
+                        handleTimeExpiredOnce();
+                    }
+                );
             }
         }
-        
-        // Submitted count aktualisieren
+
         if (typeof data.submitted_count !== 'undefined') {
             const submittedNumber = document.getElementById('submittedNumber');
             const totalPlayersEl = document.getElementById('totalPlayers');
-            
             if (submittedNumber) submittedNumber.textContent = data.submitted_count;
             if (totalPlayersEl) totalPlayersEl.textContent = data.total_players;
         }
@@ -392,27 +361,27 @@
         }
     });
 
-    let lastServerUpdate = Date.now();
-    const SYNC_THRESHOLD = 2000; // 2 Sekunden
-
     socket.on('game_timer_update', function(data) {
-        lastServerUpdate = Date.now();
-        
         // Server ist authoritative
+        let computed = null;
         if (data.start_time && data.duration) {
-            const nowMs = Date.now();
-            const elapsedSec = Math.floor((nowMs - Number(data.start_time)) / 1000);
-            serverTimeLeft = Math.max(0, Number(data.duration) - elapsedSec);
+            computed = computeServerTimeLeftFromServerTimer(data);
         } else if (typeof data.time_left !== 'undefined') {
-            serverTimeLeft = Number(data.time_left);
+            computed = Number(data.time_left);
         }
 
-        updateTimerDisplay();
-        
-        // Resette lokalen Countdown und starte neu mit Server-Wert
-        stopLocalCountdown();
-        if (serverTimeLeft > 0) {
-            startLocalCountdown();
+        if (computed !== null) {
+            serverTimeLeft = computed;
+            updateTimerDisplay();
+
+            // restart local countdown to stay in sync
+            stopSharedLocalCountdown();
+            if (serverTimeLeft > 0) {
+                startSharedLocalCountdown(serverTimeLeft,
+                    (sec, ms) => { serverTimeLeft = sec; updateTimerDisplay(); },
+                    () => { serverTimeLeft = 0; updateTimerDisplay(); handleTimeExpiredOnce(); }
+                );
+            }
         }
     });
 
@@ -420,8 +389,6 @@
         console.log('DEBUG: game_time_out received');
         showNotification('Zeit abgelaufen! Beiträge werden automatisch eingereicht.', 'warning');
 
-        // Server hat Timeout – sichere clientseitige Auto-Submit
-        stopLocalCountdown();
         handleTimeExpiredOnce();
     });
 
