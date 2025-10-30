@@ -372,11 +372,13 @@ def stop_game_timer(room_id):
             print(f"Game-Timer für Raum {room_id} gestoppt")
 
 def get_or_create_game_timer(room_id, duration=60):
-    """Erstellt oder gibt existierenden Timer zurück"""
+    """Erstellt oder gibt existierenden Timer zurück - threadsicher"""
     with game_timer_lock:
         # Stoppe vorhandenen Timer falls vorhanden
         if room_id in game_timers:
-            game_timers[room_id].stop()
+            old_timer = game_timers[room_id]
+            if old_timer.is_running:
+                old_timer.stop()
             del game_timers[room_id]
         
         # Erstelle neuen Timer
@@ -436,11 +438,12 @@ def check_room_access(room_id, redirect_on_fail=True):
                 return redirect(url_for('join_game'))
             return room, None
             
-        if room.status in ["waiting", "ready"]:  # Geändert von nur "waiting"
+        # ERWEITERTE BEDINGUNG: Spieler kann Raum in mehr Status beitreten
+        if room.status in ["waiting", "ready", "playing", "round_results"]:  # "finished" ausgeschlossen
             room.add_player(player_id)
             print(f"DEBUG: Spieler {player_id} (mit matching room_id) wieder zu Raum {room_id} hinzugefügt")
         else:
-            print(f"DEBUG: Spieler {player_id} nicht in Raum {room_id} und Raum nicht im 'waiting' oder 'ready' Zustand")
+            print(f"DEBUG: Spieler {player_id} nicht in Raum {room_id} und Raum nicht im erlaubten Zustand")
             if redirect_on_fail:
                 return redirect(url_for('join_game'))
             return room, None
@@ -778,44 +781,36 @@ def handle_connect():
 @socketio.on('disconnect')
 def handle_disconnect():
     sid = request.sid
-    # 1) Aufräumen der SID-Mappings
     player_id = sid_to_player.pop(sid, None)
+    
     if player_id:
         player_sids[player_id].discard(sid)
 
-        # wenn noch andere Sockets dieses Players existieren -> nichts weiter tun
+        # Wenn noch andere Sockets dieses Players existieren -> nichts tun
         if player_sids[player_id]:
-            print(f"DEBUG: disconnect: player {player_id} hat noch offene Sockets, ignoriere kompletten Disconnect.")
+            print(f"Disconnect: Player {player_id} hat noch offene Sockets")
             return
 
-        # Keine Sockets mehr für diesen Player -> voll-Disconnect verarbeiten
+        # Vollständiger Disconnect
         player = players.get(player_id)
-        if player:
+        if player and not player.is_leader:  # Leader nicht automatisch entfernen
             room_id = player.room_id
             if room_id and room_id in rooms:
                 room = rooms[room_id]
-
-                # Leader nicht automatisch entfernen
-                if not player.is_leader:
-                    # Benachrichtige Raum über Disconnect
-                    emit('player_disconnected', {
-                        'player_id': player_id,
-                        'player_name': player.name
-                    }, room=room_id)
-
-                # Wenn keine normalen Spieler mehr vorhanden sind, optional aufräumen (wie vorher)
-                active_players = [pid for pid in room.players if pid in players and not players[pid].is_leader]
-                if len(active_players) == 0:
-                    # optionales Cleanup: z.B. Timer stoppen / Room behalten oder löschen
-                    pass
-
-    else:
-        # fallback: falls Mapping nicht vorhanden (ältere Sessions), versuche session basierte Logik
-        player_id = session.get('player_id')
-        if player_id:
-            # (Behalte die vorhandene session-basierte Logik oder merge oben)
-            print(f"DEBUG: disconnect (fallback session): {player_id}")
-            # ... (kürzen falls du die neue Logik vollständig nutzt)
+                
+                # Benachrichtige Raum über Disconnect
+                emit('player_disconnected', {
+                    'player_id': player_id,
+                    'player_name': player.name
+                }, room=room_id)
+                
+                # Entferne Spieler aus Raum
+                room.remove_player(player_id)
+                
+                # Aktualisiere Raumstatus
+                room.update_status_based_on_conditions()
+                
+                print(f"Spieler {player.name} vollständig disconnected von Raum {room_id}")
 
 @socketio.on('join_room')
 def handle_join_room(data):
@@ -895,54 +890,22 @@ def handle_join_room(data):
 
 @socketio.on('join_game_room')
 def handle_join_game_room(data):
-    """
-    Client sendet beim Laden der Spielseite: { room_id: ... }.
-    Wir lesen player_id aus session (gesetzt beim ursprünglichen join_room),
-    tragen den socket in die persönlichen- und Raum-Rooms ein und senden initialen Status.
-    """
+    """Client sendet beim Laden der Spielseite: { room_id: ... }"""
     room_id = data.get('room_id')
     player_id = session.get('player_id')
 
     if not player_id or player_id not in players:
-        # Kein gültiger Spieler in Session — nichts tun
         return
 
-    # Join personal room (damit emits an room=player_id beim Server beim Client landen)
     try:
+        # Join personal room
         join_room(player_id)
-
         sid_to_player[request.sid] = player_id
         player_sids[player_id].add(request.sid)
 
-        # Wenn ein Timer existiert, sende vollständiges Payload (start_time/duration/time_left)
-        timer = game_timers.get(room_id)
-        if timer and timer.is_running:
-            payload = {
-                'time_left': timer.get_time_left(),
-                'start_time': int(timer.start_time * 1000) if timer.start_time else None,
-                'duration': timer.duration,
-                'timer_running': True
-            }
-        else:
-            payload = {
-                'time_left': room.timer_remaining,
-                'start_time': None,
-                'duration': room.settings.get('round_duration', 60),
-                'timer_running': bool(room.timer_running)
-            }
-        emit('game_timer_update', payload, room=request.sid)
-    except Exception as e:
-        print(f"DEBUG: join_room(player) failed: {e}")
-
-    # Join game room (falls vorhanden)
-    if room_id and room_id in rooms:
-        try:
-            join_room(room_id)
-
-            sid_to_player[request.sid] = player_id
-            player_sids[player_id].add(request.sid)
-
-            # Wenn ein Timer existiert, sende vollständiges Payload (start_time/duration/time_left)
+        # Timer-Status basierend auf Raum-Daten
+        room = rooms.get(room_id)
+        if room:
             timer = game_timers.get(room_id)
             if timer and timer.is_running:
                 payload = {
@@ -959,19 +922,21 @@ def handle_join_game_room(data):
                     'timer_running': bool(room.timer_running)
                 }
             emit('game_timer_update', payload, room=request.sid)
-        except Exception as e:
-            print(f"DEBUG: join_room(room) failed: {e}")
 
-        room = rooms[room_id]
-        submitted_count = len(room.submitted_players)
-        total_players = len([pid for pid in room.players if not players[pid].is_leader])
+            # Sende aktuellen Submit-Status
+            submitted_count = len(room.submitted_players)
+            total_players = len([pid for pid in room.players if not players[pid].is_leader])
+            emit('contribution_submitted', {
+                'submitted_count': submitted_count,
+                'total_players': total_players
+            }, room=request.sid)
 
-        # Sende initialen Timer-Status / Submit-Status direkt an diesen Socket
-        emit('game_timer_update', {'time_left': room.timer_remaining}, room=request.sid)
-        emit('contribution_submitted', {
-            'submitted_count': submitted_count,
-            'total_players': total_players
-        }, room=request.sid)
+        # Join game room
+        if room_id:
+            join_room(room_id)
+
+    except Exception as e:
+        print(f"Fehler in join_game_room: {e}")
 
 @socketio.on('player_ready')
 def handle_player_ready():
@@ -1062,7 +1027,7 @@ def handle_submit_contribution(data):
 
     with finish_round_lock:
         # Falls die Runde bereits in Ergebnissen ist, IGNORIERE dieses Submit (zu spät)
-        if room.status == "round_results":
+        if room.status in ["round_results", "finished"]:
             # optional: sende ein kurzes Feedback an den Client
             try:
                 emit('error', {'message': 'Runde bereits beendet — Einreichung nicht mehr möglich'}, room=request.sid)
