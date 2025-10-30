@@ -288,6 +288,27 @@ class GameTimer:
         start_time = time.time()
         end_time = start_time + self.duration
 
+        with self.lock:
+            self.time_left = self.duration
+            if self.room_id in rooms:
+                room = rooms[self.room_id]
+                submitted_count = len(room.submitted_players)
+                total_players = len([pid for pid in room.players if not players.get(pid, Player(pid,'')).is_leader])
+                try:
+                    room.update_timer_status(self.time_left, submitted_count, total_players, True)
+                except Exception:
+                    pass
+                try:
+                    payload = {
+                        'time_left': self.time_left,
+                        'start_time': int(self.start_time * 1000),
+                        'duration': self.duration,
+                        'timer_running': True
+                    }
+                    self.socketio.emit('game_timer_update', payload, room=self.room_id)
+                except Exception as e:
+                    print(f"Fehler beim Senden des initialen Timer-Updates für Raum {self.room_id}: {e}")
+
         while self.is_running:
             with self.lock:
                 now = time.time()
@@ -522,7 +543,7 @@ def create_game():
         session['room_id'] = room_id
         session['is_leader'] = True
         
-        # TEST: 7 Test-Spieler mit Ready-Status erstellen
+        # TEST: 6 Test-Spieler mit Ready-Status erstellen
         test_names = ["Test-Spieler 1", "Test-Spieler 2", "Test-Spieler 3", "Test-Spieler 4", 
                      "Test-Spieler 5", "Test-Spieler 6"]
         for name in test_names:
@@ -535,6 +556,11 @@ def create_game():
             
             players[player_id] = player
             room.add_player(player_id)
+
+        socketio.emit('room_list_updated', {
+            'action': 'created',
+            'room_id': room_id
+        })
         
         return redirect(url_for('game_room', room_id=room_id))
     

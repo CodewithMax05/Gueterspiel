@@ -149,11 +149,6 @@
         // Raum betreten (wichtig vor möglichen Auto-Submits)
         socket.emit('join_game_room', { room_id: currentRoomId });
 
-        // Lade den aktuellen Timer-Status vom Server (authoritative)
-        if (!socket.connected) {
-            loadTimerStatus();
-        }
-
         // Submit Button Event
         const submitBtn = document.getElementById('submitBtn');
         if (submitBtn) {
@@ -275,15 +270,24 @@
         // stoppe evtl. existierenden Intervall
         stopLocalCountdown();
 
+        // Speichere den Startwert für präzisere Berechnung
+        const countdownStartTime = Date.now();
+        const countdownStartValue = serverTimeLeft;
+
         localCountdownInterval = setInterval(() => {
             if (serverTimeLeft === null) return;
+            
+            // Berechne wie viel Zeit seit Start des Countdowns vergangen ist
+            const elapsedSinceStart = Math.floor((Date.now() - countdownStartTime) / 1000);
+            serverTimeLeft = Math.max(0, countdownStartValue - elapsedSinceStart);
+            
+            updateTimerDisplay();
+            
             if (serverTimeLeft <= 0) {
                 stopLocalCountdown();
                 handleTimeExpiredOnce();
                 return;
             }
-            serverTimeLeft -= 1;
-            updateTimerDisplay();
         }, 1000);
     }
 
@@ -343,6 +347,39 @@
     }
 
     // WebSocket Events für game.html
+    socket.on('room_state_update', function(data) {
+        console.log('DEBUG: room_state_update empfangen:', data);
+        
+        // Timer-Status verarbeiten
+        if (data.timer) {
+            if (data.timer.start_time && data.timer.duration) {
+                // Berechne aktuelle Zeit basierend auf start_time
+                const nowMs = Date.now();
+                const elapsedSec = Math.floor((nowMs - Number(data.timer.start_time)) / 1000);
+                serverTimeLeft = Math.max(0, Number(data.timer.duration) - elapsedSec);
+            } else {
+                serverTimeLeft = Number(data.timer.time_left);
+            }
+            
+            updateTimerDisplay();
+            
+            // Starte lokalen Countdown nur wenn Timer läuft und Zeit > 0
+            stopLocalCountdown();
+            if (data.timer.timer_running && serverTimeLeft > 0) {
+                startLocalCountdown();
+            }
+        }
+        
+        // Submitted count aktualisieren
+        if (typeof data.submitted_count !== 'undefined') {
+            const submittedNumber = document.getElementById('submittedNumber');
+            const totalPlayersEl = document.getElementById('totalPlayers');
+            
+            if (submittedNumber) submittedNumber.textContent = data.submitted_count;
+            if (totalPlayersEl) totalPlayersEl.textContent = data.total_players;
+        }
+    });
+
     socket.on('contribution_submitted', function(data) {
         const submittedNumber = document.getElementById('submittedNumber');
         const totalPlayersEl = document.getElementById('totalPlayers');

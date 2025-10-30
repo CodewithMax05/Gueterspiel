@@ -96,12 +96,6 @@
         }
         
         loadAvailableRooms();
-        setInterval(() => {
-            // Poll nur, falls keine Socket-Verbindung besteht (Fallback)
-            if (!socket.connected) {
-                loadAvailableRooms();
-            }
-        }, 5000);
     });
     
     function loadAvailableRooms() {
@@ -281,6 +275,18 @@
     socket.on('error', function(data) {
         console.error('DEBUG: WebSocket Error:', data);
         showNotification(data.message, 'error');
+    });
+
+    socket.on('room_list_updated', function(data) {
+        console.log('DEBUG: Raumliste wurde aktualisiert:', data);
+        // Lade Raumliste neu
+        loadAvailableRooms();
+    });
+
+    // Optional: Auch bei room_status_updated die Liste aktualisieren
+    socket.on('room_status_updated', function(data) {
+        // Falls ein Raum seinen Status ändert, Liste aktualisieren
+        loadAvailableRooms();
     });
 </script>
 {% endblock %}

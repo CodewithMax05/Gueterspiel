@@ -108,6 +108,7 @@
     let totalPlayers = 0;
     let roomId = '';
     let isLastRound = false;
+    let localCountdownInterval = null;
     // Flag: true, wenn der initiale Status (fetch /api/room/.../dashboard_status) verarbeitet wurde
     let initialStatusLoaded = false;
 
@@ -304,7 +305,67 @@
             });
     }
 
+    function startLocalCountdown() {
+        stopLocalCountdown();
+        
+        const countdownStartTime = Date.now();
+        const countdownStartValue = serverTimeLeft;
+        
+        localCountdownInterval = setInterval(() => {
+            if (typeof serverTimeLeft !== 'number') return;
+            
+            const elapsedSinceStart = Math.floor((Date.now() - countdownStartTime) / 1000);
+            serverTimeLeft = Math.max(0, countdownStartValue - elapsedSinceStart);
+            
+            updateTimerDisplay();
+            updateButtonState();
+            
+            if (serverTimeLeft <= 0) {
+                stopLocalCountdown();
+            }
+        }, 1000);
+    }
+
+    function stopLocalCountdown() {
+        if (localCountdownInterval) {
+            clearInterval(localCountdownInterval);
+            localCountdownInterval = null;
+        }
+    }
+
     // SOCKET EVENTS
+    socket.on('room_state_update', function(data) {
+        console.log('DEBUG: Leader Dashboard - room_state_update empfangen:', data);
+        
+        // Timer-Status verarbeiten
+        if (data.timer) {
+            if (data.timer.start_time && data.timer.duration) {
+                const nowMs = Date.now();
+                const elapsedSec = Math.floor((nowMs - Number(data.timer.start_time)) / 1000);
+                serverTimeLeft = Math.max(0, Number(data.timer.duration) - elapsedSec);
+            } else {
+                serverTimeLeft = Number(data.timer.time_left);
+            }
+            
+            updateTimerDisplay();
+            updateButtonState();
+            
+            // Starte lokalen Countdown
+            stopLocalCountdown();
+            if (data.timer.timer_running && serverTimeLeft > 0) {
+                startLocalCountdown();
+            }
+        }
+        
+        // Submitted count aktualisieren
+        if (typeof data.submitted_count !== 'undefined') {
+            submittedCount = data.submitted_count;
+            updateProgress();
+        }
+        
+        initialStatusLoaded = true;
+    });
+
     let lastServerUpdate = Date.now();
     const SYNC_THRESHOLD = 2000; // 2 Sekunden
 
