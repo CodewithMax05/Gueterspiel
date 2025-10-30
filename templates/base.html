@@ -45,19 +45,23 @@
         console.log('DEBUG: Session-Daten - Raum:', currentRoomId, 'Spieler:', currentPlayerId, 'Leader:', isLeader);
         
         // Verbindungsstatus
+         let hasJoinedRoomViaSocket = false;
+
         socket.on('connect', function() {
             console.log('DEBUG: Mit Server verbunden, Socket ID:', socket.id);
             updateConnectionStatus(true);
-            
-            // Wenn wir in einem Raum sind, dem Raum erneut beitreten
-            if (currentRoomId) {
-                console.log('DEBUG: Automatischer Rejoin für Raum:', currentRoomId);
-                socket.emit('join_room_reconnect', { room_id: currentRoomId, player_id: currentPlayerId });
+
+            // nur einmal pro Socket verbindung joinen (debounce / flag)
+            if (currentRoomId && !hasJoinedRoomViaSocket) {
+                console.log('DEBUG: Sende join_game_room für Raum:', currentRoomId);
+                socket.emit('join_game_room', { room_id: currentRoomId });
+                hasJoinedRoomViaSocket = true;
             }
         });
         
         socket.on('disconnect', function() {
-            console.log('Verbindung zum Server getrennt');
+            // Auf disconnect zurücksetzen, so dass beim echten Reconnect neu gejoined werden kann
+            hasJoinedRoomViaSocket = false;
             updateConnectionStatus(false);
         });
 

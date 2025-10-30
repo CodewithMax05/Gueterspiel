@@ -290,7 +290,13 @@ class GameTimer:
                     except Exception:
                         pass
                     try:
-                        self.socketio.emit('game_timer_update', {'time_left': self.time_left}, room=self.room_id)
+                        payload = {
+                            'time_left': self.time_left,
+                            'start_time': int(self.start_time * 1000),  # ms seit epoch
+                            'duration': self.duration,
+                            'timer_running': True
+                        }
+                        self.socketio.emit('game_timer_update', payload, room=self.room_id)
                     except Exception as e:
                         print(f"Fehler beim Senden des Timer-Updates für Raum {self.room_id}: {e}")
 
@@ -892,45 +898,6 @@ def handle_join_game_room(data):
             'submitted_count': submitted_count,
             'total_players': total_players
         }, room=request.sid)
-
-@socketio.on('join_room_reconnect')
-def handle_join_room_reconnect(data):
-    """Handler für Spieler, die bereits im Raum sind und die Seite neu laden"""
-    room_id = data.get('room_id')
-    player_id = data.get('player_id')
-    
-    print(f"DEBUG: join_room_reconnect - Raum: {room_id}, Spieler: {player_id}")
-    
-    if not room_id or not player_id:
-        return
-    
-    # Stelle sicher, dass Raum und Spieler existieren
-    if room_id in rooms and player_id in players:
-        room = rooms[room_id]
-        player = players[player_id]
-        
-        # Nur Rejoin erlauben wenn der Spieler serverseitig wirklich zu diesem Raum gehört
-        # (d.h. er wurde nicht vom Leader entfernt)
-        if player.is_leader:
-            # Leader darf immer wieder beitreten
-            join_room(room_id)
-            print(f"DEBUG: Leader {player_id} rejoined Raum {room_id}")
-        else:
-            if player.room_id == room_id:
-                # Spieler war vorher Teil dieses Raums -> readd falls noch nicht vorhanden
-                # ÄNDERUNG: Erlaube Reconnect in beiden Status "waiting" und "ready"
-                if player_id not in room.players and room.status in ["waiting", "ready"]:
-                    room.add_player(player_id)
-                join_room(room_id)
-                print(f"DEBUG: Spieler {player_id} erneut Raum {room_id} beigetreten (validierte room_id)")
-            else:
-                # Spieler wurde offensichtlich entfernt oder session verwirrt -> sende Event zum redirect
-                print(f"DEBUG: Spieler {player_id} versucht reconnect für Raum {room_id}, aber player.room_id={player.room_id} -> reject")
-                # Wenn möglich, schicke ein individuelles Event an die Socket (sid)
-                socketio.emit('force_redirect', {
-                    'message': 'Sie wurden aus dem Raum entfernt oder Ihre Sitzung ist abgelaufen.'
-                }, room=request.sid)
-                return
 
 @socketio.on('player_ready')
 def handle_player_ready():
