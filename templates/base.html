@@ -35,7 +35,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script>
         // Globale Variablen
-        const socket = io();
+        const socket = io({
+            transports: ['websocket'],
+            upgrade: false
+        });
     
         // Session-Daten aus dem Template lesen
         const currentRoomId = '{{ session.get("room_id", "") }}';
@@ -45,13 +48,15 @@
         console.log('DEBUG: Session-Daten - Raum:', currentRoomId, 'Spieler:', currentPlayerId, 'Leader:', isLeader);
         
         // Verbindungsstatus
-         let hasJoinedRoomViaSocket = false;
+        let hasJoinedRoomViaSocket = false;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
 
         socket.on('connect', function() {
             console.log('DEBUG: Mit Server verbunden, Socket ID:', socket.id);
             updateConnectionStatus(true);
+            reconnectAttempts = 0;
 
-            // nur einmal pro Socket verbindung joinen (debounce / flag)
             if (currentRoomId && !hasJoinedRoomViaSocket) {
                 console.log('DEBUG: Sende join_game_room für Raum:', currentRoomId);
                 socket.emit('join_game_room', { room_id: currentRoomId });
@@ -59,15 +64,37 @@
             }
         });
         
-        socket.on('disconnect', function() {
-            // Auf disconnect zurücksetzen, so dass beim echten Reconnect neu gejoined werden kann
+        socket.on('disconnect', function(reason) {
+            console.log('DEBUG: Socket disconnected:', reason);
             hasJoinedRoomViaSocket = false;
             updateConnectionStatus(false);
+            
+            if (reason === 'io server disconnect') {
+                // Server hat Verbindung getrennt - sofort reconnecten
+                socket.connect();
+            } else {
+                // Automatischer Reconnect nach Verzögerung
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                reconnectAttempts++;
+                
+                if (reconnectAttempts <= maxReconnectAttempts) {
+                    setTimeout(() => {
+                        if (!socket.connected) {
+                            socket.connect();
+                        }
+                    }, delay);
+                }
+            }
         });
 
         socket.on('error', function(data) {
             console.error('WebSocket Error:', data);
             showNotification(data.message, 'error', 5000);
+        });
+
+        socket.on('connect_error', function(error) {
+            console.error('DEBUG: Socket connection error:', error);
+            updateConnectionStatus(false);
         });
         
         function updateConnectionStatus(connected) {

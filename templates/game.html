@@ -355,10 +355,14 @@
         }
     });
 
+    let lastServerUpdate = Date.now();
+    const SYNC_THRESHOLD = 2000; // 2 Sekunden
+
     socket.on('game_timer_update', function(data) {
+        lastServerUpdate = Date.now();
+        
         // Server ist authoritative
         if (data.start_time && data.duration) {
-            // start_time ist ms seit epoch
             const nowMs = Date.now();
             const elapsedSec = Math.floor((nowMs - Number(data.start_time)) / 1000);
             serverTimeLeft = Math.max(0, Number(data.duration) - elapsedSec);
@@ -367,13 +371,10 @@
         }
 
         updateTimerDisplay();
-
-        // Wenn Server 0 sendet: local countdown stoppen & auto-submit falls nötig
-        if (serverTimeLeft <= 0) {
-            stopLocalCountdown();
-            handleTimeExpiredOnce();
-        } else {
-            // starte/aktualisiere lokalen Countdown
+        
+        // Resette lokalen Countdown und starte neu mit Server-Wert
+        stopLocalCountdown();
+        if (serverTimeLeft > 0) {
             startLocalCountdown();
         }
     });

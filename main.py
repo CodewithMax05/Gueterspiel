@@ -903,37 +903,38 @@ def handle_join_game_room(data):
         sid_to_player[request.sid] = player_id
         player_sids[player_id].add(request.sid)
 
-        # Timer-Status basierend auf Raum-Daten
-        room = rooms.get(room_id)
-        if room:
-            timer = game_timers.get(room_id)
-            if timer and timer.is_running:
-                payload = {
-                    'time_left': timer.get_time_left(),
-                    'start_time': int(timer.start_time * 1000) if timer.start_time else None,
-                    'duration': timer.duration,
-                    'timer_running': True
-                }
-            else:
-                payload = {
-                    'time_left': room.timer_remaining,
-                    'start_time': None,
-                    'duration': room.settings.get('round_duration', 60),
-                    'timer_running': bool(room.timer_running)
-                }
-            emit('game_timer_update', payload, room=request.sid)
-
-            # Sende aktuellen Submit-Status
-            submitted_count = len(room.submitted_players)
-            total_players = len([pid for pid in room.players if not players[pid].is_leader])
-            emit('contribution_submitted', {
-                'submitted_count': submitted_count,
-                'total_players': total_players
-            }, room=request.sid)
-
         # Join game room
         if room_id:
             join_room(room_id)
+            
+            # Sende kompletten Raumstatus in einem Event
+            room = rooms.get(room_id)
+            if room:
+                # Timer-Status
+                timer = game_timers.get(room_id)
+                if timer and timer.is_running:
+                    payload = {
+                        'time_left': timer.get_time_left(),
+                        'start_time': int(timer.start_time * 1000) if timer.start_time else None,
+                        'duration': timer.duration,
+                        'timer_running': True
+                    }
+                else:
+                    payload = {
+                        'time_left': room.timer_remaining,
+                        'start_time': None,
+                        'duration': room.settings.get('round_duration', 60),
+                        'timer_running': bool(room.timer_running)
+                    }
+                
+                # Sende alles in einem kombinierten Event
+                emit('room_state_update', {
+                    'timer': payload,
+                    'submitted_count': len(room.submitted_players),
+                    'total_players': len([pid for pid in room.players if not players[pid].is_leader]),
+                    'room_status': room.status,
+                    'current_round': room.current_round
+                }, room=request.sid)
 
     except Exception as e:
         print(f"Fehler in join_game_room: {e}")

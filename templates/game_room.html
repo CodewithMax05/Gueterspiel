@@ -161,13 +161,6 @@
         // Prüfe Startbedingungen (nur für Leader)
         if (isLeader) {
             checkStartRequirements(roomId);
-
-            setInterval(() => {
-                // Poll nur als Fallback, wenn kein Socket verbunden ist
-                if (!socket.connected) {
-                    checkStartRequirements(roomId);
-                }
-            }, 2000);
         }
         
         // Bereit-Button Event mit Debugging

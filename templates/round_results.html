@@ -119,13 +119,6 @@
     document.addEventListener('DOMContentLoaded', function() {
         const resultsData = document.getElementById('results-data');
         const roomId = resultsData.dataset.roomId;
-        
-        // Prüfe alle 3 Sekunden ob nächste Runde startet
-        setInterval(() => {
-            if (!socket.connected) {
-                checkGameStatus(roomId);
-            }
-        }, 3000);
     });
     
     function checkGameStatus(roomId) {

@@ -148,13 +148,6 @@
 
         // Lade gespeicherten Status beim Initialisieren (authoritative)
         loadSavedStatus();
-
-        setInterval(() => {
-            // Poll nur, falls Socket nicht verbunden ist (Fallback).
-            if (!socket.connected) {
-                checkGameStatus(roomId);
-            }
-        }, 3000);
     });
 
     function loadSavedStatus() {
@@ -312,26 +305,28 @@
     }
 
     // SOCKET EVENTS
-    // Wichtig: Ignoriere socket->timer updates *bis* initialStatusLoaded==true (sonst Race)
-    socket.on('game_timer_update', function(data) {
-        if (!initialStatusLoaded) {
-            // debug: wir haben noch nicht die fetch-Antwort erhalten -> ignorieren
-            console.log('IGNORING socket game_timer_update until initial status loaded');
-            return;
-        }
+    let lastServerUpdate = Date.now();
+    const SYNC_THRESHOLD = 2000; // 2 Sekunden
 
-        // Wenn server start_time & duration sendet -> berechne lokal genau
+    socket.on('game_timer_update', function(data) {
+        lastServerUpdate = Date.now();
+        
+        // Server ist authoritative
         if (data.start_time && data.duration) {
-            // start_time ist ms seit epoch
             const nowMs = Date.now();
             const elapsedSec = Math.floor((nowMs - Number(data.start_time)) / 1000);
             serverTimeLeft = Math.max(0, Number(data.duration) - elapsedSec);
         } else if (typeof data.time_left !== 'undefined') {
             serverTimeLeft = Number(data.time_left);
         }
-        
+
         updateTimerDisplay();
-        updateButtonState();
+        
+        // Resette lokalen Countdown und starte neu mit Server-Wert
+        stopLocalCountdown();
+        if (serverTimeLeft > 0) {
+            startLocalCountdown();
+        }
     });
 
     socket.on('contribution_submitted', function(data) {
