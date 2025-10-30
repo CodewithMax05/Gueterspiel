@@ -36,6 +36,8 @@ socketio = SocketIO(
 # Datenstrukturen zur Verwaltung der Räume und Spieler
 rooms = {}
 players = {}
+sid_to_player = {}                      # request.sid -> player_id
+player_sids = defaultdict(set) 
 
 class GameRoom:
     def __init__(self, room_id, leader_id, settings):
@@ -765,30 +767,45 @@ def handle_connect():
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    player_id = session.get('player_id')
-    if player_id and player_id in players:
-        player = players[player_id]
-        room_id = player.room_id
-        
-        if room_id and room_id in rooms:
-            room = rooms[room_id]
-            
-            # Leader wird nicht aus Raum entfernt
-            if not player.is_leader:
-                # Spieler bleibt im Raum für Reconnect-Möglichkeit
-                print(f"DEBUG: Spieler {player.name} disconnected, bleibt im Raum für Reconnect")
-                
-                # Optional: Benachrichtige andere Spieler über Disconnect
-                emit('player_disconnected', {
-                    'player_id': player_id, 
-                    'player_name': player.name
-                }, room=room_id)
-                
-            # Raum nur löschen wenn keine Spieler mehr (außer Leader)
-            active_players = [pid for pid in room.players if not players[pid].is_leader]
-            if len(active_players) == 0:
-                # Lösche Raum nach 5 Minuten Inaktivität
-                pass  # Raum bleibt für Leader erhalten
+    sid = request.sid
+    # 1) Aufräumen der SID-Mappings
+    player_id = sid_to_player.pop(sid, None)
+    if player_id:
+        player_sids[player_id].discard(sid)
+
+        # wenn noch andere Sockets dieses Players existieren -> nichts weiter tun
+        if player_sids[player_id]:
+            print(f"DEBUG: disconnect: player {player_id} hat noch offene Sockets, ignoriere kompletten Disconnect.")
+            return
+
+        # Keine Sockets mehr für diesen Player -> voll-Disconnect verarbeiten
+        player = players.get(player_id)
+        if player:
+            room_id = player.room_id
+            if room_id and room_id in rooms:
+                room = rooms[room_id]
+
+                # Leader nicht automatisch entfernen
+                if not player.is_leader:
+                    # Benachrichtige Raum über Disconnect
+                    emit('player_disconnected', {
+                        'player_id': player_id,
+                        'player_name': player.name
+                    }, room=room_id)
+
+                # Wenn keine normalen Spieler mehr vorhanden sind, optional aufräumen (wie vorher)
+                active_players = [pid for pid in room.players if pid in players and not players[pid].is_leader]
+                if len(active_players) == 0:
+                    # optionales Cleanup: z.B. Timer stoppen / Room behalten oder löschen
+                    pass
+
+    else:
+        # fallback: falls Mapping nicht vorhanden (ältere Sessions), versuche session basierte Logik
+        player_id = session.get('player_id')
+        if player_id:
+            # (Behalte die vorhandene session-basierte Logik oder merge oben)
+            print(f"DEBUG: disconnect (fallback session): {player_id}")
+            # ... (kürzen falls du die neue Logik vollständig nutzt)
 
 @socketio.on('join_room')
 def handle_join_room(data):
@@ -834,6 +851,8 @@ def handle_join_room(data):
     # Spieler zum Raum hinzufügen
     if room.add_player(player_id):
         join_room(room_id)
+        sid_to_player[request.sid] = player_id
+        player_sids[player_id].add(request.sid)
         room.update_status_based_on_conditions()
         
         with game_timer_lock:
@@ -878,6 +897,27 @@ def handle_join_game_room(data):
     # Join personal room (damit emits an room=player_id beim Server beim Client landen)
     try:
         join_room(player_id)
+
+        sid_to_player[request.sid] = player_id
+        player_sids[player_id].add(request.sid)
+
+        # Wenn ein Timer existiert, sende vollständiges Payload (start_time/duration/time_left)
+        timer = game_timers.get(room_id)
+        if timer and timer.is_running:
+            payload = {
+                'time_left': timer.get_time_left(),
+                'start_time': int(timer.start_time * 1000) if timer.start_time else None,
+                'duration': timer.duration,
+                'timer_running': True
+            }
+        else:
+            payload = {
+                'time_left': room.timer_remaining,
+                'start_time': None,
+                'duration': room.settings.get('round_duration', 60),
+                'timer_running': bool(room.timer_running)
+            }
+        emit('game_timer_update', payload, room=request.sid)
     except Exception as e:
         print(f"DEBUG: join_room(player) failed: {e}")
 
@@ -885,6 +925,27 @@ def handle_join_game_room(data):
     if room_id and room_id in rooms:
         try:
             join_room(room_id)
+
+            sid_to_player[request.sid] = player_id
+            player_sids[player_id].add(request.sid)
+
+            # Wenn ein Timer existiert, sende vollständiges Payload (start_time/duration/time_left)
+            timer = game_timers.get(room_id)
+            if timer and timer.is_running:
+                payload = {
+                    'time_left': timer.get_time_left(),
+                    'start_time': int(timer.start_time * 1000) if timer.start_time else None,
+                    'duration': timer.duration,
+                    'timer_running': True
+                }
+            else:
+                payload = {
+                    'time_left': room.timer_remaining,
+                    'start_time': None,
+                    'duration': room.settings.get('round_duration', 60),
+                    'timer_running': bool(room.timer_running)
+                }
+            emit('game_timer_update', payload, room=request.sid)
         except Exception as e:
             print(f"DEBUG: join_room(room) failed: {e}")
 

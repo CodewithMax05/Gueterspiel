@@ -121,7 +121,11 @@
         const roomId = resultsData.dataset.roomId;
         
         // Prüfe alle 3 Sekunden ob nächste Runde startet
-        setInterval(() => checkGameStatus(roomId), 3000);
+        setInterval(() => {
+            if (!socket.connected) {
+                checkGameStatus(roomId);
+            }
+        }, 3000);
     });
     
     function checkGameStatus(roomId) {

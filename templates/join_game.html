@@ -96,7 +96,12 @@
         }
         
         loadAvailableRooms();
-        setInterval(loadAvailableRooms, 5000);
+        setInterval(() => {
+            // Poll nur, falls keine Socket-Verbindung besteht (Fallback)
+            if (!socket.connected) {
+                loadAvailableRooms();
+            }
+        }, 5000);
     });
     
     function loadAvailableRooms() {
