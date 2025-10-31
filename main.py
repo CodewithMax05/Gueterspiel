@@ -7,9 +7,9 @@ import uuid
 import time
 import secrets
 import string
-from datetime import datetime, timedelta
+import math
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_socketio import SocketIO, emit, join_room
 from collections import defaultdict
 from threading import Lock 
 
@@ -291,7 +291,7 @@ class GameTimer:
         while self.is_running:
             with self.lock:
                 now = time.time()
-                self.time_left = int(max(0, end_time - now))
+                self.time_left = math.ceil(max(0, end_time - now))
 
                 if self.room_id in rooms:
                     room = rooms[self.room_id]
@@ -348,9 +348,11 @@ class GameTimer:
     def get_time_left(self):
         with self.lock:
             if not self.is_running or not self.start_time:
-                return self.duration
+                return self.duration # Oder self.time_left, je nach gewünschtem Verhalten bei "Pause"
+            
             elapsed = time.time() - self.start_time
-            return max(0, self.duration - int(elapsed))
+
+            return int(max(0, self.duration - elapsed))
         
 # Globale Variablen für Game-Timer
 game_timers = {}
@@ -439,10 +441,19 @@ def check_room_access(room_id, redirect_on_fail=True):
             return room, None
             
         # ERWEITERTE BEDINGUNG: Spieler kann Raum in mehr Status beitreten
-        if room.status in ["waiting", "ready", "playing", "round_results"]:  # "finished" ausgeschlossen
-            room.add_player(player_id)
-            print(f"DEBUG: Spieler {player_id} (mit matching room_id) wieder zu Raum {room_id} hinzugefügt")
+        # KORREKTUR: "finished" HINZUGEFÜGT
+        if room.status in ["waiting", "ready", "playing", "round_results", "finished"]:
+            
+            # Nur wieder hinzufügen, wenn das Spiel noch NICHT beendet ist
+            if room.status != "finished":
+                 room.add_player(player_id)
+                 print(f"DEBUG: Spieler {player_id} (mit matching room_id) wieder zu Raum {room_id} hinzugefügt")
+            else:
+                 # Zugriff auf die Auswertung gewähren, ohne Spieler wieder hinzuzufügen
+                 print(f"DEBUG: Spieler {player_id} (mit matching room_id) erhält Zugriff auf beendeten Raum {room_id}")
+        
         else:
+            # Dieser 'else'-Block wird jetzt nur noch bei ungültigen Zuständen getroffen
             print(f"DEBUG: Spieler {player_id} nicht in Raum {room_id} und Raum nicht im erlaubten Zustand")
             if redirect_on_fail:
                 return redirect(url_for('join_game'))

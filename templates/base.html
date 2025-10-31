@@ -163,7 +163,9 @@
                 const nowMs = Date.now();
                 const endTimeMs = Number(timer.start_time) + Number(timer.duration) * 1000;
                 const remainingMs = endTimeMs - nowMs;
-                // Math.ceil: verhindert zu frühes Absinken der Anzeige
+                
+                // KORRIGIERTE ZEILE:
+                // Math.floor: Passt zur serverseitigen int()-Trunkierung (Abrunden)
                 return Math.max(0, Math.ceil(remainingMs / 1000));
             }
             if (typeof timer.time_left !== 'undefined') {
@@ -184,19 +186,39 @@
                 window.sharedLocalInterval = null;
             }
             const startMs = Date.now();
+            // Wichtig: Wir nehmen die Millisekunden vom Server als Basis (z.B. 10.000ms)
             const startMsTotal = serverSeconds * 1000;
 
             window.sharedLocalInterval = setInterval(() => {
                 const elapsed = Date.now() - startMs;
                 const remainingMs = startMsTotal - elapsed;
+
+                // --- KORREKTUR 1: Flimmern stoppen ---
+                // Zurück zu Math.ceil.
+                // Jetzt sind Server (math.ceil) und Client-Interpolation (Math.ceil)
+                // wieder konsistent. Das Flimmern hört auf.
                 const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
 
-                if (typeof updateCb === 'function') updateCb(remainingSec, remainingMs);
+                if (typeof updateCb === 'function') {
+                    updateCb(remainingSec, remainingMs);
+                }
 
+                // --- KORREKTUR 2: "Stoppt bei 1" beheben ---
                 if (remainingMs <= 0) {
                     clearInterval(window.sharedLocalInterval);
                     window.sharedLocalInterval = null;
-                    if (typeof expireCb === 'function') expireCb();
+                    
+                    // ZWINGE die UI, die "0" anzuzeigen,
+                    // bevor der expireCb das Overlay startet.
+                    if (typeof updateCb === 'function') {
+                        updateCb(0, 0);
+                    }
+                    
+                    // Gib dem Browser 10ms Zeit, die "0" zu rendern,
+                    // BEVOR der expireCb (handleTimeExpiredOnce) aufgerufen wird.
+                    if (typeof expireCb === 'function') {
+                        setTimeout(expireCb, 10);
+                    }
                 }
             }, tickMs);
 
