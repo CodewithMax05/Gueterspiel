@@ -109,7 +109,6 @@
     let roomId = '';
     let isLastRound = false;
     let localCountdownInterval = null;
-    // Flag: true, wenn der initiale Status (fetch /api/room/.../dashboard_status) verarbeitet wurde
     let initialStatusLoaded = false;
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -146,62 +145,7 @@
                 socket.emit('next_round');
             });
         }
-
-        // Lade gespeicherten Status beim Initialisieren (authoritative)
-        loadSavedStatus();
     });
-
-    function loadSavedStatus() {
-        const dashboardData = document.getElementById('dashboard-data');
-        const roomIdLocal = dashboardData.dataset.roomId;
-
-        fetch(`/api/room/${roomIdLocal}/dashboard_status`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Server-Werte übernehmen (authoritative)
-                    serverTimeLeft = Number(data.time_left);
-                    submittedCount = Number(data.submitted_count) || 0;
-                    totalPlayers = Number(data.total_players) || totalPlayers;
-
-                    // Absicherung: Wenn Timer nicht läuft und der Raum im 'round_results' Status ist,
-                    // dann ist die Zeit 0 (Runde beendet).
-                    if (data.timer_running === false && data.status === 'round_results') {
-                        serverTimeLeft = 0;
-                    }
-
-                    // Aktualisiere UI (JETZT)
-                    updateTimerDisplay();
-                    updateButtonState();
-                    updateProgress();
-
-                    // Markiere: initialer Status ist geladen — ab jetzt dürfen socket-Events die UI verändern
-                    initialStatusLoaded = true;
-
-                    console.log('DEBUG: Geladener Status - Zeit:', serverTimeLeft,
-                        'Eingereicht:', submittedCount, 'von', totalPlayers);
-                } else {
-                    // Fallback-Initialisierung
-                    initializeTimer();
-                    initialStatusLoaded = true;
-                }
-            })
-            .catch(error => {
-                console.error('Fehler beim Laden des Dashboard-Status:', error);
-                // Fallback: Timer mit Standardwerten initialisieren
-                initializeTimer();
-                initialStatusLoaded = true;
-            });
-    }
-
-    function initializeTimer() {
-        // Nur als Fallback, wenn Server-Antwort fehlschlägt
-        if (typeof serverTimeLeft === 'undefined') {
-            serverTimeLeft = 60;
-        }
-        updateTimerDisplay();
-        updateButtonState();
-    }
 
     function updateTimerDisplay() {
         const timerElement = document.getElementById('timer');
@@ -325,6 +269,9 @@
 
         if (typeof data.submitted_count !== 'undefined') {
             submittedCount = data.submitted_count;
+            if (typeof data.total_players !== 'undefined') {
+                totalPlayers = data.total_players;
+            }
             updateProgress();
         }
 

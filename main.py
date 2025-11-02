@@ -942,12 +942,21 @@ def handle_join_game_room(data):
                         'duration': room.settings.get('round_duration', 60),
                         'timer_running': bool(room.timer_running)
                     }
+
+                if room.status == 'round_results':
+                    # Runde ist vorbei: Verwende die gespeicherten Zähler
+                    submitted_c = getattr(room, 'submitted_count', len(room.submitted_players))
+                    total_p = getattr(room, 'total_players', len([pid for pid in room.players if not players[pid].is_leader]))
+                else:
+                    # Runde läuft: Verwende die Live-Zähler
+                    submitted_c = len(room.submitted_players)
+                    total_p = len([pid for pid in room.players if not players[pid].is_leader])
                 
                 # Sende alles in einem kombinierten Event
                 emit('room_state_update', {
                     'timer': payload,
-                    'submitted_count': len(room.submitted_players),
-                    'total_players': len([pid for pid in room.players if not players[pid].is_leader]),
+                    'submitted_count': submitted_c,
+                    'total_players': total_p,
                     'room_status': room.status,
                     'current_round': room.current_round
                 }, room=request.sid)
@@ -1173,13 +1182,6 @@ def finish_round(room_id):
         for pid in room.players:
             if pid in players:
                 p = players[pid]
-                try:
-                    p.game_history.setdefault('contributions', []).append(
-                        p.current_contribution if p.current_contribution is not None else 0
-                    )
-                    p.game_history.setdefault('balances', []).append(p.coins)
-                except Exception:
-                    pass
                 # setze auf None, wie zuvor (wird in reset_for_next_round wieder auf 0 gesetzt)
                 p.current_contribution = None
 
