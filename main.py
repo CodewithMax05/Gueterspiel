@@ -48,6 +48,7 @@ class GameRoom:
         self.status = "waiting"  # waiting, ready, playing, round_results, finished
         self.current_round = 0
         self.groups = []
+        self.group_cooperation = {} 
         self.round_start_time = None
         self.submitted_players = set()
         self.round_results = None
@@ -204,8 +205,19 @@ class GameRoom:
         for group in self.groups:
             # 1) Zuerst gesamte Gruppensumme berechnen
             total_contribution = 0
+            cooperative_players = 0
+
             for player_id in group['player_ids']:
                 total_contribution += players[player_id].current_contribution
+                if players[player_id].current_contribution > 0:
+                    cooperative_players += 1
+
+            # Berechne Kooperationsquote für diese Gruppe
+            cooperation_rate = (cooperative_players / len(group['player_ids'])) * 100 if len(group['player_ids']) > 0 else 0
+
+            if self.current_round not in self.group_cooperation:
+                self.group_cooperation[self.current_round] = {}
+            self.group_cooperation[self.current_round][group['group_number']] = cooperation_rate
 
             # Payout pro Spieler (basierend auf vollständiger Gruppensumme)
             payout_per_player = (total_contribution * multiplier) / len(group['player_ids']) if len(group['player_ids']) > 0 else 0
@@ -244,6 +256,7 @@ class GameRoom:
                 'total_contribution': round(total_contribution, 2),
                 'total_pool': round(total_contribution * multiplier, 2),
                 'payout_per_player': round(payout_per_player, 2),
+                'cooperation_rate': round(cooperation_rate, 2),
                 'players': group_players
             })
 
