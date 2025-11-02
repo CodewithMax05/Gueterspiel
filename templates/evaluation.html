@@ -40,64 +40,16 @@
     </div>
     {% endif %}
 
-    <!-- Gruppenvergleich -->
-    <div class="groups-comparison">
-        <h2>Gruppenvergleich</h2>
-        
-        <div class="groups-ranking">
-            {% for group in room.groups %}
-            {% set group_total = [] %}
-            {% for player_id in group.player_ids %}
-                {% if player_id in players %}
-                    {% set _ = group_total.append(players[player_id].coins) %}
-                {% endif %}
-            {% endfor %}
-            {% set avg_balance = (group_total|sum / group_total|length) if group_total|length > 0 else 0 %}
-            
-            <div class="group-rank-item {% if player.id in group.player_ids %}your-group{% endif %}">
-                <div class="rank-position">#{{ loop.index }}</div>
-                <div class="group-info">
-                    <h3>Gruppe {{ group.group_number }}</h3>
-                    <div class="group-members">
-                        {% for member in group.members %}
-                        <span class="member-tag {% if member == player.name %}you{% endif %}">
-                            {% if not room.incognito_mode or player.is_leader or member == player.name %}
-                                {{ member }}{% if member == player.name %} (Du){% endif %}
-                            {% else %}
-                                Spieler {{ loop.index }}
-                            {% endif %}
-                        </span>
-                        {% endfor %}
-                    </div>
-                </div>
-                <div class="group-stats">
-                    <div class="group-stat">
-                        <span class="stat-label">Durchschn. Guthaben:</span>
-                        <span class="stat-value">{{ "%.2f"|format(avg_balance) }}</span>
-                    </div>
-                    <div class="group-stat">
-                        <span class="stat-label">Mitglieder:</span>
-                        <span class="stat-value">{{ group.members|length }}</span>
-                    </div>
-                </div>
-                {% if player.id in group.player_ids %}
-                <div class="your-group-badge">Deine Gruppe</div>
-                {% endif %}
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-
     <!-- Detaillierte Gruppenstatistiken -->
-    <div class="detailed-stats">
-        <h2>Detaillierte Statistiken</h2>
-        
+    <div class="detailed-stats">        
         <!-- Diagramme nur für Spieler, nicht für Leader -->
         {% if not is_leader %}
+        <h2>Detaillierte Statistiken</h2>
+
         <div class="stats-grid">
             <!-- Einzahlungsverlauf -->
             <div class="stat-chart">
-                <h3>📊 Einzahlungsverlauf deiner Gruppe</h3>
+                <h3>Einzahlungsverlauf deiner Gruppe</h3>
                 <div class="chart-container">
                     <canvas id="contributionChart" width="400" height="200"></canvas>
                 </div>
@@ -105,7 +57,7 @@
             
             <!-- Guthabenverlauf -->
             <div class="stat-chart">
-                <h3>💰 Guthabenverlauf</h3>
+                <h3>Guthabenverlauf</h3>
                 <div class="chart-container">
                     <canvas id="balanceChart" width="400" height="200"></canvas>
                 </div>
@@ -113,13 +65,14 @@
         </div>
         {% endif %}
         
-        <!-- Vergleichstabelle -->
+        <!-- Vergleichstabelle mit Rang -->
         <div class="comparison-table">
-            <h3>Gruppenvergleich</h3>
+            <h2>Gruppenvergleich</h2>
             <div class="table-container">
                 <table>
                     <thead>
                         <tr>
+                            <th>Rang</th>
                             <th>Gruppe</th>
                             <th>Durchschn. Guthaben</th>
                             <th>Durchschn. Einzahlung</th>
@@ -128,25 +81,41 @@
                         </tr>
                     </thead>
                     <tbody>
+                        {% set groups_with_total = [] %}
                         {% for group in room.groups %}
-                        {% set group_balances = [] %}
-                        {% set group_contributions = [] %}
-                        {% for player_id in group.player_ids %}
-                            {% if player_id in players %}
-                                {% set p = players[player_id] %}
-                                {% set _ = group_balances.append(p.coins) %}
-                                {% set _ = group_contributions.extend(p.game_history.contributions) %}
-                            {% endif %}
+                            {% set group_balances = [] %}
+                            {% set group_contributions = [] %}
+                            {% for player_id in group.player_ids %}
+                                {% if player_id in players %}
+                                    {% set p = players[player_id] %}
+                                    {% set _ = group_balances.append(p.coins) %}
+                                    {% set _ = group_contributions.extend(p.game_history.contributions) %}
+                                {% endif %}
+                            {% endfor %}
+                            {% set total_wealth = group_balances|sum %}
+                            {% set _ = groups_with_total.append({
+                                'group': group,
+                                'total_wealth': total_wealth,
+                                'group_balances': group_balances,
+                                'group_contributions': group_contributions
+                            }) %}
                         {% endfor %}
+                        
+                        {% set sorted_groups = groups_with_total|sort(attribute='total_wealth', reverse=true) %}
+                        
+                        {% for group_data in sorted_groups %}
+                        {% set group = group_data.group %}
+                        {% set group_balances = group_data.group_balances %}
+                        {% set group_contributions = group_data.group_contributions %}
                         {% set avg_balance = (group_balances|sum / group_balances|length) if group_balances|length > 0 else 0 %}
                         {% set avg_contribution = (group_contributions|sum / group_contributions|length) if group_contributions|length > 0 else 0 %}
                         {% set total_profit = group_balances|sum - (initial_coins * group_balances|length) %}
                         {% set cooperation_rate = ((group_contributions|select('gt', 0)|list|length / group_contributions|length * 100) if group_contributions|length > 0 else 0) %}
                         
                         <tr class="{% if player.id in group.player_ids %}highlight-row{% endif %}">
+                            <td><strong>{{ loop.index }}</strong></td>
                             <td>
                                 <strong>Gruppe {{ group.group_number }}</strong>
-                                {% if player.id in group.player_ids %}<span class="you-indicator">(Deine Gruppe)</span>{% endif %}
                             </td>
                             <td>{{ "%.2f"|format(avg_balance) }}</td>
                             <td>{{ "%.2f"|format(avg_contribution) }}</td>
@@ -169,9 +138,9 @@
 
     <!-- Aktionsbuttons -->
     <div class="action-buttons">
-        <a href="{{ url_for('index') }}" class="btn btn-large">🏠 Zurück zur Startseite</a>
+        <a href="{{ url_for('index') }}" class="btn btn-large">Zurück zur Startseite</a>
         {% if is_leader %}
-        <button class="btn btn-large btn-secondary" onclick="exportData()">📥 Daten exportieren</button>
+        <button class="btn btn-large btn-secondary" onclick="exportData()">Daten exportieren</button>
         {% endif %}
     </div>
 </div>
