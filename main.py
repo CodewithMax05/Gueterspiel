@@ -864,26 +864,36 @@ def handle_disconnect():
             print(f"Disconnect: Player {player_id} hat noch offene Sockets")
             return
 
-        # Vollständiger Disconnect
+        # Vollständiger Disconnect (keine aktiven Sockets mehr für diesen Player)
         player = players.get(player_id)
         if player and not player.is_leader:  # Leader nicht automatisch entfernen
             room_id = player.room_id
             if room_id and room_id in rooms:
                 room = rooms[room_id]
                 
-                # Benachrichtige Raum über Disconnect
-                emit('player_disconnected', {
-                    'player_id': player_id,
-                    'player_name': player.name
-                }, room=room_id)
+                # --- HIER IST DIE ÄNDERUNG ---
+                # Entferne Spieler nur, wenn sie die Lobby verlassen (waiting/ready).
+                # Wenn das Spiel läuft (playing, round_results, finished),
+                # gehen wir davon aus, dass es nur ein Seitenwechsel ist.
+                # Die check_room_access-Funktion fängt sie auf der nächsten Seite wieder auf.
+                if room.status in ["waiting", "ready"]:
+                    print(f"Spieler {player.name} hat die Lobby {room_id} verlassen.")
+                    
+                    # Benachrichtige Raum über Disconnect
+                    emit('player_disconnected', {
+                        'player_id': player_id,
+                        'player_name': player.name
+                    }, room=room_id)
+                    
+                    # Entferne Spieler aus Raum
+                    room.remove_player(player_id)
+                    
+                    # Aktualisiere Raumstatus
+                    room.update_status_based_on_conditions()
                 
-                # Entferne Spieler aus Raum
-                room.remove_player(player_id)
-                
-                # Aktualisiere Raumstatus
-                room.update_status_based_on_conditions()
-                
-                print(f"Spieler {player.name} vollständig disconnected von Raum {room_id}")
+                else:
+                    # Spiel läuft. Nicht entfernen.
+                    print(f"Spieler {player.name} disconnected (vermutlich Navigation), aber Spiel läuft. Nicht entfernt.")
 
 @socketio.on('join_room')
 def handle_join_room(data):

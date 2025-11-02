@@ -146,9 +146,6 @@
         // Verhindere Mehrfach-Submits
         hasSubmitted = false;
 
-        // Raum betreten (wichtig vor möglichen Auto-Submits)
-        socket.emit('join_game_room', { room_id: currentRoomId });
-
         // Submit Button Event
         const submitBtn = document.getElementById('submitBtn');
         if (submitBtn) {
@@ -237,30 +234,6 @@
             timerElement.classList.add('warning');
             progressRing.classList.add('warning');
         }
-    }
-
-    function loadTimerStatus() {
-        fetch(`/api/room/${currentRoomId}/dashboard_status`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    serverTimeLeft = parseInt(data.time_left);
-                    updateTimerDisplay();
-
-                    console.log('DEBUG: Geladener Timer-Status:', serverTimeLeft, 'Sekunden');
-
-                    // Wenn der Server sagt: Zeit ist 0 und noch nicht abgegeben => handle expiration
-                    if (serverTimeLeft <= 0) {
-                        // kurze Verzögerung, damit join_game_room zuvor verarbeitet wird
-                        setTimeout(() => {
-                            handleTimeExpiredOnce();
-                        }, 100); 
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Fehler beim Laden des Timer-Status:', error);
-            });
     }
 
     function handleTimeExpiredOnce() {

@@ -119,32 +119,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const resultsData = document.getElementById('results-data');
-        const roomId = resultsData.dataset.roomId;
-    });
-    
-    function checkGameStatus(roomId) {
-        fetch(`/api/room/${roomId}/status`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.status === 'playing') {
-                    window.location.href = `/game/${roomId}`;
-                } else if (data.status === 'finished') {
-                    window.location.href = `/evaluation/${roomId}`;
-                }
-            })
-            .catch(error => {
-                console.error('Fehler beim Prüfen des Spielstatus:', error);
-            });
-    }
-    
+<script>    
     // WebSocket Events für round_results.html
     socket.on('next_round_started', function(data) {
         // Fallback

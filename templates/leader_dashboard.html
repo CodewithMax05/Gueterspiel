@@ -131,9 +131,6 @@
             nextRoundBtn.classList.remove('btn-pulse');
         }
 
-        // Leader dem Raum beitreten, um Beitrags-Events zu erhalten
-        socket.emit('join_game_room', { room_id: roomId });
-
         // Prüfe ob letzte Runde
         checkIfLastRound();
 
@@ -228,24 +225,6 @@
             })
             .catch(error => {
                 console.error('Fehler beim Prüfen der Rundenfortsetzung:', error);
-            });
-    }
-
-    function checkGameStatus(roomIdLocal) {
-        fetch(`/api/room/${roomIdLocal}/status`)
-            .then(response => response.json())
-            .then(data => {
-                const currentRoundElement = document.getElementById('currentRound');
-                if (currentRoundElement && data.current_round) {
-                    currentRoundElement.textContent = data.current_round;
-                }
-
-                if (data.status === 'round_results') {
-                    checkIfLastRound();
-                }
-            })
-            .catch(error => {
-                console.error('Fehler beim Prüfen des Spielstatus:', error);
             });
     }
 
