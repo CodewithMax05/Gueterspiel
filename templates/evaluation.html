@@ -81,63 +81,21 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% set groups_with_total = [] %}
-                        {% for group in room.groups %}
-                            {% set group_balances = [] %}
-                            {% set group_contributions = [] %}
-                            {% set group_cooperation_rates = [] %}
-
-                            {% for player_id in group.player_ids %}
-                                {% if player_id in players %}
-                                    {% set p = players[player_id] %}
-                                    {% set _ = group_balances.append(p.coins) %}
-                                    {% set _ = group_contributions.extend(p.game_history.contributions) %}
-                                {% endif %}
-                            {% endfor %}
-
-                            {% for round_num in range(1, room.current_round + 1) %}
-                                {% if room.group_cooperation.get(round_num, {}).get(group.group_number) is defined %}
-                                    {% set cooperation_rate = room.group_cooperation[round_num][group.group_number] %}
-                                    {% set _ = group_cooperation_rates.append(cooperation_rate) %}
-                                {% endif %}
-                            {% endfor %}
-
-                            {% set total_wealth = group_balances|sum %}
-                            {% set _ = groups_with_total.append({
-                                'group': group,
-                                'total_wealth': total_wealth,
-                                'group_balances': group_balances,
-                                'group_contributions': group_contributions,
-                                'group_cooperation_rates': group_cooperation_rates
-                            }) %}
-                        {% endfor %}
-                        
-                        {% set sorted_groups = groups_with_total|sort(attribute='total_wealth', reverse=true) %}
-                        
-                        {% for group_data in sorted_groups %}
-                        {% set group = group_data.group %}
-                        {% set group_balances = group_data.group_balances %}
-                        {% set group_contributions = group_data.group_contributions %}
-                        {% set group_cooperation_rates = group_data.group_cooperation_rates %}
-                        {% set avg_balance = (group_balances|sum / group_balances|length) if group_balances|length > 0 else 0 %}
-                        {% set avg_contribution = (group_contributions|sum / group_contributions|length) if group_contributions|length > 0 else 0 %}
-                        {% set total_profit = group_balances|sum - (initial_coins * group_balances|length) %}
-                        {% set avg_cooperation = (group_cooperation_rates|sum / group_cooperation_rates|length) if group_cooperation_rates|length > 0 else 0 %}
-                        
-                        <tr class="{% if player.id in group.player_ids %}highlight-row{% endif %}">
+                        {% for group_data in group_comparison %}
+                        <tr class="{% if player.id in group_data.group.player_ids %}highlight-row{% endif %}">
                             <td><strong>{{ loop.index }}</strong></td>
                             <td>
-                                <strong>Gruppe {{ group.group_number }}</strong>
+                                <strong>Gruppe {{ group_data.group.group_number }}</strong>
                             </td>
-                            <td>{{ "%.2f"|format(avg_balance) }}</td>
-                            <td>{{ "%.2f"|format(avg_contribution) }}</td>
-                            <td class="{% if total_profit > 0 %}positive{% elif total_profit < 0 %}negative{% endif %}">
-                                {{ "%+.2f"|format(total_profit) }}
+                            <td>{{ "%.2f"|format(group_data.avg_balance) }}</td>
+                            <td>{{ "%.2f"|format(group_data.avg_contribution) }}</td>
+                            <td class="{% if group_data.total_profit > 0 %}positive{% elif group_data.total_profit < 0 %}negative{% endif %}">
+                                {{ "%+.2f"|format(group_data.total_profit) }}
                             </td>
                             <td>
-                                <div class="cooperation-bar" data-rate="{{ avg_cooperation }}">
+                                <div class="cooperation-bar" data-rate="{{ group_data.avg_cooperation }}">
                                     <div class="cooperation-fill"></div>
-                                    <span class="cooperation-text">{{ "%.1f"|format(avg_cooperation) }}%</span>
+                                    <span class="cooperation-text">{{ "%.1f"|format(group_data.avg_cooperation) }}%</span>
                                 </div>
                             </td>
                         </tr>

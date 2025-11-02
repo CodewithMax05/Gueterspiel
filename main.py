@@ -157,6 +157,46 @@ class GameRoom:
                 return group
         return None
     
+    def get_group_comparison_data(self, players_dict, initial_coins):
+        """Berechnet Vergleichsdaten für alle Gruppen"""
+        groups_data = []
+        
+        for group in self.groups:
+            group_balances = []
+            group_contributions = []
+            group_cooperation_rates = []
+            
+            for player_id in group['player_ids']:
+                if player_id in players_dict:
+                    player = players_dict[player_id]
+                    group_balances.append(player.coins)
+                    group_contributions.extend(player.game_history['contributions'])
+            
+            # Sammle Kooperationsraten
+            for round_num in range(1, self.current_round + 1):
+                if (self.group_cooperation.get(round_num, {})
+                        .get(group['group_number']) is not None):
+                    cooperation_rate = self.group_cooperation[round_num][group['group_number']]
+                    group_cooperation_rates.append(cooperation_rate)
+            
+            # Berechne Kennzahlen
+            avg_balance = (sum(group_balances) / len(group_balances)) if group_balances else 0
+            avg_contribution = (sum(group_contributions) / len(group_contributions)) if group_contributions else 0
+            total_profit = sum(group_balances) - (initial_coins * len(group_balances))
+            avg_cooperation = (sum(group_cooperation_rates) / len(group_cooperation_rates)) if group_cooperation_rates else 0
+            
+            groups_data.append({
+                'group': group,
+                'avg_balance': round(avg_balance, 2),
+                'avg_contribution': round(avg_contribution, 2),
+                'total_profit': round(total_profit, 2),
+                'avg_cooperation': round(avg_cooperation, 2),
+                'total_wealth': sum(group_balances)
+            })
+        
+        # Sortiere nach Gesamtguthaben absteigend
+        return sorted(groups_data, key=lambda x: x['total_wealth'], reverse=True)
+    
     def should_continue_game(self):
         """Prüft ob das Spiel weitergehen soll basierend auf den Einstellungen"""
         # Wenn noch keine Runde gespielt wurde, soll weitergemacht werden
@@ -674,11 +714,15 @@ def evaluation(room_id):
     
     room, player = result
     initial_coins = room.settings['initial_coins']
+
+    # Gruppenvergleichsdaten berechnen
+    group_comparison = room.get_group_comparison_data(players, initial_coins)
     
     return render_template('evaluation.html',
                          room=room,
                          player=player,
                          initial_coins=initial_coins,
+                         group_comparison=group_comparison,
                          is_leader=player.id == room.leader_id)
 
 # API Routes
