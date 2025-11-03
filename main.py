@@ -13,8 +13,6 @@ from flask_socketio import SocketIO, emit, join_room
 from collections import defaultdict
 from threading import Lock 
 
-finish_round_lock = Lock()
-
 app = Flask(__name__)
 is_production = os.environ.get('FLASK_ENV') == 'production'
 
@@ -30,14 +28,19 @@ socketio = SocketIO(
     manage_session=True,
     logger=not is_production,  # Logger nur in Development
     engineio_logger=not is_production,  # EngineIO Logger nur in Development
-    async_mode='gevent'  # Wichtig für Production
+    async_mode='gevent',  # Wichtig für Production
+    ping_timeout=60, 
+    ping_interval=25
 )
 
 # Datenstrukturen zur Verwaltung der Räume und Spieler
 rooms = {}
 players = {}
-sid_to_player = {}                      # request.sid -> player_id
-player_sids = defaultdict(set) 
+sid_to_player = {}
+pending_removals = {}
+player_sids = defaultdict(set)
+finish_round_lock = Lock()
+removal_lock = Lock()                   
 
 class GameRoom:
     def __init__(self, room_id, leader_id, settings):
@@ -856,44 +859,44 @@ def handle_disconnect():
     sid = request.sid
     player_id = sid_to_player.pop(sid, None)
     
-    if player_id:
-        player_sids[player_id].discard(sid)
+    if not player_id:
+        return
+        
+    player_sids[player_id].discard(sid)
 
-        # Wenn noch andere Sockets dieses Players existieren -> nichts tun
-        if player_sids[player_id]:
-            print(f"Disconnect: Player {player_id} hat noch offene Sockets")
-            return
+    # Wenn noch andere Sockets/Tabs dieses Players existieren -> nichts tun
+    if player_sids[player_id]:
+        print(f"Disconnect: Player {player_id} hat noch offene Sockets. Nichts tun.")
+        return
 
-        # Vollständiger Disconnect (keine aktiven Sockets mehr für diesen Player)
-        player = players.get(player_id)
-        if player and not player.is_leader:  # Leader nicht automatisch entfernen
-            room_id = player.room_id
-            if room_id and room_id in rooms:
-                room = rooms[room_id]
-                
-                # --- HIER IST DIE ÄNDERUNG ---
-                # Entferne Spieler nur, wenn sie die Lobby verlassen (waiting/ready).
-                # Wenn das Spiel läuft (playing, round_results, finished),
-                # gehen wir davon aus, dass es nur ein Seitenwechsel ist.
-                # Die check_room_access-Funktion fängt sie auf der nächsten Seite wieder auf.
-                if room.status in ["waiting", "ready"]:
-                    print(f"Spieler {player.name} hat die Lobby {room_id} verlassen.")
-                    
-                    # Benachrichtige Raum über Disconnect
-                    emit('player_disconnected', {
-                        'player_id': player_id,
-                        'player_name': player.name
-                    }, room=room_id)
-                    
-                    # Entferne Spieler aus Raum
-                    room.remove_player(player_id)
-                    
-                    # Aktualisiere Raumstatus
-                    room.update_status_based_on_conditions()
-                
-                else:
-                    # Spiel läuft. Nicht entfernen.
-                    print(f"Spieler {player.name} disconnected (vermutlich Navigation), aber Spiel läuft. Nicht entfernt.")
+    # --- Vollständiger Disconnect (alle SIDs/Tabs für diesen Player sind weg) ---
+    player = players.get(player_id)
+    if not player or player.is_leader:
+        return  # Leader nicht automatisch entfernen
+
+    room_id = player.room_id
+    if not room_id or room_id not in rooms:
+        return
+        
+    room = rooms[room_id]
+
+    # Wenn das Spiel läuft (playing, results, finished), NIEMALS entfernen.
+    # Der Spieler soll jederzeit wieder beitreten können.
+    if room.status not in ["waiting", "ready"]:
+        print(f"Spieler {player.name} disconnected, aber Spiel läuft. Nicht entfernt.")
+        return
+        
+    # --- Spiel ist in der Lobby (waiting/ready) ---
+    # Starte die "Gnadenfrist", anstatt den Spieler sofort zu entfernen.
+    with removal_lock:
+        # Falls schon ein Task läuft, brich ihn ab (sollte nicht passieren, aber sicher ist sicher)
+        if player_id in pending_removals:
+            pending_removals[player_id].kill()
+            
+        print(f"DEBUG: Spieler {player.name} vollständig disconnected (Lobby). Starte 10s Gnadenfrist.")
+        # Starte den verzögerten Entfernungs-Task
+        greenlet = spawn(delayed_remove_player, player_id, room_id, 10)
+        pending_removals[player_id] = greenlet
 
 @socketio.on('join_room')
 def handle_join_room(data):
@@ -979,6 +982,15 @@ def handle_join_game_room(data):
 
     if not player_id or player_id not in players:
         return
+    
+    with removal_lock:
+        if player_id in pending_removals:
+            greenlet = pending_removals.pop(player_id)
+            try:
+                greenlet.kill()
+                print(f"DEBUG: Spieler {player_id} hat sich wiederverbunden. Entfernungs-Task abgebrochen.")
+            except Exception as e:
+                print(f"DEBUG: Fehler beim Abbrechen des removal_tasks für {player_id}: {e}")
 
     try:
         # Join personal room
@@ -1172,6 +1184,67 @@ def handle_submit_contribution(data):
             finish_round(room_id)
         except Exception as e:
             print(f"Fehler beim Beenden der Runde nach vollem Submit: {e}")
+
+def delayed_remove_player(player_id, room_id, delay_seconds=10):
+    """
+    Wartet 'delay_seconds' und entfernt dann den Spieler, 
+    falls er sich nicht wiederverbunden hat UND das Spiel noch nicht gestartet ist.
+    """
+    sleep(delay_seconds)
+    
+    with removal_lock:
+        # Prüfen, ob der Task bereits abgebrochen wurde (durch reconnect)
+        if player_id not in pending_removals:
+            print(f"DEBUG: delayed_remove für {player_id} abgebrochen (reconnected).")
+            return
+        
+        # Entferne den Task-Eintrag
+        del pending_removals[player_id]
+
+    # Erneute Prüfung NACH dem Sleep: Ist der Spieler wirklich weg?
+    player = players.get(player_id)
+    room = rooms.get(room_id)
+    
+    if not player or not room:
+        return
+        
+    # Hat sich der Spieler in der Zwischenzeit mit einer neuen SID verbunden?
+    if player_sids.get(player_id):
+        print(f"DEBUG: delayed_remove für {player_id} abgebrochen (neue SID gefunden).")
+        return
+        
+    # Ist das Spiel in der Zwischenzeit gestartet? Dann nicht entfernen.
+    if room.status not in ["waiting", "ready"]:
+        print(f"DEBUG: delayed_remove für {player_id} abgebrochen (Spiel läuft).")
+        return
+
+    # --- OK, Spieler ist weg, 10s sind um, Spiel ist noch in der Lobby ---
+    # Jetzt den Spieler wirklich entfernen
+    print(f"DEBUG: Gnadenfrist für {player.name} abgelaufen. Entferne aus Raum {room_id}.")
+    
+    try:
+        room.remove_player(player_id)
+        
+        # Benachrichtige Raum
+        socketio.emit('player_disconnected', {
+            'player_id': player_id,
+            'player_name': player.name
+        }, room=room_id)
+        
+        room.update_status_based_on_conditions()
+        
+        # Spieler-Objekte aufräumen
+        try:
+            del players[player_id]
+        except KeyError:
+            pass
+        try:
+            del player_sids[player_id]
+        except KeyError:
+            pass
+            
+    except Exception as e:
+        print(f"Fehler bei delayed_remove_player: {e}")
 
 def finish_round(room_id):
     """Beendet die Runde sicher: fehlende Beiträge auf 0 setzen, finale Submit-Status senden,
