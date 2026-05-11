@@ -159,15 +159,6 @@
          */
         function computeServerTimeLeftFromServerTimer(timer) {
             if (!timer) return null;
-            if (typeof timer.start_time !== 'undefined' && typeof timer.duration !== 'undefined') {
-                const nowMs = Date.now();
-                const endTimeMs = Number(timer.start_time) + Number(timer.duration) * 1000;
-                const remainingMs = endTimeMs - nowMs;
-                
-                // KORRIGIERTE ZEILE:
-                // Math.floor: Passt zur serverseitigen int()-Trunkierung (Abrunden)
-                return Math.max(0, Math.ceil(remainingMs / 1000));
-            }
             if (typeof timer.time_left !== 'undefined') {
                 return Number(timer.time_left);
             }
