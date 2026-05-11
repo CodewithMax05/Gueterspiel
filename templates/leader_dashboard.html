@@ -290,6 +290,7 @@
     socket.on('round_finished', function(data) {
         // round_finished ist ein finales Event — sollte immer verarbeitet werden
         console.log('DEBUG: round_finished received on dashboard');
+        stopSharedLocalCountdown(); 
         showNotification('Runde beendet! Alle Spieler haben eingereicht.', 'success');
 
         // Setze Timer & Fortschritt auf finalen Zustand
