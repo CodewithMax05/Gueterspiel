@@ -145,6 +145,7 @@
      data-room-id="{{ room.id }}"
      data-is-leader="{{ 'true' if is_leader else 'false' }}"
      data-room-leader-id="{{ room.leader_id }}"
+     data-incognito="{{ 'true' if room.incognito_mode else 'false' }}"
      style="display: none;">
 </div>
 
@@ -157,6 +158,7 @@
         const roomId = roomData.dataset.roomId;
         const isLeader = roomData.dataset.isLeader === 'true';
         const roomLeaderId = roomData.dataset.roomLeaderId;
+        const isIncognito = roomData.dataset.incognito === 'true'; 
         
         // Prüfe Startbedingungen (nur für Leader)
         if (isLeader) {
@@ -272,6 +274,13 @@
     
     // WebSocket Events für game_room.html
     socket.on('player_joined', function(data) {
+        if (isIncognito && data.id !== currentPlayerId) {
+            updatePlayerCount();
+            checkRoomStatus();
+            checkRequirementsOnEvents();
+            return;
+        }
+
         updatePlayerList(data);
         updatePlayerCount();
         checkRoomStatus();
