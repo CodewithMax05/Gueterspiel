@@ -121,6 +121,11 @@ input, select, textarea {
     transition: all 0.3s ease;
 }
 
+select option {
+    background: #1a1a2e;
+    color: white;
+}
+
 input:focus, select:focus, textarea:focus {
     outline: none;
     border-color: #667eea;
