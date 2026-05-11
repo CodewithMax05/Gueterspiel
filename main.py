@@ -12,6 +12,8 @@ from flask import Flask, render_template, request, session, redirect, url_for, j
 from flask_socketio import SocketIO, emit, join_room
 from collections import defaultdict
 from threading import Lock 
+from dotenv import load_dotenv
+load_dotenv()
 
 app = Flask(__name__)
 is_production = os.environ.get('FLASK_ENV') == 'production'
