@@ -310,10 +310,11 @@ class GameRoom:
         return results
 
 class Player:
-    def __init__(self, player_id, name, is_leader=False):
+    def __init__(self, player_id, name, is_leader=False, is_test=False):
         self.id = player_id
         self.name = name
         self.is_leader = is_leader
+        self.is_test = is_test
         self.coins = 0
         self.current_contribution = 0
         self.ready = False
@@ -431,6 +432,51 @@ def stop_game_timer(room_id):
                 if room.status == "round_results":
                     room.timer_remaining = 0
             print(f"Game-Timer für Raum {room_id} gestoppt")
+
+def simulate_test_players(room_id):
+    """Lässt Test-Spieler zu zufälligen Zeitpunkten zufällige Beiträge einreichen"""
+    room = rooms.get(room_id)
+    if not room:
+        return
+
+    for pid in list(room.players):
+        player = players.get(pid)
+        if player and player.is_test:
+            spawn(_test_player_submit, pid, room_id)
+
+def _test_player_submit(player_id, room_id):
+    room = rooms.get(room_id)
+    player = players.get(player_id)
+    if not room or not player:
+        return
+
+    # Zufällig warten (zwischen 2s und 90% der Rundendauer)
+    duration = room.settings.get('round_duration', 60)
+    wait_time = random.uniform(2, duration * 0.9)
+    sleep(wait_time)
+
+    # Abbrechen falls Runde schon vorbei
+    if room.status != 'playing' or player_id in room.submitted_players:
+        return
+
+    # Zufälliger Beitrag zwischen 0 und aktuellem Guthaben
+    contribution = random.randint(0, int(player.coins))
+    player.current_contribution = contribution
+    room.submitted_players.add(player_id)
+
+    submitted_count = len(room.submitted_players)
+    total_players = len([pid for pid in room.players
+                         if not players.get(pid, Player(pid, '')).is_leader])
+
+    socketio.emit('contribution_submitted', {
+        'submitted_count': submitted_count,
+        'total_players': total_players
+    }, room=room_id)
+
+    # Falls alle eingereicht haben: Runde sofort beenden
+    if submitted_count == total_players:
+        stop_game_timer(room_id)
+        finish_round(room_id)
 
 def get_or_create_game_timer(room_id, duration=60):
     """Erstellt oder gibt existierenden Timer zurück - threadsicher"""
@@ -597,7 +643,7 @@ def create_game():
                      "Test-Spieler 5", "Test-Spieler 6"]
         for name in test_names:
             player_id = str(uuid.uuid4())
-            player = Player(player_id, name)
+            player = Player(player_id, name, is_test=True) 
             player.room_id = room_id
             player.coins = room.settings['initial_coins']
             player.game_history['balances'].append(player.coins)
@@ -1090,6 +1136,7 @@ def handle_start_game():
 
             duration = room.settings.get('round_duration', 60)
             get_or_create_game_timer(room_id, duration)
+            simulate_test_players(room_id) 
             print(f"DEBUG: Spiel gestartet - Timer für Raum {room_id} mit {duration}s gestartet")
             
             # Setze alle Spieler auf nicht bereit für nächste Runde
@@ -1374,6 +1421,7 @@ def handle_next_round():
             # Timer für neue Runde starten
             duration = room.settings.get('round_duration', 60)
             get_or_create_game_timer(room_id, duration)
+            simulate_test_players(room_id) 
             
             emit('next_round_started', {
                 'current_round': room.current_round,
