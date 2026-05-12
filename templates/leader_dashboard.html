@@ -405,9 +405,9 @@
                         <tr>
                             <td>${m.name}</td>
                             <td style="text-align:center">
-                                ${m.has_submitted
+                                ${m.has_submitted && m.contribution > 0
                                     ? '<span style="color:#28a745">✅</span>'
-                                    : '<span style="color:#dc3545">–</span>'}
+                                    : '<span style="color:#dc3545">❌</span>'}
                             </td>
                             <td style="text-align:center">
                                 ${m.has_submitted && m.contribution !== null ? m.contribution.toFixed(2) : '–'}
