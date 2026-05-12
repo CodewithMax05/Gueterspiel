@@ -65,24 +65,43 @@
         <h2 class="groups-title">👥 Gruppenübersicht</h2>
         
         {% if room.groups %}
-            {% for group in room.groups %}
-            <div class="group-card" data-group-number="{{ group.group_number }}">
-                <div class="group-header">
-                    <h3>Gruppe {{ group.group_number }}</h3>
-                    <span class="group-player-count">
-                        {{ group.members|length }} Spieler
-                    </span>
-                </div>
-                
-                <div class="group-members">
-                    {% for member in group.members %}
-                    <div class="member-badge">
-                        {{ member }}
+            <div id="groupsAccordion">
+                {% for group in room.groups %}
+                <div class="group-card" data-group="{{ group.group_number }}" id="groupCard-{{ group.group_number }}">
+                    <div class="group-header" onclick="toggleGroup(parseInt(this.closest('.group-card').dataset.group))">
+                        <div class="group-header-left">
+                            <span class="toggle-icon" id="icon-{{ group.group_number }}">▶</span>
+                            <h3>Gruppe {{ group.group_number }}</h3>
+                        </div>
+                        <div class="group-header-right">
+                            <span class="group-balance" id="balance-{{ group.group_number }}">
+                                Gesamtguthaben: –
+                            </span>
+                            <span class="group-player-count">{{ group.members|length }} Spieler</span>
+                        </div>
                     </div>
-                    {% endfor %}
+
+                    <!-- Detailansicht (eingeklappt) -->
+                    <div class="group-details hidden" id="details-{{ group.group_number }}">
+                        <table class="group-table">
+                            <thead>
+                                <tr>
+                                    <th>Spieler</th>
+                                    <th>Eingezahlt</th>
+                                    <th>Betrag</th>
+                                    <th>Guthaben</th>
+                                    <th>Koopquote</th>
+                                    <th>Gewinn/Verlust</th> 
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-{{ group.group_number }}">
+                                <tr><td colspan="5" style="text-align:center; color:#aaa;">Lade...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
+                {% endfor %}
             </div>
-            {% endfor %}
         {% else %}
             <div class="empty-groups-message">
                 <p>Noch keine Gruppen erstellt. Das Spiel startet bald...</p>
@@ -343,5 +362,83 @@
             window.location.href = `/evaluation/${data.room_id}`;
         }, 1500);
     });
+
+    // --- Gruppen Accordion ---
+    const openGroups = new Set();
+
+    function toggleGroup(groupNumber) {
+        const details = document.getElementById(`details-${groupNumber}`);
+        const icon = document.getElementById(`icon-${groupNumber}`);
+
+        if (openGroups.has(groupNumber)) {
+            openGroups.delete(groupNumber);
+            details.classList.add('hidden');
+            icon.textContent = '▶';
+        } else {
+            openGroups.add(groupNumber);
+            details.classList.remove('hidden');
+            icon.textContent = '▼';
+            loadGroupDetails();
+        }
+    }
+
+    function loadGroupDetails() {
+        if (!roomId) return;
+
+        fetch(`/api/room/${roomId}/group_details`)
+            .then(r => r.json())
+            .then(groups => {
+                groups.forEach(group => {
+                    // Gesamtguthaben immer aktualisieren
+                    const balanceEl = document.getElementById(`balance-${group.group_number}`);
+                    if (balanceEl) {
+                        balanceEl.textContent = `Gesamtguthaben: ${group.total_balance.toFixed(2)}`;
+                    }
+
+                    // Tabelle nur aktualisieren wenn Gruppe offen
+                    if (!openGroups.has(group.group_number)) return;
+
+                    const tbody = document.getElementById(`tbody-${group.group_number}`);
+                    if (!tbody) return;
+
+                    tbody.innerHTML = group.members.map(m => `
+                        <tr>
+                            <td>${m.name}</td>
+                            <td style="text-align:center">
+                                ${m.has_submitted
+                                    ? '<span style="color:#28a745">✅</span>'
+                                    : '<span style="color:#dc3545">–</span>'}
+                            </td>
+                            <td style="text-align:center">
+                                ${m.has_submitted && m.contribution !== null ? m.contribution.toFixed(2) : '–'}
+                            </td>
+                            <td style="text-align:center">${m.coins.toFixed(2)}</td>
+                            <td style="text-align:center">${m.coop_rate}%</td>
+                            <td style="text-align:center; font-weight:600; color:${
+                                m.profit === null ? 'white' :
+                                m.profit > 0 ? '#28a745' :
+                                m.profit < 0 ? '#dc3545' : 'white'
+                            }">
+                                ${m.profit === null ? '–' : (m.profit > 0 ? '+' : '') + m.profit.toFixed(2)}
+                            </td>
+                        </tr>
+                    `).join('');
+                });
+            })
+            .catch(err => console.error('Fehler beim Laden der Gruppendetails:', err));
+    }
+
+    // Bei jedem contribution_submitted die Details neu laden
+    socket.on('contribution_submitted', function(data) {
+        submittedCount = Number(data.submitted_count) || submittedCount;
+        totalPlayers = Number(data.total_players) || totalPlayers;
+        updateProgress();
+        loadGroupDetails(); // Details aktualisieren
+    });
+
+    // Initial laden
+    loadGroupDetails();
+    // Alle 3 Sekunden aktualisieren
+    setInterval(loadGroupDetails, 3000);
 </script>
 {% endblock %}

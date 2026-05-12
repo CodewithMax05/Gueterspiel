@@ -883,6 +883,86 @@ def api_room_dashboard_status(room_id):
         'status': room.status
     })
 
+@app.route('/api/room/<room_id>/group_details')
+def api_group_details(room_id):
+    if room_id not in rooms:
+        return jsonify({'error': 'Raum nicht gefunden'}), 404
+
+    room = rooms[room_id]
+    groups_data = []
+
+    # Ergebnisse der aktuellen Runde als Lookup vorbereiten (für round_results Status)
+    results_lookup = {}
+    if room.status == 'round_results' and room.round_results:
+        for group_result in room.round_results:
+            for p in group_result['players']:
+                results_lookup[p['id']] = {
+                    'contribution': p['contribution'],
+                    'new_balance': p['new_balance'],
+                    'profit': p['profit']
+                }
+
+    for group in room.groups:
+        members_data = []
+
+        for pid in group['player_ids']:
+            if pid not in players:
+                continue
+            player = players[pid]
+
+            # Bisherige Kooperationsquote (aus abgeschlossenen Runden)
+            contributions = player.game_history['contributions']
+
+            # Aktuelle Runde einberechnen falls bereits eingezahlt
+            current_contribution = player.current_contribution
+            if pid in room.submitted_players and current_contribution is not None:
+                all_contributions = contributions + [current_contribution]
+            elif room.status == 'round_results' and pid in results_lookup:
+                all_contributions = contributions  # bereits in game_history enthalten
+            else:
+                all_contributions = contributions
+
+            coop_rate = round(
+                (sum(1 for c in all_contributions if c > 0) / len(all_contributions)) * 100, 1
+            ) if all_contributions else 0
+
+            # Status abhängig vom Rundenstand bestimmen
+            if room.status == 'round_results' and pid in results_lookup:
+                # Runde beendet: Daten aus Ergebnissen nehmen
+                result = results_lookup[pid]
+                has_submitted = True
+                contribution = result['contribution']
+                display_coins = result['new_balance']
+            elif pid in room.submitted_players:
+                # Runde läuft, Spieler hat eingezahlt: temporären Abzug anzeigen
+                contribution = player.current_contribution or 0
+                has_submitted = True
+                display_coins = round(player.coins - contribution, 2)
+            else:
+                # Noch nicht eingezahlt
+                has_submitted = False
+                contribution = None
+                display_coins = round(player.coins, 2)
+
+            members_data.append({
+                'name': player.name,
+                'coins': display_coins,
+                'has_submitted': has_submitted,
+                'contribution': round(contribution, 2) if contribution is not None else None,
+                'coop_rate': coop_rate,
+                'profit': results_lookup[pid]['profit'] if room.status == 'round_results' and pid in results_lookup else None  # NEU
+            })
+
+        total_balance = sum(m['coins'] for m in members_data)
+
+        groups_data.append({
+            'group_number': group['group_number'],
+            'total_balance': round(total_balance, 2),
+            'members': members_data
+        })
+
+    return jsonify(groups_data)
+
 @app.route('/api/room/<room_id>/can_continue')
 def api_room_can_continue(room_id):
     """Prüft ob das Spiel weitergehen kann"""
