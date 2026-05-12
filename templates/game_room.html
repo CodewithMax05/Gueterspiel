@@ -274,7 +274,11 @@
     
     // WebSocket Events für game_room.html
     socket.on('player_joined', function(data) {
-        if (isIncognito && data.id !== currentPlayerId) {
+        const roomData = document.getElementById('room-data');
+        const incognito = roomData ? roomData.dataset.incognito === 'true' : false;
+        const leaderFlag = roomData ? roomData.dataset.isLeader === 'true' : false;
+
+        if (incognito && !leaderFlag && data.id !== currentPlayerId) {
             updatePlayerCount();
             checkRoomStatus();
             checkRequirementsOnEvents();
