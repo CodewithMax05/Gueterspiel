@@ -1248,7 +1248,7 @@ def handle_submit_contribution(data):
     if not player_id or player_id not in players:
         return
 
-    contribution = int(data.get('contribution', 0))
+    contribution = round(float(data.get('contribution', 0)), 2)
     player = players[player_id]
     room_id = player.room_id
 

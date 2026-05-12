@@ -76,8 +76,19 @@
             💰 Wie viel möchtest du einzahlen?
         </h3>
         
-        <div class="contribution-options" id="coinOptions">
-            <!-- Wird per JavaScript generiert -->
+        <div class="contribution-slider-wrapper">
+            <div class="slider-value-row">
+                <span class="slider-value-label">Dein Beitrag:</span>
+                <div class="slider-input-box">
+                    <input type="number" id="contributionInput" min="0" step="0.01" value="0">
+                    <span class="input-unit">🪙</span>
+                </div>
+            </div>
+            <input type="range" id="contributionSlider" min="0" max="0" step="0.01" value="0" class="contribution-range">
+            <div class="slider-range-labels">
+                <span>0</span>
+                <span id="sliderMaxLabel">0</span>
+            </div>
         </div>
         
         <button class="btn submit-button" id="submitBtn" disabled>
@@ -136,7 +147,7 @@
         }
 
         // UI initialisieren
-        generateCoinOptions(initialBalance);
+        initSlider(initialBalance);
         const currentBalanceText = document.getElementById('currentBalanceText');
         if (currentBalanceText) currentBalanceText.textContent = initialBalance.toFixed(2);
 
@@ -153,42 +164,100 @@
         }
     });
 
-    function generateCoinOptions(currentBalance) {
-        const container = document.getElementById('coinOptions');
-        if (!container) return;
+    function initSlider(currentBalance) {
+        const max = Math.floor(currentBalance * 100) / 100;
+        const slider = document.getElementById('contributionSlider');
+        const input = document.getElementById('contributionInput');
+        const maxLabel = document.getElementById('sliderMaxLabel');
 
-        container.innerHTML = '';
+        slider.max = max;
+        maxLabel.textContent = max.toFixed(2);
+        input.max = max;
+        input.value = '0.00';
 
-        // Maximum ist jetzt das aktuelle Guthaben (abgerundet)
-        const maxAmount = Math.floor(currentBalance);
+        selectedContribution = 0;
+        updateSliderFill(slider);
 
-        for (let i = 0; i <= maxAmount; i++) {
-            const option = document.createElement('div');
-            option.className = 'coin-option';
-            option.textContent = i;
-            option.dataset.value = i;
-
-            // Alle Optionen sind verfügbar, da wir nur bis zum Guthaben gehen
-            option.addEventListener('click', function() {
-                if (hasSubmitted) return;
-                selectContribution(i, option);
-            });
-
-            container.appendChild(option);
-        }
-    }
-
-    function selectContribution(amount, element) {
-        selectedContribution = amount;
-
-        document.querySelectorAll('.coin-option').forEach(opt => {
-            opt.classList.remove('selected');
+        // Slider → Input
+        slider.addEventListener('input', function() {
+            const val = parseFloat(this.value);
+            input.value = val.toFixed(2);
+            selectedContribution = val;
+            updateSliderFill(this);
+            input.style.color = '#fff';
         });
 
-        element.classList.add('selected');
+        // Nur erlaubte Tasten zulassen
+        input.addEventListener('keydown', function(e) {
+            const allowed = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Home', 'End'];
+            const isNumber = e.key >= '0' && e.key <= '9';
+            const isDecimal = (e.key === '.' || e.key === ',');
 
-        const submitBtn = document.getElementById('submitBtn');
-        if (submitBtn) submitBtn.disabled = false;
+            if (!isNumber && !isDecimal && !allowed.includes(e.key)) {
+                e.preventDefault();
+                return;
+            }
+
+            // Nur einen Dezimalpunkt erlauben
+            if (isDecimal && this.value.includes('.')) {
+                e.preventDefault();
+                return;
+            }
+        });
+
+        // Input → Slider (live Validierung)
+        input.addEventListener('input', function() {
+            // Komma durch Punkt ersetzen
+            this.value = this.value.replace(',', '.');
+
+            // Nur Zahlen und einen Punkt erlauben
+            this.value = this.value.replace(/[^0-9.]/g, '');
+
+            // Maximal 2 Nachkommastellen
+            const parts = this.value.split('.');
+            if (parts[1] && parts[1].length > 2) {
+                this.value = parts[0] + '.' + parts[1].substring(0, 2);
+            }
+
+            let val = parseFloat(this.value);
+            if (isNaN(val)) val = 0;
+
+            // Visuelles Feedback bei Überschreitung
+            if (val > max) {
+                input.style.color = '#dc3545';
+            } else {
+                input.style.color = '#fff';
+            }
+
+            // Slider aktualisieren (geclampt)
+            const clampedVal = Math.min(Math.max(val, 0), max);
+            slider.value = clampedVal;
+            selectedContribution = clampedVal;
+            updateSliderFill(slider);
+        });
+
+        // Beim Verlassen: Wert bereinigen und formatieren
+        input.addEventListener('blur', function() {
+            let val = parseFloat(this.value);
+            if (isNaN(val) || val < 0) val = 0;
+            if (val > max) val = max;
+            val = Math.round(val * 100) / 100;
+            this.value = val.toFixed(2);
+            input.style.color = '#fff';
+            selectedContribution = val;
+            slider.value = val;
+            updateSliderFill(slider);
+        });
+
+        // Submit direkt aktivieren (0 ist gültig)
+        document.getElementById('submitBtn').disabled = false;
+    }
+
+    function updateSliderFill(slider) {
+        const val = parseFloat(slider.value);
+        const max = parseFloat(slider.max) || 1;
+        const percent = (val / max) * 100;
+        slider.style.background = `linear-gradient(to right, #667eea ${percent}%, rgba(255,255,255,0.1) ${percent}%)`;
     }
 
     function setProgress(percent) {
