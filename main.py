@@ -1131,7 +1131,6 @@ def handle_join_game_room(data):
         if room_id:
             join_room(room_id)
             
-            # Sende kompletten Raumstatus in einem Event
             room = rooms.get(room_id)
             if room:
                 # Timer-Status
@@ -1152,21 +1151,25 @@ def handle_join_game_room(data):
                     }
 
                 if room.status == 'round_results':
-                    # Runde ist vorbei: Verwende die gespeicherten Zähler
                     submitted_c = getattr(room, 'submitted_count', len(room.submitted_players))
                     total_p = getattr(room, 'total_players', len([pid for pid in room.players if not players[pid].is_leader]))
                 else:
-                    # Runde läuft: Verwende die Live-Zähler
                     submitted_c = len(room.submitted_players)
                     total_p = len([pid for pid in room.players if not players[pid].is_leader])
-                
-                # Sende alles in einem kombinierten Event
+
+                # Prüfen ob Spieler bereits eingereicht hat
+                player = players.get(player_id)
+                has_submitted = player_id in room.submitted_players
+                player_contribution = round(player.current_contribution, 2) if player and has_submitted and player.current_contribution is not None else 0
+
                 emit('room_state_update', {
                     'timer': payload,
                     'submitted_count': submitted_c,
                     'total_players': total_p,
                     'room_status': room.status,
-                    'current_round': room.current_round
+                    'current_round': room.current_round,
+                    'has_submitted': has_submitted,
+                    'player_contribution': player_contribution
                 }, room=request.sid)
 
     except Exception as e:

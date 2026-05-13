@@ -398,29 +398,43 @@
         console.log('DEBUG: room_state_update empfangen:', data);
 
         if (data.timer) {
-            // Nutze die zentrale Funktion
             const computed = computeServerTimeLeftFromServerTimer(data.timer);
             serverTimeLeft = computed;
             updateTimerDisplay();
 
-            // Stoppe alten lokalen Countdown
             stopSharedLocalCountdown();
 
             if (data.timer.timer_running && serverTimeLeft > 0) {
-                // Starte lokalen Countdown und sorge dafür, dass handleTimeExpiredOnce() genau einmal ausgeführt wird
                 startSharedLocalCountdown(serverTimeLeft,
                     (sec, ms) => {
                         serverTimeLeft = sec;
                         updateTimerDisplay();
                     },
                     () => {
-                        // Ablauf: nur einmal ausführen
                         serverTimeLeft = 0;
                         updateTimerDisplay();
                         handleTimeExpiredOnce();
                     }
                 );
             }
+        }
+
+        // Overlay wiederherstellen falls bereits eingereicht
+        if (data.has_submitted && data.room_status === 'playing') {
+            selectedContribution = data.player_contribution || 0;
+            hasSubmitted = true;
+
+            const slider = document.getElementById('contributionSlider');
+            const input = document.getElementById('contributionInput');
+            if (slider) {
+                slider.value = selectedContribution;
+                updateSliderFill(slider);
+            }
+            if (input) {
+                input.value = selectedContribution.toFixed(2);
+            }
+
+            disableInteractionAfterSubmit();
         }
 
         if (typeof data.submitted_count !== 'undefined') {
