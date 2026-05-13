@@ -978,6 +978,46 @@ def api_room_can_continue(room_id):
         'max_rounds': room.settings.get('max_rounds', 5)
     })
 
+@app.route('/api/room/<room_id>/evaluation_details')
+def api_evaluation_details(room_id):
+    if room_id not in rooms:
+        return jsonify({'error': 'Raum nicht gefunden'}), 404
+
+    room = rooms[room_id]
+    groups_data = []
+    initial_coins = room.settings['initial_coins']
+
+    for group in room.groups:
+        members_data = []
+
+        for pid in group['player_ids']:
+            if pid not in players:
+                continue
+            player = players[pid]
+
+            contributions = player.game_history['contributions']
+            balances = player.game_history['balances']
+
+            coop_rate = round(
+                (sum(1 for c in contributions if c > 0) / len(contributions)) * 100, 1
+            ) if contributions else 0
+
+            members_data.append({
+                'name': player.name,
+                'final_balance': round(player.coins, 2),
+                'total_profit': round(player.coins - initial_coins, 2),
+                'coop_rate': coop_rate,
+                'contributions': [round(c, 2) for c in contributions],
+                'balances': [round(b, 2) for b in balances]
+            })
+
+        groups_data.append({
+            'group_number': group['group_number'],
+            'members': members_data
+        })
+
+    return jsonify(groups_data)
+
 # WebSocket Events
 @socketio.on('connect')
 def handle_connect():

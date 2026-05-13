@@ -82,10 +82,17 @@
                     </thead>
                     <tbody>
                         {% for group_data in group_comparison %}
-                        <tr class="{% if player.id in group_data.group.player_ids %}highlight-row{% endif %}">
+                        <tr class="group-summary-row {% if player.id in group_data.group.player_ids %}highlight-row{% endif %}"
+                            data-group="{{ group_data.group.group_number }}"
+                            onclick="toggleGroupDetails(parseInt(this.dataset.group))"
+                            style="cursor: pointer;">
                             <td><strong>{{ loop.index }}</strong></td>
                             <td>
-                                <strong>Gruppe {{ group_data.group.group_number }}</strong>
+                                <span class="toggle-icon" id="eval-icon-{{ group_data.group.group_number }}">▶</span>
+                                <strong> Gruppe {{ group_data.group.group_number }}</strong>
+                                {% if player.id in group_data.group.player_ids %}
+                                    <span class="you-indicator">(Deine Gruppe)</span>
+                                {% endif %}
                             </td>
                             <td>{{ "%.2f"|format(group_data.avg_balance) }}</td>
                             <td>{{ "%.2f"|format(group_data.avg_contribution) }}</td>
@@ -96,6 +103,14 @@
                                 <div class="cooperation-bar" data-rate="{{ group_data.avg_cooperation }}">
                                     <div class="cooperation-fill"></div>
                                     <span class="cooperation-text">{{ "%.1f"|format(group_data.avg_cooperation) }}%</span>
+                                </div>
+                            </td>
+                        </tr>
+                        <!-- Detailzeile -->
+                        <tr class="group-detail-row hidden" id="eval-details-{{ group_data.group.group_number }}">
+                            <td colspan="6" style="padding: 0;">
+                                <div class="player-details-container" id="eval-players-{{ group_data.group.group_number }}">
+                                    <p style="text-align:center; color:#aaa; padding: 15px;">Lade...</p>
                                 </div>
                             </td>
                         </tr>
@@ -364,6 +379,86 @@
         URL.revokeObjectURL(url);
         
         showNotification('Auswertung wurde heruntergeladen!', 'success');
+    }
+
+    const openEvalGroups = new Set();
+    let evalData = null;
+
+    // Daten einmalig laden
+    fetch(`/api/room/{{ room.id }}/evaluation_details`)
+        .then(r => r.json())
+        .then(data => { evalData = data; })
+        .catch(err => console.error('Fehler:', err));
+
+    function toggleGroupDetails(groupNumber) {
+        const detailRow = document.getElementById(`eval-details-${groupNumber}`);
+        const icon = document.getElementById(`eval-icon-${groupNumber}`);
+
+        if (openEvalGroups.has(groupNumber)) {
+            openEvalGroups.delete(groupNumber);
+            detailRow.classList.add('hidden');
+            icon.textContent = '▶';
+        } else {
+            openEvalGroups.add(groupNumber);
+            detailRow.classList.remove('hidden');
+            icon.textContent = '▼';
+            renderGroupDetails(groupNumber);
+        }
+    }
+
+    function renderGroupDetails(groupNumber) {
+        if (!evalData) return;
+
+        const group = evalData.find(g => g.group_number === groupNumber);
+        if (!group) return;
+
+        const container = document.getElementById(`eval-players-${groupNumber}`);
+        if (!container) return;
+
+        const totalRounds = group.members[0]?.contributions.length || 0;
+
+        // Rundenspalten für Tabellenkopf
+        let roundHeaders = '';
+        for (let r = 1; r <= totalRounds; r++) {
+            roundHeaders += `<th>Runde ${r}</th>`;
+        }
+
+        // Spielerzeilen
+        let rows = group.members.map(m => {
+            const profitColor = m.total_profit > 0 ? '#28a745' : m.total_profit < 0 ? '#dc3545' : 'white';
+            const profitSign = m.total_profit > 0 ? '+' : '';
+
+            let roundCells = m.contributions.map((c, i) => {
+                const cls = c > 0 ? 'cooperated' : 'defected';
+                const label = c > 0 ? `+${c.toFixed(2)}` : `${c.toFixed(2)}`;
+                return `<td><span class="round-pill ${cls}">${label}</span></td>`;
+            }).join('');
+
+            return `
+                <tr>
+                    <td><strong>${m.name}</strong></td>
+                    <td>${m.final_balance.toFixed(2)} 🪙</td>
+                    <td style="color:${profitColor}; font-weight:600">${profitSign}${m.total_profit.toFixed(2)}</td>
+                    <td>${m.coop_rate}%</td>
+                    ${roundCells}
+                </tr>
+            `;
+        }).join('');
+
+        container.innerHTML = `
+            <table class="player-detail-table">
+                <thead>
+                    <tr>
+                        <th>Spieler</th>
+                        <th>Endguthaben</th>
+                        <th>Gewinn/Verlust</th>
+                        <th>Koopquote</th>
+                        ${roundHeaders}
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        `;
     }
 </script>
 {% endblock %}
