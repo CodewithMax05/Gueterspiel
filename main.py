@@ -1315,6 +1315,36 @@ def handle_submit_contribution(data):
         except Exception as e:
             print(f"Fehler beim Beenden der Runde nach vollem Submit: {e}")
 
+@socketio.on('retract_contribution')
+def handle_retract_contribution():
+    player_id = session.get('player_id')
+    if not player_id or player_id not in players:
+        return
+
+    player = players[player_id]
+    room_id = player.room_id
+
+    if not room_id or room_id not in rooms:
+        return
+
+    room = rooms[room_id]
+
+    if room.status != 'playing':
+        return
+
+    # Beitrag zurückziehen
+    player.current_contribution = 0
+    room.submitted_players.discard(player_id)
+
+    submitted_count = len(room.submitted_players)
+    total_players = len([pid for pid in room.players
+                         if not players.get(pid, Player(pid, '')).is_leader])
+
+    socketio.emit('contribution_submitted', {
+        'submitted_count': submitted_count,
+        'total_players': total_players
+    }, room=room_id)
+
 def delayed_remove_player(player_id, room_id, delay_seconds=10):
     """
     Wartet 'delay_seconds' und entfernt dann den Spieler, 

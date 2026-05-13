@@ -106,10 +106,13 @@
     <div class="waiting-content">
         <h2>⏳ Warte auf andere Spieler</h2>
         <div class="spinner"></div>
-        <p>Du hast deinen Beitrag eingereicht</p>
+        <p>Du hast <strong><span id="submittedAmount">0</span> Coins</strong> eingereicht</p>
         <div class="submitted-count" id="submittedCount">
             <span id="submittedNumber">0</span> von <span id="totalPlayers">{{ room.players|length }}</span> Spielern haben eingereicht
         </div>
+        <button class="btn btn-secondary" id="changeContributionBtn" style="margin-top: 15px;">
+            ✏️ Betrag ändern
+        </button>
     </div>
 </div>
 
@@ -161,6 +164,28 @@
         const submitBtn = document.getElementById('submitBtn');
         if (submitBtn) {
             submitBtn.addEventListener('click', submitContribution);
+        }
+
+        // Betrag ändern Button
+        const changeBtn = document.getElementById('changeContributionBtn');
+        if (changeBtn) {
+            changeBtn.addEventListener('click', function() {
+                // Server informieren
+                socket.emit('retract_contribution');
+
+                // Overlay schließen
+                const waitingOverlay = document.getElementById('waitingOverlay');
+                if (waitingOverlay) waitingOverlay.style.display = 'none';
+
+                const slider = document.getElementById('contributionSlider');
+                const input = document.getElementById('contributionInput');
+                const submitBtn = document.getElementById('submitBtn');
+                if (slider) slider.disabled = false;
+                if (input) input.disabled = false;
+                if (submitBtn) submitBtn.disabled = false;
+
+                hasSubmitted = false;
+            });
         }
     });
 
@@ -349,14 +374,20 @@
     }
 
     function disableInteractionAfterSubmit() {
-        // Disable Button und Optionen, zeige Overlay
+        // Eingereichten Betrag im Overlay anzeigen
+        const submittedAmountEl = document.getElementById('submittedAmount');
+        if (submittedAmountEl) {
+            submittedAmountEl.textContent = selectedContribution.toFixed(2);
+        }
+
         const submitBtn = document.getElementById('submitBtn');
         if (submitBtn) submitBtn.disabled = true;
 
-        document.querySelectorAll('.coin-option').forEach(opt => {
-            opt.classList.add('disabled');
-            opt.removeEventListener('click', () => {});
-        });
+        // Slider und Input deaktivieren
+        const slider = document.getElementById('contributionSlider');
+        const input = document.getElementById('contributionInput');
+        if (slider) slider.disabled = true;
+        if (input) input.disabled = true;
 
         const waitingOverlay = document.getElementById('waitingOverlay');
         if (waitingOverlay) waitingOverlay.style.display = 'flex';
