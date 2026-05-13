@@ -251,6 +251,12 @@
     socket.on('room_state_update', function(data) {
         console.log('DEBUG: Leader Dashboard - room_state_update empfangen:', data);
 
+        // Rundenzahl aktualisieren
+        const roundEl = document.getElementById('currentRound');
+        if (roundEl && data.current_round) {
+            roundEl.textContent = data.current_round;
+        }
+
         if (data.timer) {
             serverTimeLeft = computeServerTimeLeftFromServerTimer(data.timer);
             updateTimerDisplay();
@@ -341,6 +347,13 @@
 
     socket.on('next_round_started', function(data) {
         showNotification('Nächste Runde startet!', 'success');
+    
+        // Rundenzahl aktualisieren
+        const roundEl = document.getElementById('currentRound');
+        if (roundEl && data.current_round) {
+            roundEl.textContent = data.current_round;
+        }
+
         submittedCount = 0;
         updateProgress();
 

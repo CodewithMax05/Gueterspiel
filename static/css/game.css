@@ -242,6 +242,10 @@
     margin: 20px 0;
 }
 
+.slider-track-container {
+    padding: 10px 0;
+}
+
 .slider-value-row {
     display: flex;
     align-items: center;
@@ -300,7 +304,9 @@
 .contribution-range {
     -webkit-appearance: none;
     appearance: none;
-    width: 100%;
+    display: block;
+    width: calc(100% + 28px); /* Thumb-Breite kompensieren */
+    margin: 0 -14px;          /* Halbe Thumb-Breite nach außen schieben */
     height: 8px;
     border-radius: 4px;
     outline: none;
@@ -311,8 +317,8 @@
 
 .contribution-range::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     background: linear-gradient(45deg, #667eea, #764ba2);
     cursor: pointer;
@@ -333,6 +339,12 @@
     cursor: pointer;
     border: none;
     box-shadow: 0 2px 10px rgba(102, 126, 234, 0.6);
+}
+
+.contribution-range::-moz-range-track {
+    height: 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .slider-range-labels {

@@ -80,7 +80,7 @@
             <div class="slider-value-row">
                 <span class="slider-value-label">Dein Beitrag:</span>
                 <div class="slider-input-box">
-                    <input type="number" id="contributionInput" min="0" step="0.01" value="0">
+                    <input type="text" inputmode="decimal" id="contributionInput" value="0.00">
                     <span class="input-unit">🪙</span>
                 </div>
             </div>
@@ -172,7 +172,6 @@
 
         slider.max = max;
         maxLabel.textContent = max.toFixed(2);
-        input.max = max;
         input.value = '0.00';
 
         selectedContribution = 0;
@@ -187,56 +186,66 @@
             input.style.color = '#fff';
         });
 
-        // Nur erlaubte Tasten zulassen
+        // Unerlaubte Zeichen beim Tippen direkt blockieren
         input.addEventListener('keydown', function(e) {
             const allowed = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Home', 'End'];
             const isNumber = e.key >= '0' && e.key <= '9';
-            const isDecimal = (e.key === '.' || e.key === ',');
+            const isDecimal = e.key === '.' || e.key === ',';
+            const hasDecimal = this.value.includes('.') || this.value.includes(',');
 
             if (!isNumber && !isDecimal && !allowed.includes(e.key)) {
                 e.preventDefault();
                 return;
             }
 
-            // Nur einen Dezimalpunkt erlauben
-            if (isDecimal && this.value.includes('.')) {
+            // Nur einen Dezimaltrenner erlauben
+            if (isDecimal && hasDecimal) {
                 e.preventDefault();
-                return;
             }
         });
 
-        // Input → Slider (live Validierung)
+        // Live-Validierung beim Eingeben
         input.addEventListener('input', function() {
-            // Komma durch Punkt ersetzen
-            this.value = this.value.replace(',', '.');
+            let raw = this.value;
 
-            // Nur Zahlen und einen Punkt erlauben
-            this.value = this.value.replace(/[^0-9.]/g, '');
+            // Komma zu Punkt konvertieren
+            raw = raw.replace(',', '.');
+
+            // Alles außer Zahlen und Punkt entfernen
+            raw = raw.replace(/[^0-9.]/g, '');
+
+            // Nur ersten Punkt behalten
+            const firstDot = raw.indexOf('.');
+            if (firstDot !== -1) {
+                raw = raw.substring(0, firstDot + 1) + raw.substring(firstDot + 1).replace(/\./g, '');
+            }
 
             // Maximal 2 Nachkommastellen
-            const parts = this.value.split('.');
-            if (parts[1] && parts[1].length > 2) {
-                this.value = parts[0] + '.' + parts[1].substring(0, 2);
+            if (firstDot !== -1 && raw.length > firstDot + 3) {
+                raw = raw.substring(0, firstDot + 3);
             }
 
-            let val = parseFloat(this.value);
+            // Wert parsen
+            const isTypingDecimal = raw.endsWith('.');
+            let val = parseFloat(raw);
             if (isNaN(val)) val = 0;
 
-            // Visuelles Feedback bei Überschreitung
-            if (val > max) {
-                input.style.color = '#dc3545';
-            } else {
-                input.style.color = '#fff';
+            // Sofort auf max begrenzen (außer wenn gerade den Punkt tippt)
+            if (!isTypingDecimal && val > max) {
+                val = max;
+                raw = max.toFixed(2);
             }
 
-            // Slider aktualisieren (geclampt)
-            const clampedVal = Math.min(Math.max(val, 0), max);
+            this.value = raw;
+            input.style.color = '#fff';
+
+            const clampedVal = Math.min(Math.max(isTypingDecimal ? 0 : val, 0), max);
             slider.value = clampedVal;
             selectedContribution = clampedVal;
             updateSliderFill(slider);
         });
 
-        // Beim Verlassen: Wert bereinigen und formatieren
+        // Beim Verlassen: finales Format sicherstellen
         input.addEventListener('blur', function() {
             let val = parseFloat(this.value);
             if (isNaN(val) || val < 0) val = 0;
