@@ -29,15 +29,11 @@
                 
                 <div class="group-stats">
                     <div class="stat-box">
-                        <div class="stat-label">Eingezahlt</div>
+                        <div class="stat-label">Summe Einzahlungen</div>
                         <div class="stat-value">{{ "%.2f"|format(group.total_contribution) }}</div>
                     </div>
                     <div class="stat-box">
-                        <div class="stat-label">Pool gesamt</div>
-                        <div class="stat-value">{{ "%.2f"|format(group.total_pool) }}</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-label">Pro Spieler</div>
+                        <div class="stat-label">Auszahlung pro Spieler</div>
                         <div class="stat-value">{{ "%.2f"|format(group.payout_per_player) }}</div>
                     </div>
                     <div class="stat-box">
