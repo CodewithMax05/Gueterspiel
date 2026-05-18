@@ -32,7 +32,7 @@
             <div class="stat-card">
                 <div class="stat-icon">🎯</div>
                 <div class="stat-info">
-                    <div class="stat-value">{{ player.game_history.contributions|sum if player.game_history.contributions else 0 | round(2) }}</div>
+                    <div class="stat-value">{{ (player.game_history.contributions|sum)|round(2) }}</div>
                     <div class="stat-label">Coins eingezahlt</div>
                 </div>
             </div>

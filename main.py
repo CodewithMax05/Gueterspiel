@@ -639,8 +639,7 @@ def create_game():
         session['is_leader'] = True
         
         # TEST: 6 Test-Spieler mit Ready-Status erstellen
-        test_names = ["Test-Spieler 1", "Test-Spieler 2", "Test-Spieler 3", "Test-Spieler 4", 
-                     "Test-Spieler 5", "Test-Spieler 6"]
+        test_names = [f"Test-Spieler {i}" for i in range(1, 39)]  # 1 bis 38
         for name in test_names:
             player_id = str(uuid.uuid4())
             player = Player(player_id, name, is_test=True) 
