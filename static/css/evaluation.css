@@ -113,7 +113,7 @@
 }
 
 .rank-gold td {
-    background: rgba(255, 215, 0, 0.4);
+    background: rgba(255, 215, 0, 0.4) !important;
 }
 
 .rank-silver td:first-child {
@@ -121,7 +121,7 @@
 }
 
 .rank-silver td {
-    background: rgba(192, 192, 192, 0.4);
+    background: rgba(192, 192, 192, 0.4) !important;
 }
 
 .rank-bronze td:first-child {
@@ -129,7 +129,7 @@
 }
 
 .rank-bronze td {
-    background: rgba(205, 127, 50, 0.4);
+    background: rgba(205, 127, 50, 0.4) !important;
 }
 
 .group-info {
