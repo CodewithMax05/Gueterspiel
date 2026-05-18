@@ -107,6 +107,31 @@
     min-width: 40px;
 }
 
+/* Rang-Farben */
+.rank-gold td:first-child {
+    border-left: 4px solid #ffd700;
+}
+
+.rank-gold td {
+    background: rgba(255, 215, 0, 0.4);
+}
+
+.rank-silver td:first-child {
+    border-left: 4px solid #c0c0c0;
+}
+
+.rank-silver td {
+    background: rgba(192, 192, 192, 0.4);
+}
+
+.rank-bronze td:first-child {
+    border-left: 4px solid #cd7f32;
+}
+
+.rank-bronze td {
+    background: rgba(205, 127, 50, 0.4);
+}
+
 .group-info {
     flex: 1;
 }
@@ -289,6 +314,10 @@ th {
     background: rgba(255, 255, 255, 0.05);
     cursor: pointer;
 }
+
+.rank-gold:hover td { background: rgba(255, 215, 0, 0.25); }
+.rank-silver:hover td { background: rgba(192, 192, 192, 0.25); }
+.rank-bronze:hover td { background: rgba(205, 127, 50, 0.25); }
 
 /* Detail-Zeile: Breite durch äußere Tabelle begrenzt */
 .group-detail-row td {

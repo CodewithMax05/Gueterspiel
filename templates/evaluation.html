@@ -82,7 +82,12 @@
                     </thead>
                     <tbody>
                         {% for group_data in group_comparison %}
-                        <tr class="group-summary-row {% if player.id in group_data.group.player_ids %}highlight-row{% endif %}"
+                        <tr class="group-summary-row
+                            {% if loop.index == 1 %}rank-gold
+                            {% elif loop.index == 2 %}rank-silver
+                            {% elif loop.index == 3 %}rank-bronze
+                            {% endif %}
+                            {% if player.id in group_data.group.player_ids %}highlight-row{% endif %}"
                             data-group="{{ group_data.group.group_number }}"
                             onclick="toggleGroupDetails(parseInt(this.dataset.group))"
                             style="cursor: pointer;">
