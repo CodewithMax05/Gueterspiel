@@ -19,7 +19,9 @@ load_dotenv()
 app = Flask(__name__)
 is_production = os.environ.get('FLASK_ENV') == 'production'
 
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_123')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
+if not app.config['SECRET_KEY']:
+    raise ValueError("SECRET_KEY nicht gesetzt!")
 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = is_production
