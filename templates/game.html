@@ -505,6 +505,14 @@
         }, 600);
     });
 
+    socket.on('redirect_to_game', function(data) {
+        window.location.href = `/game/${data.room_id}`;
+    });
+
+    socket.on('next_round_started', function(data) {
+        window.location.href = `/game/${data.room_id}`;
+    });
+
     socket.on('game_finished', function(data) {
         showNotification('Spiel beendet! Zeige Auswertung...', 'success');
         setTimeout(() => {
