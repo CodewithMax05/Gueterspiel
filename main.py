@@ -1474,6 +1474,7 @@ def finish_round(room_id):
 
         # Setze Status *so früh wie möglich*, damit keine späteren submits mehr akzeptiert werden
         room.status = "round_results"
+        room.round_end_time = time.time() 
         room.timer_running = False
         room.timer_remaining = 0
 
@@ -1566,6 +1567,12 @@ def handle_next_round():
     
     if room_id and room_id in rooms and player.is_leader:
         room = rooms[room_id]
+
+        # NEU: Mindestens 3 Sekunden warten nach Rundenende
+        min_wait = 3
+        if hasattr(room, 'round_end_time') and time.time() - room.round_end_time < min_wait:
+            emit('error', {'message': 'Bitte warte noch einen Moment...'})
+            return
         
         # Prüfe ob Spiel weitergeht
         if room.should_continue_game():
