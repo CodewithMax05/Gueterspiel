@@ -313,36 +313,38 @@
     });
 
     socket.on('round_finished', function(data) {
-        // round_finished ist ein finales Event — sollte immer verarbeitet werden
         console.log('DEBUG: round_finished received on dashboard');
-        stopSharedLocalCountdown(); 
+        stopSharedLocalCountdown();
         showNotification('Runde beendet! Alle Spieler haben eingereicht.', 'success');
 
-        // Setze Timer & Fortschritt auf finalen Zustand
         serverTimeLeft = 0;
-
-        // Falls totalPlayers noch 0, versuche es aus DOM oder Payload
-        if (!totalPlayers || totalPlayers === 0) {
-            const dashboardData = document.getElementById('dashboard-data');
-            if (dashboardData && dashboardData.dataset.totalPlayers) {
-                totalPlayers = parseInt(dashboardData.dataset.totalPlayers);
-            } else if (data && data.room_id) {
-                // optional: könntest fetch(/api/room/...) probieren
-            }
-        }
-
-        // Set submittedCount vollständig (sicherer Fallback)
         submittedCount = totalPlayers || submittedCount;
 
         updateProgress();
         updateTimerDisplay();
-        updateButtonState();
 
-        // Jetzt ist initial state definitiv geladen (falls vorher nicht)
         initialStatusLoaded = true;
-
-        // Prüfe ob letzte Runde
         checkIfLastRound();
+
+        // NEU: 3 Sekunden Countdown bevor Button aktiv wird
+        let countdown = 3;
+        const nextRoundBtn = document.getElementById('nextRoundBtn');
+
+        const countdownInterval = setInterval(() => {
+            if (nextRoundBtn) {
+                nextRoundBtn.textContent = `⏳ Bitte warten... (${countdown}s)`;
+                nextRoundBtn.disabled = true;
+                nextRoundBtn.classList.add('btn-disabled');
+                nextRoundBtn.classList.remove('btn-pulse');
+            }
+            countdown--;
+
+            if (countdown < 0) {
+                clearInterval(countdownInterval);
+                // Jetzt Button normal aktivieren
+                updateButtonState();
+            }
+        }, 1000);
     });
 
     socket.on('next_round_started', function(data) {
