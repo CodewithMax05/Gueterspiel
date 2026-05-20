@@ -156,11 +156,14 @@
 
     <!-- Aktionsbuttons -->
     <div class="action-buttons">
-        <a href="{{ url_for('index') }}" class="btn btn-large">Zurück zur Startseite</a>
+        <a href="{{ url_for('index') }}" class="btn btn-large btn-secondary">Zur Startseite</a>
         {% if is_leader %}
         <a href="{{ url_for('evaluation_export', room_id=room.id) }}" class="btn btn-large btn-secondary">
             Daten exportieren
         </a>
+        <button class="btn btn-large" id="returnToLobbyBtn" onclick="returnToLobby()">
+            <i class="fas fa-redo"></i> Zurück zum Gameroom
+        </button>
         {% endif %}
     </div>
 </div>
@@ -497,6 +500,15 @@
                 <tbody>${rows}</tbody>
             </table>
         `;
+    }
+
+    function returnToLobby() {
+        const btn = document.getElementById('returnToLobbyBtn');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Wird zurückgesetzt...';
+        }
+        socket.emit('return_to_lobby');
     }
 </script>
 {% endblock %}

@@ -531,7 +531,27 @@ def check_room_access(room_id):
 # Routen
 @app.route('/')
 def index():
-    return render_template('index.html')
+    active_room = None
+    player_id = session.get('player_id')
+    if player_id and player_id in players:
+        p = players[player_id]
+        if p.room_id and p.room_id in rooms:
+            r = rooms[p.room_id]
+            if r.status not in ['finished']:
+                # Ziel-URL je nach Raumstatus
+                status_urls = {
+                    'waiting':       url_for('game_room',        room_id=r.id),
+                    'ready':         url_for('game_room',        room_id=r.id),
+                    'playing':       url_for('game',             room_id=r.id),
+                    'round_results': url_for('round_results',    room_id=r.id),
+                }
+                rejoin_url = status_urls.get(r.status, url_for('game_room', room_id=r.id))
+                active_room = {
+                    'id':     r.id,
+                    'status': r.status,
+                    'url':    rejoin_url,
+                }
+    return render_template('index.html', active_room=active_room)
 
 @app.route('/create_game', methods=['GET', 'POST'])
 def create_game():
@@ -645,6 +665,14 @@ def game_room(room_id):
         return redirect(url_for('join_game'))
 
     is_leader = player.id == room.leader_id
+
+    # Während laufendem Spiel: Spieler zur richtigen Seite weiterleiten
+    if not is_leader and room.status == 'playing':
+        return redirect(url_for('game', room_id=room_id))
+    if not is_leader and room.status == 'round_results':
+        return redirect(url_for('round_results', room_id=room_id))
+    if room.status == 'finished':
+        return redirect(url_for('evaluation', room_id=room_id))
 
     # Spielerliste für Template vorbereiten
     player_list = []
@@ -1767,6 +1795,148 @@ def handle_next_round():
             emit('game_finished', {
                 'room_id': room_id
             }, room=room_id)
+
+@socketio.on('leave_room')
+def handle_leave_room():
+    """Spieler oder Leader verlässt den Raum freiwillig."""
+    player_id = session.get('player_id')
+    if not player_id or player_id not in players:
+        emit('left_room', {})
+        return
+
+    player = players[player_id]
+    room_id = player.room_id
+
+    if not room_id or room_id not in rooms:
+        emit('left_room', {})
+        return
+
+    room = rooms[room_id]
+
+    if player.is_leader:
+        # Raum sofort schließen: alle Spieler rauswerfen und benachrichtigen
+        socketio.emit('room_closed', {
+            'message': 'Der Spielleiter hat den Raum verlassen. Der Raum wurde geschlossen.'
+        }, room=room_id)
+
+        # Alle Spieler-Daten aufräumen
+        for pid in list(room.players):
+            p = players.pop(pid, None)
+            player_sids.pop(pid, None)
+            if p:
+                p.room_id = None
+
+        # Raum selbst entfernen
+        rooms.pop(room_id, None)
+
+        # Timer stoppen falls aktiv
+        timer = game_timers.pop(room_id, None)
+        if timer:
+            try:
+                timer.stop()
+            except Exception:
+                pass
+
+        # Raumliste global aktualisieren (join_game.html reagiert darauf)
+        socketio.emit('room_list_updated', {
+            'action': 'deleted',
+            'room_id': room_id
+        })
+
+    else:
+        lobby_statuses = ['waiting', 'ready']
+        if room.status in lobby_statuses:
+            # Lobby: Spieler sofort vollständig entfernen
+            room.remove_player(player_id)
+            player.room_id = None
+
+            with removal_lock:
+                greenlet = pending_removals.pop(player_id, None)
+                if greenlet:
+                    try:
+                        greenlet.kill()
+                    except Exception:
+                        pass
+
+            socketio.emit('player_left', {
+                'player_id': player_id,
+                'player_name': player.name
+            }, room=room_id)
+
+            room.update_status_based_on_conditions()
+            players.pop(player_id, None)
+            player_sids.pop(player_id, None)
+        else:
+            # Spiel läuft: Spieler bleibt im Raum erhalten (kann rejoin),
+            # aber wir informieren die anderen über seinen Weggang
+            socketio.emit('player_connection_changed', {
+                'player_id': player_id,
+                'player_name': player.name,
+                'connected': False
+            }, room=room_id)
+
+    emit('left_room', {})
+
+
+@socketio.on('return_to_lobby')
+def handle_return_to_lobby():
+    """Leader setzt den Raum auf Lobby-Zustand zurück (nach Auswertung)."""
+    player_id = session.get('player_id')
+    if not player_id or player_id not in players:
+        return
+
+    player = players[player_id]
+    if not player.is_leader:
+        emit('error', {'message': 'Nur der Spielleiter kann den Raum zurücksetzen.'})
+        return
+
+    room_id = player.room_id
+    if not room_id or room_id not in rooms:
+        return
+
+    room = rooms[room_id]
+
+    # Timer stoppen
+    timer = game_timers.pop(room_id, None)
+    if timer:
+        try:
+            timer.stop()
+        except Exception:
+            pass
+
+    # Raum-Zustand zurücksetzen
+    room.status = 'waiting'
+    room.current_round = 0
+    room.groups = []
+    room.submitted_players = set()
+    room.players_in_results = set()
+    room.round_results = None
+    room.timer_running = False
+    room.timer_remaining = room.settings.get('round_duration', 60)
+    room.round_end_time = None
+
+    # Alle Spieler zurücksetzen
+    initial_coins = room.settings['initial_coins']
+    for pid in list(room.players):
+        p = players.get(pid)
+        if p and not p.is_leader:
+            p.ready = True if p.is_test else False
+            p.coins = initial_coins
+            p.current_contribution = 0
+            p.game_history = {
+                'balances': [initial_coins],
+                'contributions': []
+            }
+
+    # Raumliste aktualisieren (wieder joinbar)
+    socketio.emit('room_list_updated', {
+        'action': 'reset',
+        'room_id': room_id
+    })
+
+    # Alle Clients in den Gameroom schicken
+    socketio.emit('return_to_lobby', {'room_id': room_id}, room=room_id)
+
 
 @socketio.on('remove_player')
 def handle_remove_player(data):

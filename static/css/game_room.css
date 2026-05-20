@@ -40,12 +40,20 @@
     gap: 15px;
 }
 
-.leader-actions,
-.action-buttons .player-actions {
+.leader-actions {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 15px;
+}
+
+.action-buttons .player-actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
 }
 
 .player-item .player-actions {
@@ -259,6 +267,85 @@
 .ready-toggle.loading {
     opacity: 0.7;
     cursor: not-allowed;
+}
+
+/* ── Leave-Button: gleiche Größe wie Ready-Toggle ── */
+.btn-leave {
+    min-width: 180px;
+    height: 48px;
+    padding: 12px 24px;
+    justify-content: center;
+}
+
+/* ── Bestätigungs-Modal ── */
+.leave-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    animation: fadeInOverlay 0.2s ease;
+}
+
+.leave-modal-overlay.hidden {
+    display: none;
+}
+
+@keyframes fadeInOverlay {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.leave-modal {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    padding: 36px 32px 28px;
+    max-width: 420px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(102, 126, 234, 0.15);
+    animation: slideUpModal 0.25s ease;
+}
+
+@keyframes slideUpModal {
+    from { transform: translateY(20px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+}
+
+.leave-modal-icon {
+    font-size: 3em;
+    margin-bottom: 16px;
+    line-height: 1;
+}
+
+.leave-modal-title {
+    color: #fff;
+    font-size: 1.3em;
+    font-weight: 700;
+    margin: 0 0 12px;
+}
+
+.leave-modal-text {
+    color: #aaa;
+    font-size: 0.95em;
+    line-height: 1.6;
+    margin: 0 0 28px;
+}
+
+.leave-modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.leave-modal-actions .btn {
+    min-width: 130px;
+    justify-content: center;
 }
 
 /* Inkognito-Hinweis in der Spielerliste */

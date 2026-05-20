@@ -15,9 +15,6 @@
                 <i class="fas fa-users"></i>
                 Öffentliches-Gut-Spiel
             </div>
-            <ul class="nav-links">
-                <li><a href="{{ url_for('index') }}">Home</a></li>
-            </ul>
         </nav>
         <div class="connection-status connected" id="connectionStatus" style="display: none;">
             ✅ Verbunden
@@ -317,6 +314,22 @@
             } else if (data.status === 'finished' && !path.startsWith('/evaluation/')) {
                 window.location.href = `/evaluation/${currentRoomId}`;
             }
+        });
+
+        // Raum wurde vom Leader geschlossen – globaler Handler für alle Seiten
+        socket.on('room_closed', function(data) {
+            if (!currentRoomId) return;
+            showNotification(data.message || 'Der Raum wurde geschlossen.', 'error', 5000);
+            setTimeout(() => { window.location.href = '/'; }, 2000);
+        });
+
+        // Leader hat Raum zurück in die Lobby versetzt
+        socket.on('return_to_lobby', function(data) {
+            if (!currentRoomId) return;
+            showNotification('Der Raum wurde zurückgesetzt. Weiterleitung zur Lobby...', 'info', 3000);
+            setTimeout(() => {
+                window.location.href = `/game_room/${data.room_id}`;
+            }, 1200);
         });
     </script>
     

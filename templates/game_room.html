@@ -54,7 +54,14 @@
                 <h4>Voraussetzungen für Spielstart:</h4>
                 <div id="reqMinPlayers">Prüfe...</div>
             </div>
-            <button class="btn btn-success" id="startBtn" disabled>Spiel starten</button>
+            <div class="action-buttons-row">
+                <button class="btn btn-success" id="startBtn" disabled>
+                    <i class="fas fa-play"></i> Spiel starten
+                </button>
+                <button class="btn btn-danger" onclick="leaveRoom()">
+                    <i class="fas fa-sign-out-alt"></i> Raum verlassen
+                </button>
+            </div>
         </div>
         {% else %}
         <div class="player-actions">
@@ -74,6 +81,9 @@
                         {% endif %}
                     {% endfor %}
                 </span>
+            </button>
+            <button class="btn btn-danger btn-leave" onclick="leaveRoom()">
+                <i class="fas fa-sign-out-alt"></i> Raum verlassen
             </button>
         </div>
         {% endif %}
@@ -147,6 +157,21 @@
      data-room-leader-id="{{ room.leader_id }}"
      data-incognito="{{ 'true' if room.incognito_mode else 'false' }}"
      class="hidden">
+</div>
+
+<!-- Bestätigungs-Modal: Raum verlassen -->
+<div class="leave-modal-overlay hidden" id="leaveModal">
+    <div class="leave-modal">
+        <div class="leave-modal-icon" id="leaveModalIcon">🚪</div>
+        <h3 class="leave-modal-title" id="leaveModalTitle">Raum verlassen?</h3>
+        <p class="leave-modal-text" id="leaveModalText">Möchtest du den Raum wirklich verlassen?</p>
+        <div class="leave-modal-actions">
+            <button class="btn btn-secondary" onclick="closeLeaveModal()">Abbrechen</button>
+            <button class="btn btn-danger" id="leaveModalConfirm" onclick="confirmLeaveRoom()">
+                <i class="fas fa-sign-out-alt"></i> Verlassen
+            </button>
+        </div>
+    </div>
 </div>
 
 {% endblock %}
@@ -486,5 +511,54 @@
             totalPlayersElement.textContent = playerItems.length;
         }
     }
+
+    function leaveRoom() {
+        const roomData = document.getElementById('room-data');
+        const isLeaderLocal = roomData ? roomData.dataset.isLeader === 'true' : false;
+
+        const icon  = document.getElementById('leaveModalIcon');
+        const title = document.getElementById('leaveModalTitle');
+        const text  = document.getElementById('leaveModalText');
+        const btn   = document.getElementById('leaveModalConfirm');
+
+        if (isLeaderLocal) {
+            icon.textContent  = '⚠️';
+            title.textContent = 'Raum schließen?';
+            text.textContent  = 'Der Raum wird für alle Spieler sofort geschlossen. Diese Aktion kann nicht rückgängig gemacht werden.';
+            btn.innerHTML     = '<i class="fas fa-times-circle"></i> Raum schließen';
+        } else {
+            icon.textContent  = '🚪';
+            title.textContent = 'Raum verlassen?';
+            text.textContent  = 'Du verlässt den Raum und wirst aus der Spielerliste entfernt.';
+            btn.innerHTML     = '<i class="fas fa-sign-out-alt"></i> Verlassen';
+        }
+
+        document.getElementById('leaveModal').classList.remove('hidden');
+    }
+
+    function closeLeaveModal() {
+        document.getElementById('leaveModal').classList.add('hidden');
+    }
+
+    function confirmLeaveRoom() {
+        closeLeaveModal();
+        socket.emit('leave_room');
+    }
+
+    // Modal schließen bei Klick auf den Overlay-Hintergrund
+    document.getElementById('leaveModal').addEventListener('click', function(e) {
+        if (e.target === this) closeLeaveModal();
+    });
+
+    // Server bestätigt erfolgreiches Verlassen
+    socket.on('left_room', function() {
+        window.location.href = '/';
+    });
+
+    // Raum wurde vom Leader geschlossen (für Spieler)
+    socket.on('room_closed', function(data) {
+        showNotification(data.message || 'Der Raum wurde geschlossen.', 'error', 5000);
+        setTimeout(() => { window.location.href = '/'; }, 2000);
+    });
 </script>
 {% endblock %}

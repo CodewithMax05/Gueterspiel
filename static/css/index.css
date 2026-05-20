@@ -1,11 +1,76 @@
 /* static/css/index.css */
 .container {
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    min-height: calc(100vh - 140px); /* Berücksichtigt Header und Footer */
+    min-height: calc(100vh - 140px);
     padding: 20px;
     width: 100%;
+    gap: 20px;
+}
+
+/* ── Rejoin-Banner ── */
+.rejoin-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    background: rgba(102, 126, 234, 0.12);
+    border: 1px solid rgba(102, 126, 234, 0.35);
+    border-radius: 14px;
+    padding: 18px 24px;
+    max-width: 650px;
+    width: 90%;
+    animation: fadeInUp 0.4s ease;
+}
+
+.rejoin-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.rejoin-icon {
+    font-size: 2em;
+    line-height: 1;
+}
+
+.rejoin-title {
+    font-weight: 700;
+    color: #fff;
+    font-size: 1em;
+    margin-bottom: 3px;
+}
+
+.rejoin-sub {
+    font-size: 0.85em;
+    color: #aaa;
+}
+
+.btn-rejoin {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.9em;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.btn-rejoin:hover {
+    opacity: 0.9;
+    transform: translateY(-2px);
+}
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 .hero-box {

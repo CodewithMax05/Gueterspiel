@@ -6,7 +6,12 @@
 
 {% block body %}
 <div class="container">
-    <h1>Verfügbare Spiele</h1>
+    <div class="page-title-row">
+        <h1>Verfügbare Spiele</h1>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary btn-back">
+            <i class="fas fa-arrow-left"></i> Zurück
+        </a>
+    </div>
     
     <div class="direct-join">
         <h3>Direkt beitreten:</h3>

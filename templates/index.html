@@ -6,10 +6,31 @@
 
 {% block body %}
 <div class="container">
+
+    {% if active_room %}
+    <div class="rejoin-banner">
+        <div class="rejoin-info">
+            <span class="rejoin-icon">🎮</span>
+            <div>
+                <div class="rejoin-title">Du bist noch in einem aktiven Raum</div>
+                <div class="rejoin-sub">Raum {{ active_room.id }}
+                    {% if active_room.status == 'playing' %} · Spiel läuft
+                    {% elif active_room.status == 'round_results' %} · Rundenauswertung
+                    {% elif active_room.status in ['waiting', 'ready'] %} · Lobby
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <a href="{{ active_room.url }}" class="btn btn-rejoin">
+            <i class="fas fa-play-circle"></i> Zurück zum Spiel
+        </a>
+    </div>
+    {% endif %}
+
     <div class="hero-box">
         <div class="welcome-section">
             <h1>Willkommen zum öffentlichen Gut-Spiel!</h1>
-            
+
             <div class="game-explanation">
                 <p>Spieler investieren Coins in ein öffentliches Gut. Die Gesamteinzahlungen werden vervielfacht und gleichmäßig auf alle Gruppenmitglieder verteilt.</p>
                 <p><strong>Ziel:</strong> Durch strategische Entscheidungen das höchste Gesamtguthaben zu erreichen!</p>
