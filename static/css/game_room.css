@@ -260,3 +260,18 @@
     opacity: 0.7;
     cursor: not-allowed;
 }
+
+/* Inkognito-Hinweis in der Spielerliste */
+.incognito-notice {
+    text-align: center;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    margin: 10px 0;
+}
+
+.incognito-notice-hint {
+    font-size: 14px;
+    color: #aaa;
+    margin-top: 8px;
+}

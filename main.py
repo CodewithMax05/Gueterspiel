@@ -8,7 +8,8 @@ import time
 import secrets
 import string
 import math
-from flask import Flask, render_template, request, session, redirect, url_for, jsonify
+from datetime import datetime
+from flask import Flask, render_template, request, session, redirect, url_for, jsonify, make_response
 from flask_socketio import SocketIO, emit, join_room
 from collections import defaultdict
 from threading import Lock 
@@ -28,8 +29,8 @@ app.config['SESSION_COOKIE_SECURE'] = is_production
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
 socketio = SocketIO(
-    app, 
-    cors_allowed_origins="*",
+    app,
+    cors_allowed_origins=os.environ.get('ALLOWED_ORIGIN', '*'),
     manage_session=True,
     logger=not is_production,  # Logger nur in Development
     engineio_logger=not is_production,  # EngineIO Logger nur in Development
@@ -721,6 +722,55 @@ def evaluation(room_id):
                          initial_coins=initial_coins,
                          group_comparison=group_comparison,
                          is_leader=player.id == room.leader_id)
+
+@app.route('/evaluation/<room_id>/export')
+def evaluation_export(room_id):
+    """Liefert die Auswertung als eigenständige HTML-Datei zum Download."""
+    room, player = check_room_access(room_id)
+    if room is None:
+        return redirect(url_for('index'))
+    if player is None:
+        return redirect(url_for('join_game'))
+
+    initial_coins = room.settings['initial_coins']
+    group_comparison = room.get_group_comparison_data(players, initial_coins)
+
+    # Gruppendetails für alle Gruppen berechnen
+    groups_details = []
+    for group in room.groups:
+        members_data = []
+        for pid in group['player_ids']:
+            if pid not in players:
+                continue
+            p = players[pid]
+            contributions = p.game_history['contributions']
+            coop_rate = round(
+                (sum(1 for c in contributions if c > 0) / len(contributions)) * 100, 1
+            ) if contributions else 0
+            members_data.append({
+                'name': p.name,
+                'final_balance': round(p.coins, 2),
+                'total_profit': round(p.coins - initial_coins, 2),
+                'coop_rate': coop_rate,
+                'contributions': [round(c, 2) for c in contributions],
+            })
+        groups_details.append({
+            'group_number': group['group_number'],
+            'members': members_data,
+        })
+
+    html = render_template('evaluation_export.html',
+                           room=room,
+                           group_comparison=group_comparison,
+                           groups_details=groups_details,
+                           initial_coins=initial_coins,
+                           num_rounds=room.current_round,
+                           now=datetime.now().strftime('%d.%m.%Y %H:%M Uhr'))
+
+    response = make_response(html)
+    response.headers['Content-Disposition'] = f'attachment; filename=Auswertung_Raum_{room_id}.html'
+    response.headers['Content-Type'] = 'text/html; charset=utf-8'
+    return response
 
 # API Routes
 @app.route('/api/rooms')

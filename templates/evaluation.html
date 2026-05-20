@@ -89,11 +89,10 @@
                             {% endif %}
                             {% if player.id in group_data.group.player_ids %}highlight-row{% endif %}"
                             data-group="{{ group_data.group.group_number }}"
-                            onclick="toggleGroupDetails(parseInt(this.dataset.group))"
-                            style="cursor: pointer;">
+                            onclick="toggleGroupDetails(parseInt(this.dataset.group))">
                             <td><strong>{{ loop.index }}</strong></td>
                             <td>
-                                <span class="toggle-icon" id="eval-icon-{{ group_data.group.group_number }}">▶</span>
+                                    <span class="toggle-icon" id="eval-icon-{{ group_data.group.group_number }}">▶</span>
                                 <strong> Gruppe {{ group_data.group.group_number }}</strong>
                                 {% if player.id in group_data.group.player_ids %}
                                     <span class="you-indicator">(Deine Gruppe)</span>
@@ -101,9 +100,7 @@
                             </td>
                             <td>{{ "%.2f"|format(group_data.avg_balance) }}</td>
                             <td>{{ "%.2f"|format(group_data.avg_contribution) }}</td>
-                            <td class="{% if group_data.total_profit > 0 %}positive{% elif group_data.total_profit < 0 %}negative{% endif %}">
-                                {{ "%+.2f"|format(group_data.total_profit) }}
-                            </td>
+                            <td>{{ "%+.2f"|format(group_data.total_profit) }}</td>
                             <td>
                                 <div class="cooperation-bar" data-rate="{{ group_data.avg_cooperation }}">
                                     <div class="cooperation-fill"></div>
@@ -130,19 +127,21 @@
     <div class="action-buttons">
         <a href="{{ url_for('index') }}" class="btn btn-large">Zurück zur Startseite</a>
         {% if is_leader %}
-        <button class="btn btn-large btn-secondary" onclick="exportData()">Daten exportieren</button>
+        <a href="{{ url_for('evaluation_export', room_id=room.id) }}" class="btn btn-large btn-secondary">
+            Daten exportieren
+        </a>
         {% endif %}
     </div>
 </div>
 
 <!-- Versteckte Daten für JavaScript -->
-<div id="evaluation-data" 
+<div id="evaluation-data"
      data-initial-coins="{{ initial_coins }}"
      data-is-leader="{{ 'true' if is_leader else 'false' }}"
      data-balances="{{ player.game_history.balances | tojson | safe }}"
      data-contributions="{{ player.game_history.contributions | tojson | safe }}"
      data-rounds="{{ room.current_round }}"
-     style="display: none;">
+     class="hidden">
 </div>
 {% endblock %}
 
@@ -312,142 +311,6 @@
         });
     }
     
-    function exportData() {
-        // Buttons temporär verstecken
-        const actionButtons = document.querySelector('.evaluation-container .action-buttons');
-        if (actionButtons) actionButtons.style.display = 'none';
-
-        // Alle Stylesheets inline sammeln
-        let styles = '';
-        for (const sheet of document.styleSheets) {
-            try {
-                for (const rule of sheet.cssRules) {
-                    styles += rule.cssText + '\n';
-                }
-            } catch (e) {
-                // Externe Stylesheets (CDN) überspringen
-            }
-        }
-
-        // Aktuellen HTML-Inhalt holen
-        const htmlContent = `<!DOCTYPE html>
-    <html lang="de">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Spielauswertung - Raum {{ room.id }}</title>
-        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-        <style>${styles}</style>
-    </head>
-    <body>
-        <header>
-            <nav class="navbar">
-                <div class="logo">
-                    <i class="fas fa-users"></i>
-                    Öffentliches-Gut-Spiel
-                </div>
-            </nav>
-        </header>
-        <main>
-            ${document.querySelector('.evaluation-container').outerHTML}
-        </main>
-        <script>
-            // Accordion-Funktionalität
-            const openEvalGroups = new Set();
-            const evalData = ${JSON.stringify(window.evalData || null)};
-
-            function toggleGroupDetails(groupNumber) {
-                const detailRow = document.getElementById('eval-details-' + groupNumber);
-                const icon = document.getElementById('eval-icon-' + groupNumber);
-
-                if (openEvalGroups.has(groupNumber)) {
-                    openEvalGroups.delete(groupNumber);
-                    detailRow.classList.add('hidden');
-                    icon.textContent = '▶';
-                } else {
-                    openEvalGroups.add(groupNumber);
-                    detailRow.classList.remove('hidden');
-                    icon.textContent = '▼';
-                    renderGroupDetails(groupNumber);
-                }
-            }
-
-            function renderGroupDetails(groupNumber) {
-                if (!evalData) return;
-                const group = evalData.find(g => g.group_number === groupNumber);
-                if (!group) return;
-
-                const container = document.getElementById('eval-players-' + groupNumber);
-                if (!container) return;
-
-                const totalRounds = group.members[0]?.contributions.length || 0;
-
-                let roundHeaders = '';
-                for (let r = 1; r <= totalRounds; r++) {
-                    roundHeaders += '<th>Runde ' + r + '</th>';
-                }
-
-                let rows = group.members.map(m => {
-                    const profitColor = m.total_profit > 0 ? '#28a745' : m.total_profit < 0 ? '#dc3545' : 'white';
-                    const profitSign = m.total_profit > 0 ? '+' : '';
-
-                    let roundCells = m.contributions.map(c => {
-                        const cls = c > 0 ? 'cooperated' : 'defected';
-                        const label = c > 0 ? '+' + c.toFixed(2) : c.toFixed(2);
-                        return '<td><span class="round-pill ' + cls + '">' + label + '</span></td>';
-                    }).join('');
-
-                    return '<tr>' +
-                        '<td><strong>' + m.name + '</strong></td>' +
-                        '<td>' + m.final_balance.toFixed(2) + ' 🪙</td>' +
-                        '<td style="color:' + profitColor + '; font-weight:600">' + profitSign + m.total_profit.toFixed(2) + '</td>' +
-                        '<td>' + m.coop_rate + '%</td>' +
-                        roundCells +
-                        '</tr>';
-                }).join('');
-
-                container.innerHTML =
-                    '<table class="player-detail-table">' +
-                        '<thead><tr>' +
-                            '<th>Spieler</th>' +
-                            '<th>Endguthaben</th>' +
-                            '<th>Gewinn/Verlust</th>' +
-                            '<th>Koopquote</th>' +
-                            roundHeaders +
-                        '</tr></thead>' +
-                        '<tbody>' + rows + '</tbody>' +
-                    '</table>';
-            }
-
-            // Kooperations-Balken initialisieren
-            document.querySelectorAll('.cooperation-bar').forEach(bar => {
-                const rate = parseFloat(bar.getAttribute('data-rate'));
-                const fill = bar.querySelector('.cooperation-fill');
-                if (fill && !isNaN(rate)) {
-                    fill.style.width = rate + '%';
-                }
-            });
-        <\/script>
-    </body>
-    </html>`;
-
-        // Buttons wieder einblenden
-        if (actionButtons) actionButtons.style.display = '';
-
-        // Als Datei herunterladen
-        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Spielauswertung_Raum_{{ room.id }}.html`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        showNotification('Auswertung wurde heruntergeladen!', 'success');
-    }
-
     const openEvalGroups = new Set();
     let evalData = null;
 
@@ -456,7 +319,6 @@
         .then(r => r.json())
         .then(data => {
             evalData = data;
-            window.evalData = data;  // NEU: global für Export verfügbar machen
         })
         .catch(err => console.error('Fehler:', err));
 
@@ -495,10 +357,12 @@
 
         // Spielerzeilen
         let rows = group.members.map(m => {
-            const profitColor = m.total_profit > 0 ? '#28a745' : m.total_profit < 0 ? '#dc3545' : 'white';
+            const profitClass = m.total_profit > 0 ? 'profit-positive'
+                : m.total_profit < 0 ? 'profit-negative'
+                : 'profit-neutral';
             const profitSign = m.total_profit > 0 ? '+' : '';
 
-            let roundCells = m.contributions.map((c, i) => {
+            let roundCells = m.contributions.map(c => {
                 const cls = c > 0 ? 'cooperated' : 'defected';
                 const label = c > 0 ? `+${c.toFixed(2)}` : `${c.toFixed(2)}`;
                 return `<td><span class="round-pill ${cls}">${label}</span></td>`;
@@ -508,7 +372,7 @@
                 <tr>
                     <td><strong>${m.name}</strong></td>
                     <td>${m.final_balance.toFixed(2)} 🪙</td>
-                    <td style="color:${profitColor}; font-weight:600">${profitSign}${m.total_profit.toFixed(2)}</td>
+                    <td class="${profitClass}">${profitSign}${m.total_profit.toFixed(2)}</td>
                     <td>${m.coop_rate}%</td>
                     ${roundCells}
                 </tr>

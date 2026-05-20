@@ -95,7 +95,7 @@
                                 </tr>
                             </thead>
                             <tbody id="tbody-{{ group.group_number }}">
-                                <tr><td colspan="5" style="text-align:center; color:#aaa;">Lade...</td></tr>
+                                <tr><td colspan="5" class="td-loading">Lade...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -408,28 +408,26 @@
                     const tbody = document.getElementById(`tbody-${group.group_number}`);
                     if (!tbody) return;
 
-                    tbody.innerHTML = group.members.map(m => `
+                    tbody.innerHTML = group.members.map(m => {
+                        const profitClass = m.profit === null ? 'profit-neutral'
+                            : m.profit > 0 ? 'profit-positive'
+                            : m.profit < 0 ? 'profit-negative'
+                            : 'profit-neutral';
+                        const profitText = m.profit === null ? '–'
+                            : (m.profit > 0 ? '+' : '') + m.profit.toFixed(2);
+                        const submittedIcon = m.has_submitted && m.contribution > 0
+                            ? '<span class="text-success">✅</span>'
+                            : '<span class="text-danger">❌</span>';
+                        return `
                         <tr>
                             <td>${m.name}</td>
-                            <td style="text-align:center">
-                                ${m.has_submitted && m.contribution > 0
-                                    ? '<span style="color:#28a745">✅</span>'
-                                    : '<span style="color:#dc3545">❌</span>'}
-                            </td>
-                            <td style="text-align:center">
-                                ${m.has_submitted && m.contribution !== null ? m.contribution.toFixed(2) : '–'}
-                            </td>
-                            <td style="text-align:center">${m.coins.toFixed(2)}</td>
-                            <td style="text-align:center">${m.coop_rate}%</td>
-                            <td style="text-align:center; font-weight:600; color:${
-                                m.profit === null ? 'white' :
-                                m.profit > 0 ? '#28a745' :
-                                m.profit < 0 ? '#dc3545' : 'white'
-                            }">
-                                ${m.profit === null ? '–' : (m.profit > 0 ? '+' : '') + m.profit.toFixed(2)}
-                            </td>
-                        </tr>
-                    `).join('');
+                            <td class="td-center">${submittedIcon}</td>
+                            <td class="td-center">${m.has_submitted && m.contribution !== null ? m.contribution.toFixed(2) : '–'}</td>
+                            <td class="td-center">${m.coins.toFixed(2)}</td>
+                            <td class="td-center">${m.coop_rate}%</td>
+                            <td class="td-center ${profitClass}">${profitText}</td>
+                        </tr>`;
+                    }).join('');
                 });
             })
             .catch(err => console.error('Fehler beim Laden der Gruppendetails:', err));

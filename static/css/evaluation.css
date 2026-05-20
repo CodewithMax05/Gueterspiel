@@ -408,6 +408,22 @@ th {
     display: none;
 }
 
+/* Gruppenzeilen sind klickbar */
+.group-summary-row {
+    cursor: pointer;
+}
+
+/* Detailzeile ohne Padding */
+.group-detail-row > td {
+    padding: 0;
+}
+
+/* Spielerzahl in Gruppenüberschrift */
+.group-player-count-badge {
+    color: #667eea;
+    font-size: 1.1em;
+}
+
 /* Scrollbar Styling */
 .player-details-container::-webkit-scrollbar {
     height: 6px;

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spielauswertung – Raum {{ room.id }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            min-height: 100vh;
+            line-height: 1.6;
+            padding: 30px 20px 60px;
+        }
+
+        /* ── Seitentitel ── */
+        .evaluation-title {
+            text-align: center;
+            margin-bottom: 8px;
+            color: #fff;
+            font-size: 2.5em;
+        }
+
+        .meta {
+            text-align: center;
+            color: #aaa;
+            font-size: 0.9em;
+            margin-bottom: 30px;
+        }
+        .meta span { margin: 0 12px; }
+
+        /* ── Sektions-Boxen ── */
+        .section-box {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .section-box h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.4em;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(102, 126, 234, 0.3);
+        }
+
+        /* ── Haupt-Vergleichstabelle ── */
+        .table-container {
+            overflow-x: auto;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        /* Äußere Rankingtabelle: fixe Breiten damit Detail-Zeilen nicht die Spalten aufsprengen */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.92em;
+            table-layout: fixed;
+        }
+
+        /* Spaltenbreiten Rankingtabelle */
+        table colgroup col:nth-child(1) { width: 6%; }
+        table colgroup col:nth-child(2) { width: 16%; }
+        table colgroup col:nth-child(3) { width: 18%; }
+        table colgroup col:nth-child(4) { width: 18%; }
+        table colgroup col:nth-child(5) { width: 18%; }
+        table colgroup col:nth-child(6) { width: 24%; }
+
+        th {
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
+            padding: 12px 15px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        tr:last-child td { border-bottom: none; }
+
+        /* Rang-Farben – identisch zu evaluation.css */
+        .rank-gold   td { background: rgba(255, 215, 0,   0.4) !important; }
+        .rank-silver td { background: rgba(192, 192, 192, 0.4) !important; }
+        .rank-bronze td { background: rgba(205, 127, 50,  0.4) !important; }
+
+        .rank-gold   td:first-child { border-left: 4px solid #ffd700; }
+        .rank-silver td:first-child { border-left: 4px solid #c0c0c0; }
+        .rank-bronze td:first-child { border-left: 4px solid #cd7f32; }
+
+        /* Gewinn/Verlust */
+        .profit-positive { color: #28a745; font-weight: 600; }
+        .profit-negative { color: #dc3545; font-weight: 600; }
+
+        /* ── Kooperations-Balken ── */
+        .coop-bar-wrap {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            height: 20px;
+            width: 120px;
+            display: inline-block;
+            vertical-align: middle;
+            overflow: hidden;
+            position: relative;
+        }
+        .coop-bar-fill {
+            background: linear-gradient(90deg, #28a745, #20c997);
+            height: 100%;
+            border-radius: 10px;
+        }
+        .coop-bar-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 0.78em;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            white-space: nowrap;
+        }
+
+        /* ── Accordion ── */
+        .group-summary-row {
+            cursor: pointer;
+        }
+        .group-summary-row:hover td {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .rank-gold:hover   td { background: rgba(255, 215, 0,   0.25) !important; }
+        .rank-silver:hover td { background: rgba(192, 192, 192, 0.25) !important; }
+        .rank-bronze:hover td { background: rgba(205, 127, 50,  0.25) !important; }
+
+        .toggle-icon {
+            display: inline-block;
+            margin-right: 6px;
+            font-size: 0.75em;
+            transition: transform 0.2s ease;
+        }
+
+        .group-detail-row td {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .group-detail-row.hidden { display: none; }
+
+        /* ── Detail-Container: pro Gruppe eigene horizontale Scrollbar ── */
+        .player-details-container {
+            padding: 15px 20px;
+            overflow-x: auto;
+            overflow-y: visible;
+            /* Firefox */
+            scrollbar-width: thin;
+            scrollbar-color: #667eea rgba(255, 255, 255, 0.05);
+        }
+
+        /* Webkit: horizontale Scrollbar pro Container */
+        .player-details-container::-webkit-scrollbar        { height: 6px; }
+        .player-details-container::-webkit-scrollbar-track  { background: rgba(255,255,255,0.05); border-radius: 10px; }
+        .player-details-container::-webkit-scrollbar-thumb  { background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 10px; }
+        .player-details-container::-webkit-scrollbar-thumb:hover { background: linear-gradient(90deg, #764ba2, #667eea); }
+
+        /* ── Innere Detailtabelle ── */
+        .player-detail-table {
+            table-layout: auto;
+            width: max-content;
+            min-width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+            margin-bottom: 15px;
+        }
+
+        .player-detail-table th {
+            background: rgba(102, 126, 234, 0.15);
+            color: #667eea;
+            padding: 8px 12px;
+            text-align: left;
+            font-weight: 600;
+            white-space: nowrap;
+            min-width: 85px;
+        }
+
+        .player-detail-table th:nth-child(-n+4),
+        .player-detail-table td:nth-child(-n+4) { min-width: unset; }
+
+        .player-detail-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            color: #ddd;
+            white-space: nowrap;
+            min-width: 85px;
+        }
+
+        .player-detail-table tr:last-child td { border-bottom: none; }
+        .player-detail-table tr:hover td { background: rgba(255, 255, 255, 0.03); }
+
+        /* Runden-Pills – identisch zu evaluation.css */
+        .round-pill {
+            border-radius: 12px;
+            padding: 3px 10px;
+            font-size: 0.85em;
+            display: inline-block;
+        }
+        .round-pill.cooperated {
+            background: rgba(40, 167, 69, 0.2);
+            border: 1px solid rgba(40, 167, 69, 0.4);
+            color: #28a745;
+        }
+        .round-pill.defected {
+            background: rgba(220, 53, 69, 0.15);
+            border: 1px solid rgba(220, 53, 69, 0.3);
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+
+<h1 class="evaluation-title">Spielauswertung</h1>
+<p class="meta">
+    <span>Raum: <strong>{{ room.id }}</strong></span>
+    <span>Runden gespielt: <strong>{{ num_rounds }}</strong></span>
+    <span>Startguthaben: <strong>{{ "%.2f"|format(initial_coins) }} Coins</strong></span>
+    <span>Multiplikator: <strong>{{ room.settings.multiplier }}×</strong></span>
+    <span>Gruppengröße: <strong>{{ room.settings.group_size }}</strong></span>
+    {% if now %}<span>Exportiert am: <strong>{{ now }}</strong></span>{% endif %}
+</p>
+
+<!-- Gruppenvergleich mit Accordion -->
+<div class="section-box">
+    <h2>Gruppenranking</h2>
+    <div class="table-container">
+        <table>
+            <colgroup>
+                <col><col><col><col><col><col>
+            </colgroup>
+            <thead>
+                <tr>
+                    <th>Rang</th>
+                    <th>Gruppe</th>
+                    <th>Ø Guthaben</th>
+                    <th>Ø Einzahlung</th>
+                    <th>Gesamtgewinn</th>
+                    <th>Kooperationsrate</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for gd in group_comparison %}
+                {# Zusammenfassungszeile – klickbar #}
+                <tr class="group-summary-row {% if loop.index == 1 %}rank-gold{% elif loop.index == 2 %}rank-silver{% elif loop.index == 3 %}rank-bronze{% endif %}"
+                    onclick="toggleGroup({{ gd.group.group_number }})">
+                    <td><strong>{{ loop.index }}</strong></td>
+                    <td>
+                        <span class="toggle-icon" id="icon-{{ gd.group.group_number }}">▶</span>
+                        <strong>Gruppe {{ gd.group.group_number }}</strong>
+                    </td>
+                    <td>{{ "%.2f"|format(gd.avg_balance) }}</td>
+                    <td>{{ "%.2f"|format(gd.avg_contribution) }}</td>
+                    <td>{{ "%+.2f"|format(gd.total_profit) }}</td>
+                    <td>
+                        <div class="coop-bar-wrap">
+                            <div class="coop-bar-fill" style="width:{{ gd.avg_cooperation }}%"></div>
+                            <span class="coop-bar-text">{{ "%.1f"|format(gd.avg_cooperation) }}%</span>
+                        </div>
+                    </td>
+                </tr>
+                {# Detailzeile – eingeklappt #}
+                <tr class="group-detail-row hidden" id="detail-{{ gd.group.group_number }}">
+                    <td colspan="6">
+                        <div class="player-details-container">
+                            {% set group = groups_details | selectattr("group_number", "equalto", gd.group.group_number) | first %}
+                            {% if group %}
+                            <table class="player-detail-table">
+                                <thead>
+                                    <tr>
+                                        <th>Spieler</th>
+                                        <th>Endguthaben</th>
+                                        <th>Gewinn/Verlust</th>
+                                        <th>Koopquote</th>
+                                        {% for r in range(1, num_rounds + 1) %}
+                                        <th>Runde {{ r }}</th>
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for m in group.members %}
+                                    <tr>
+                                        <td><strong>{{ m.name }}</strong></td>
+                                        <td>{{ "%.2f"|format(m.final_balance) }} 🪙</td>
+                                        <td class="{% if m.total_profit > 0 %}profit-positive{% elif m.total_profit < 0 %}profit-negative{% endif %}">
+                                            {{ "%+.2f"|format(m.total_profit) }}
+                                        </td>
+                                        <td>{{ m.coop_rate }}%</td>
+                                        {% for c in m.contributions %}
+                                        <td>
+                                            <span class="round-pill {% if c > 0 %}cooperated{% else %}defected{% endif %}">
+                                                {% if c > 0 %}+{% endif %}{{ "%.2f"|format(c) }}
+                                            </span>
+                                        </td>
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const openGroups = new Set();
+
+    function toggleGroup(groupNumber) {
+        const detailRow = document.getElementById('detail-' + groupNumber);
+        const icon = document.getElementById('icon-' + groupNumber);
+        if (!detailRow) return;
+
+        if (openGroups.has(groupNumber)) {
+            openGroups.delete(groupNumber);
+            detailRow.classList.add('hidden');
+            icon.textContent = '▶';
+        } else {
+            openGroups.add(groupNumber);
+            detailRow.classList.remove('hidden');
+            icon.textContent = '▼';
+        }
+    }
+</script>
+
+</body>
+</html>

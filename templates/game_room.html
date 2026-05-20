@@ -83,9 +83,9 @@
     <div class="player-list">
         <h3>Aktive Spieler:</h3>
         {% if room.incognito_mode and not is_leader %}
-        <div style="text-align: center; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 8px; margin: 10px 0;">
+        <div class="incognito-notice">
             <p>🔒 Inkognito-Modus aktiv</p>
-            <p style="font-size: 14px; color: #aaa;">Namen anderer Spieler werden nicht angezeigt</p>
+            <p class="incognito-notice-hint">Namen anderer Spieler werden nicht angezeigt</p>
         </div>
         {% endif %}
         <div id="playersContainer">
@@ -95,14 +95,14 @@
                 <div class="player-item current-player {% if p.ready %}ready{% endif %}" id="player-{{ p.id }}">
                     <div>
                         <span class="player-name">⭐ {{ p.name }} (Du)</span>
-                        <span style="color: #666; margin-left: 10px;">({{ "%.2f"|format(p.coins) }} Coins)</span>
+                        <span class="coins-display">({{ "%.2f"|format(p.coins) }} Coins)</span>
                     </div>
                     <div class="player-actions">
                         <span class="player-status">
                             {% if p.ready %}
-                            <span style="color: #28a745;">✅ Bereit</span>
+                            <span class="text-success">✅ Bereit</span>
                             {% else %}
-                            <span style="color: #dc3545;">❌ Nicht bereit</span>
+                            <span class="text-danger">❌ Nicht bereit</span>
                             {% endif %}
                         </span>
                     </div>
@@ -117,15 +117,15 @@
                     <div>
                         <span class="player-name">{{ p.name }}</span>
                         {% if not room.incognito_mode or is_leader %}
-                        <span style="color: #666; margin-left: 10px;">({{ "%.2f"|format(p.coins) }} Coins)</span>
+                        <span class="coins-display">({{ "%.2f"|format(p.coins) }} Coins)</span>
                         {% endif %}
                     </div>
                     <div class="player-actions">
                         <span class="player-status">
                             {% if p.ready %}
-                            <span style="color: #28a745;">✅ Bereit</span>
+                            <span class="text-success">✅ Bereit</span>
                             {% else %}
-                            <span style="color: #dc3545;">❌ Nicht bereit</span>
+                            <span class="text-danger">❌ Nicht bereit</span>
                             {% endif %}
                         </span>
                         {% if is_leader %}
@@ -141,12 +141,12 @@
         </div>
     </div>
 
-<div id="room-data" 
+<div id="room-data"
      data-room-id="{{ room.id }}"
      data-is-leader="{{ 'true' if is_leader else 'false' }}"
      data-room-leader-id="{{ room.leader_id }}"
      data-incognito="{{ 'true' if room.incognito_mode else 'false' }}"
-     style="display: none;">
+     class="hidden">
 </div>
 
 {% endblock %}
@@ -300,13 +300,13 @@
                 playerElement.classList.add('ready');
                 const statusElement = playerElement.querySelector('.player-status');
                 if (statusElement) {
-                    statusElement.innerHTML = '<span style="color: #28a745;">✅ Bereit</span>';
+                    statusElement.innerHTML = '<span class="text-success">✅ Bereit</span>';
                 }
             } else {
                 playerElement.classList.remove('ready');
                 const statusElement = playerElement.querySelector('.player-status');
                 if (statusElement) {
-                    statusElement.innerHTML = '<span style="color: #dc3545;">❌ Nicht bereit</span>';
+                    statusElement.innerHTML = '<span class="text-danger">❌ Nicht bereit</span>';
                 }
             }
         }
@@ -446,13 +446,13 @@
         playerElement.innerHTML = `
             <div>
                 <span class="player-name">${playerName}</span>
-                <span style="color: #666; margin-left: 10px;">(${playerData.coins} Coins)</span>
+                <span class="coins-display">(${playerData.coins} Coins)</span>
             </div>
             <div class="player-actions">
                 <span class="player-status">
-                    ${playerData.ready ? 
-                        '<span style="color: #28a745;">✅ Bereit</span>' : 
-                        '<span style="color: #dc3545;">❌ Nicht bereit</span>'
+                    ${playerData.ready
+                        ? '<span class="text-success">✅ Bereit</span>'
+                        : '<span class="text-danger">❌ Nicht bereit</span>'
                     }
                 </span>
                 ${actionsHtml}
