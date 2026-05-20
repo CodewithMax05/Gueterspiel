@@ -742,6 +742,14 @@ def game(room_id):
 
     if player.is_leader:
         return redirect(url_for('leader_dashboard', room_id=room_id))
+
+    # Falsche Seite für aktuellen Status → korrekte Seite
+    if room.status == 'round_results':
+        return redirect(url_for('round_results', room_id=room_id))
+    if room.status == 'finished':
+        return redirect(url_for('evaluation', room_id=room_id))
+    if room.status in ['waiting', 'ready']:
+        return redirect(url_for('game_room', room_id=room_id))
     
     # Initialisiere Spieler-Guthaben beim ersten Betreten des Spiels
     if player.coins == 0 and len(player.game_history['balances']) == 0:
@@ -1915,7 +1923,7 @@ def handle_leave_room():
         })
 
     else:
-        lobby_statuses = ['waiting', 'ready']
+        lobby_statuses = ['waiting', 'ready', 'finished']
         if room.status in lobby_statuses:
             # Lobby: Spieler sofort vollständig entfernen
             room.remove_player(player_id)

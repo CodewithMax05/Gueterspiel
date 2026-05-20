@@ -317,10 +317,19 @@
         socket.on('room_state_update', function(data) {
             if (isLeader || !currentRoomId) return;
             const path = window.location.pathname;
+            const status = data.room_status || data.status;
 
-            if (data.status === 'playing' && !path.startsWith('/game/')) {
+            // Nur auf Spielseiten weiterleiten – nie von index/evaluation wegdrängen
+            const onGamePage = path.startsWith('/game/') ||
+                               path.startsWith('/round_results/') ||
+                               path.startsWith('/game_room/');
+
+            if (status === 'playing' && !path.startsWith('/game/')) {
                 window.location.href = `/game/${currentRoomId}`;
-            } else if (data.status === 'finished' && !path.startsWith('/evaluation/')) {
+            } else if (status === 'round_results' && !path.startsWith('/round_results/')) {
+                window.location.href = `/round_results/${currentRoomId}`;
+            } else if (status === 'finished' && onGamePage) {
+                // Nur weiterleiten wenn Spieler noch auf einer Spielseite steckt
                 window.location.href = `/evaluation/${currentRoomId}`;
             }
         });

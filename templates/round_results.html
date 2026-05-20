@@ -87,8 +87,17 @@
 
 {% block scripts %}
 <script>
-    // Dem Server mitteilen, dass dieser Spieler round_results geladen hat
-    socket.emit('arrived_at_results');
+    // Dem Server mitteilen, dass dieser Spieler round_results geladen hat.
+    // Falls Socket noch nicht verbunden (z.B. nach Browser-Neustart), warten.
+    function sendArrived() {
+        socket.emit('arrived_at_results');
+    }
+
+    if (socket.connected) {
+        sendArrived();
+    } else {
+        socket.once('connect', sendArrived);
+    }
 </script>
 {% endblock %}
 {% endblock %}
