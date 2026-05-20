@@ -8,7 +8,7 @@ import time
 import secrets
 import string
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify, make_response
 from flask_socketio import SocketIO, emit, join_room
 from collections import defaultdict
@@ -27,6 +27,8 @@ if not app.config['SECRET_KEY']:
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = is_production
 app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 
 socketio = SocketIO(
     app,
