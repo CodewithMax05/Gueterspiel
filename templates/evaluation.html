@@ -88,7 +88,7 @@
         </div>
 
         <div class="podium-chart-container">
-            <h3 style="color:#aaa; font-size:0.95em; margin-bottom:12px;">📈 Gewinnverlauf pro Runde</h3>
+            <h3 style="color:#aaa; font-size:0.95em; margin-bottom:12px;">📈 Gewinnverlauf pro Runde (kumuliert)</h3>
             <canvas id="podiumChart" height="80"></canvas>
         </div>
     </div>
@@ -319,9 +319,9 @@
         const fillColors   = ['rgba(255,215,0,0.12)', 'rgba(192,192,192,0.08)', 'rgba(205,127,50,0.08)'];
         const pointColors  = ['rgba(255,215,0,1)', 'rgba(192,192,192,1)', 'rgba(205,127,50,1)'];
 
-        // X-Achse: Runde 1, 2, 3 ... (Länge aus längstem Verlauf)
+        // X-Achse: Start, Nach Runde 1, 2, 3 ... (Länge aus längstem Verlauf)
         const maxRounds = Math.max(...sorted.map(p => p.profit_history.length));
-        const labels = Array.from({ length: maxRounds }, (_, i) => `Runde ${i + 1}`);
+        const labels = Array.from({ length: maxRounds }, (_, i) => i === 0 ? 'Start' : `Nach Runde ${i}`);
 
         const datasets = sorted.map((p, i) => ({
             label: `${p.medal} ${p.name}`,

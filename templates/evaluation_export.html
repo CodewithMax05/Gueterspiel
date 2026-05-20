@@ -311,7 +311,7 @@
 
     <!-- Liniendiagramm: Gewinnverlauf pro Runde -->
     <div style="background:rgba(255,255,255,0.05); border-radius:10px; padding:16px; margin-top:20px;">
-        <p style="color:#aaa; font-size:0.95em; margin-bottom:12px;">📈 Gewinnverlauf pro Runde</p>
+        <p style="color:#aaa; font-size:0.95em; margin-bottom:12px;">📈 Gewinnverlauf pro Runde (kumuliert)</p>
         <canvas id="podiumChart" height="90"></canvas>
     </div>
 </div>
@@ -443,7 +443,7 @@
         const fillColors   = ['rgba(255,215,0,0.1)', 'rgba(192,192,192,0.08)', 'rgba(205,127,50,0.08)'];
 
         const maxRounds = Math.max.apply(null, sorted.map(function(p) { return p.profit_history.length; }));
-        const labels = Array.from({ length: maxRounds }, function(_, i) { return 'Runde ' + (i + 1); });
+        const labels = Array.from({ length: maxRounds }, function(_, i) { return i === 0 ? 'Start' : 'Nach Runde ' + i; });
 
         const datasets = sorted.map(function(p, i) {
             return {
