@@ -262,7 +262,8 @@
                 {% for gd in group_comparison %}
                 {# Zusammenfassungszeile – klickbar #}
                 <tr class="group-summary-row {% if loop.index == 1 %}rank-gold{% elif loop.index == 2 %}rank-silver{% elif loop.index == 3 %}rank-bronze{% endif %}"
-                    onclick="toggleGroup({{ gd.group.group_number }})">
+                    data-group="{{ gd.group.group_number }}"
+                    onclick="toggleGroup(parseInt(this.dataset.group))">
                     <td><strong>{{ loop.index }}</strong></td>
                     <td>
                         <span class="toggle-icon" id="icon-{{ gd.group.group_number }}">▶</span>
@@ -273,7 +274,7 @@
                     <td>{{ "%+.2f"|format(gd.total_profit) }}</td>
                     <td>
                         <div class="coop-bar-wrap">
-                            <div class="coop-bar-fill" style="width:{{ gd.avg_cooperation }}%"></div>
+                            <div class="coop-bar-fill" data-width="{{ gd.avg_cooperation }}"></div>
                             <span class="coop-bar-text">{{ "%.1f"|format(gd.avg_cooperation) }}%</span>
                         </div>
                     </td>
@@ -344,6 +345,11 @@
             icon.textContent = '▼';
         }
     }
+
+    // Kooperations-Balken-Breiten aus data-width setzen
+    document.querySelectorAll('.coop-bar-fill[data-width]').forEach(function(el) {
+        el.style.width = (parseFloat(el.dataset.width) || 0) + '%';
+    });
 </script>
 
 </body>
