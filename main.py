@@ -1277,12 +1277,13 @@ def handle_join_game_room(data):
                         'timer_running': bool(room.timer_running)
                     }
 
+                non_leader_ids = [pid for pid in room.players if pid in players and not players[pid].is_leader]
                 if room.status == 'round_results':
                     submitted_c = getattr(room, 'submitted_count', len(room.submitted_players))
-                    total_p = getattr(room, 'total_players', len([pid for pid in room.players if not players[pid].is_leader]))
+                    total_p = getattr(room, 'total_players', len(non_leader_ids))
                 else:
                     submitted_c = len(room.submitted_players)
-                    total_p = len([pid for pid in room.players if not players[pid].is_leader])
+                    total_p = len(non_leader_ids)
 
                 # Prüfen ob Spieler bereits eingereicht hat
                 player = players.get(player_id)
@@ -1298,6 +1299,16 @@ def handle_join_game_room(data):
                     'has_submitted': has_submitted,
                     'player_contribution': player_contribution
                 }, room=request.sid)
+
+                # Leader-Reconnect im round_results-Status: Ankunftszähler direkt nachliefern
+                if player and player.is_leader and room.status == 'round_results':
+                    arrived = len(room.players_in_results)
+                    total_non_leader = len(non_leader_ids)
+                    emit('results_arrival_update', {
+                        'arrived': arrived,
+                        'total': total_non_leader,
+                        'all_ready': arrived >= total_non_leader and total_non_leader > 0
+                    }, room=request.sid)
 
     except Exception as e:
         print(f"Fehler in join_game_room: {e}")
