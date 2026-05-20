@@ -9,96 +9,68 @@
     <h1 style="text-align: center;">📊 Ergebnisse Runde {{ room.current_round }}</h1>
     
     <!-- Gruppenergebnisse - Nur die eigene Gruppe -->
-    <div class="group-results">        
-        {% for group in results %}
-            {% set ns = namespace(found=false) %}
-            {% for p in group.players %}
-                {% if p.id == player.id %}
-                    {% set ns.found = true %}
-                {% endif %}
-            {% endfor %}
-            
-            {% if ns.found %}
-            <div class="group-card">
-                <div class="group-header">
-                    <h3>Gruppe {{ group.group_number }}</h3>
-                    <span style="color: #667eea; font-size: 18px;">
-                        {{ group.players|length }} Spieler
-                    </span>
+    <div class="group-results">
+        {% if player_group %}
+        <div class="group-card">
+            <div class="group-header">
+                <h3>Gruppe {{ player_group.group_number }}</h3>
+                <span style="color: #667eea; font-size: 18px;">
+                    {{ player_group.players|length }} Spieler
+                </span>
+            </div>
+
+            <div class="group-stats">
+                <div class="stat-box">
+                    <div class="stat-label">Summe Einzahlungen</div>
+                    <div class="stat-value">{{ "%.2f"|format(player_group.total_contribution) }}</div>
                 </div>
-                
-                <div class="group-stats">
-                    <div class="stat-box">
-                        <div class="stat-label">Summe Einzahlungen</div>
-                        <div class="stat-value">{{ "%.2f"|format(group.total_contribution) }}</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-label">Auszahlung pro Spieler</div>
-                        <div class="stat-value">{{ "%.2f"|format(group.payout_per_player) }}</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-label">Kooperationsquote</div>
-                        <div class="stat-value">{{ "%.1f"|format(group.cooperation_rate) }}%</div>
-                    </div>
+                <div class="stat-box">
+                    <div class="stat-label">Auszahlung pro Spieler</div>
+                    <div class="stat-value">{{ "%.2f"|format(player_group.payout_per_player) }}</div>
                 </div>
-                
-                <div class="players-table">
-                    <div class="player-row header">
-                        <div>Spieler</div>
-                        <div>Eingezahlt</div>
-                        <div>Ausgezahlt</div>
-                        <div>Neues Guthaben</div>
-                        <div>Gewinn/Verlust</div>
-                    </div>
-                    
-                    {% for p in group.players %}
-                    <div class="player-row {% if p.id == player.id %}current-player{% endif %}">
-                        <div data-label="Spieler:">
-                            {% if not room.incognito_mode or player.is_leader or p.id == player.id %}
-                                {{ p.name }}
-                                {% if p.id == player.id %}<strong>(Du)</strong>{% endif %}
-                            {% else %}
-                                Spieler {{ loop.index }}
-                            {% endif %}
-                        </div>
-                        <div data-label="Eingezahlt:">
-                            {% if not room.incognito_mode or player.is_leader or p.id == player.id %}
-                                {{ "%.2f"|format(p.contribution) }}
-                            {% else %}
-                                ???
-                            {% endif %}
-                        </div>
-                        <div data-label="Ausgezahlt:">
-                            {% if not room.incognito_mode or player.is_leader or p.id == player.id %}
-                                {{ "%.2f"|format(p.payout) }}
-                            {% else %}
-                                ???
-                            {% endif %}
-                        </div>
-                        <div data-label="Guthaben:">
-                            {% if not room.incognito_mode or player.is_leader or p.id == player.id %}
-                                {{ "%.2f"|format(p.new_balance) }}
-                            {% else %}
-                                ???
-                            {% endif %}
-                        </div>
-                        <div data-label="Gewinn/Verlust:" 
-                             class="profit-indicator 
-                                    {% if not room.incognito_mode or player.is_leader or p.id == player.id %}
-                                        {% if p.profit > 0 %}positive{% elif p.profit < 0 %}negative{% endif %}
-                                    {% endif %}">
-                            {% if not room.incognito_mode or player.is_leader or p.id == player.id %}
-                                {% if p.profit > 0 %}+{% endif %}{{ "%.2f"|format(p.profit) }}
-                            {% else %}
-                                ???
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
+                <div class="stat-box">
+                    <div class="stat-label">Kooperationsquote</div>
+                    <div class="stat-value">{{ "%.1f"|format(player_group.cooperation_rate) }}%</div>
                 </div>
             </div>
-            {% endif %}
-        {% endfor %}
+
+            <div class="players-table">
+                <div class="player-row header">
+                    <div>Spieler</div>
+                    <div>Eingezahlt</div>
+                    <div>Ausgezahlt</div>
+                    <div>Neues Guthaben</div>
+                    <div>Gewinn/Verlust</div>
+                </div>
+
+                {% set visible = not room.incognito_mode or is_leader %}
+                {% for p in player_group.players %}
+                {% set is_me = p.id == player.id %}
+                {% set show = visible or is_me %}
+                <div class="player-row {% if is_me %}current-player{% endif %}">
+                    <div data-label="Spieler:">
+                        {% if show %}{{ p.name }}{% if is_me %} <strong>(Du)</strong>{% endif %}
+                        {% else %}Spieler {{ loop.index }}{% endif %}
+                    </div>
+                    <div data-label="Eingezahlt:">
+                        {% if show %}{{ "%.2f"|format(p.contribution) }}{% else %}???{% endif %}
+                    </div>
+                    <div data-label="Ausgezahlt:">
+                        {% if show %}{{ "%.2f"|format(p.payout) }}{% else %}???{% endif %}
+                    </div>
+                    <div data-label="Guthaben:">
+                        {% if show %}{{ "%.2f"|format(p.new_balance) }}{% else %}???{% endif %}
+                    </div>
+                    <div data-label="Gewinn/Verlust:"
+                         class="profit-indicator {% if show %}{% if p.profit > 0 %}positive{% elif p.profit < 0 %}negative{% endif %}{% endif %}">
+                        {% if show %}{% if p.profit > 0 %}+{% endif %}{{ "%.2f"|format(p.profit) }}
+                        {% else %}???{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
     </div>
     
     <!-- Warte auf Leader -->

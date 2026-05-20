@@ -24,6 +24,12 @@
         </div>
     </header>
 
+    <!-- Leader-Status-Banner: wird per Socket ein-/ausgeblendet -->
+    <div id="leader-status-banner" class="leader-banner hidden" role="alert">
+        <span id="leader-banner-icon"></span>
+        <span id="leader-banner-text"></span>
+    </div>
+
     <main>
         {% block body %}{% endblock %}
     </main>
@@ -33,6 +39,7 @@
     </footer>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
         // Globale Variablen
         const socket = io({
@@ -229,6 +236,32 @@
                 window.sharedLocalInterval = null;
             }
         }
+
+        /* --- Leader-Status-Banner --- */
+        function setLeaderBanner(icon, text, cssClass, autohideMs = 0) {
+            const banner = document.getElementById('leader-status-banner');
+            const bannerIcon = document.getElementById('leader-banner-icon');
+            const bannerText = document.getElementById('leader-banner-text');
+            if (!banner) return;
+            bannerIcon.textContent = icon;
+            bannerText.textContent = text;
+            banner.className = `leader-banner ${cssClass}`;
+            if (autohideMs > 0) {
+                setTimeout(() => { banner.className = 'leader-banner hidden'; }, autohideMs);
+            }
+        }
+
+        socket.on('leader_disconnected', function(data) {
+            setLeaderBanner('⚠️', data.message, 'warning');
+        });
+
+        socket.on('leader_reconnected', function(data) {
+            setLeaderBanner('✅', data.message, 'success', 4000);
+        });
+
+        socket.on('leader_offline', function(data) {
+            setLeaderBanner('🔴', data.message, 'danger');
+        });
     </script>
     
     {% block scripts %}{% endblock %}

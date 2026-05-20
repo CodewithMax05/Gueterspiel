@@ -51,7 +51,7 @@
             <div class="stat-chart">
                 <h3>Einzahlungsverlauf deiner Gruppe</h3>
                 <div class="chart-container">
-                    <canvas id="contributionChart" width="400" height="200"></canvas>
+                    <canvas id="contributionChart"></canvas>
                 </div>
             </div>
             
@@ -59,7 +59,7 @@
             <div class="stat-chart">
                 <h3>Guthabenverlauf</h3>
                 <div class="chart-container">
-                    <canvas id="balanceChart" width="400" height="200"></canvas>
+                    <canvas id="balanceChart"></canvas>
                 </div>
             </div>
         </div>
@@ -168,165 +168,107 @@
         initCooperationBars();
     });
     
+    // Gemeinsame Chart.js Optionen für dunkles Theme
+    const chartDefaults = {
+        responsive: true,
+        maintainAspectRatio: true,
+        animation: { duration: 800, easing: 'easeInOutQuart' },
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: 'rgba(20, 20, 40, 0.9)',
+                titleColor: '#ccc',
+                bodyColor: '#fff',
+                borderColor: 'rgba(255,255,255,0.15)',
+                borderWidth: 1,
+                padding: 10,
+            }
+        },
+        scales: {
+            x: {
+                ticks: { color: '#aaa', font: { size: 12 } },
+                grid: { color: 'rgba(255,255,255,0.07)' }
+            },
+            y: {
+                ticks: { color: '#aaa', font: { size: 12 }, callback: v => v.toFixed(2) },
+                grid: { color: 'rgba(255,255,255,0.07)' }
+            }
+        }
+    };
+
     function renderContributionChart(contributions) {
         const canvas = document.getElementById('contributionChart');
         if (!canvas || !contributions.length) return;
-        
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
-        const padding = 40;
-        
-        // Chart-Hintergrund
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-        ctx.fillRect(0, 0, width, height);
-        
-        // Raster zeichnen
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-        ctx.lineWidth = 1;
-        
-        // Horizontale Linien
-        for (let i = 0; i <= 5; i++) {
-            const y = padding + (i * (height - 2 * padding) / 5);
-            ctx.beginPath();
-            ctx.moveTo(padding, y);
-            ctx.lineTo(width - padding, y);
-            ctx.stroke();
-        }
-        
-        // Daten normalisieren
-        const maxContribution = Math.max(...contributions, 1);
-        const dataPoints = contributions.map((value, index) => ({
-            x: padding + (index / (contributions.length - 1 || 1)) * (width - 2 * padding),
-            y: height - padding - (value / maxContribution) * (height - 2 * padding)
-        }));
-        
-        // Linie zeichnen
-        ctx.strokeStyle = '#667eea';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        
-        dataPoints.forEach((point, index) => {
-            if (index === 0) {
-                ctx.moveTo(point.x, point.y);
-            } else {
-                ctx.lineTo(point.x, point.y);
+
+        new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: contributions.map((_, i) => `Runde ${i + 1}`),
+                datasets: [{
+                    label: 'Einzahlung (Coins)',
+                    data: contributions,
+                    backgroundColor: contributions.map(c =>
+                        c > 0 ? 'rgba(102, 126, 234, 0.75)' : 'rgba(220, 53, 69, 0.55)'
+                    ),
+                    borderColor: contributions.map(c =>
+                        c > 0 ? '#667eea' : '#dc3545'
+                    ),
+                    borderWidth: 2,
+                    borderRadius: 6,
+                }]
+            },
+            options: {
+                ...chartDefaults,
+                plugins: {
+                    ...chartDefaults.plugins,
+                    tooltip: {
+                        ...chartDefaults.plugins.tooltip,
+                        callbacks: { label: ctx => `${ctx.parsed.y.toFixed(2)} Coins` }
+                    }
+                },
+                scales: {
+                    ...chartDefaults.scales,
+                    y: { ...chartDefaults.scales.y, beginAtZero: true }
+                }
             }
         });
-        ctx.stroke();
-        
-        // Punkte zeichnen
-        ctx.fillStyle = '#667eea';
-        dataPoints.forEach(point => {
-            ctx.beginPath();
-            ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
-            ctx.fill();
-        });
-        
-        // Beschriftungen
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        
-        // X-Achse (Runden)
-        contributions.forEach((_, index) => {
-            const x = padding + (index / (contributions.length - 1 || 1)) * (width - 2 * padding);
-            ctx.fillText(`R${index + 1}`, x, height - padding + 20);
-        });
-        
-        // Y-Achse (Coins)
-        ctx.textAlign = 'right';
-        for (let i = 0; i <= 5; i++) {
-            const value = (i / 5) * maxContribution;
-            const y = height - padding - (i / 5) * (height - 2 * padding);
-            ctx.fillText(value.toFixed(1), padding - 5, y + 3);
-        }
-        
-        // Titel
-        ctx.textAlign = 'center';
-        ctx.fillText('Einzahlungen pro Runde', width / 2, 20);
     }
-    
+
     function renderBalanceChart(balances) {
         const canvas = document.getElementById('balanceChart');
         if (!canvas || !balances.length) return;
-        
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
-        const padding = 40;
-        
-        // Chart-Hintergrund
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-        ctx.fillRect(0, 0, width, height);
-        
-        // Raster zeichnen
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-        ctx.lineWidth = 1;
-        
-        // Horizontale Linien
-        for (let i = 0; i <= 5; i++) {
-            const y = padding + (i * (height - 2 * padding) / 5);
-            ctx.beginPath();
-            ctx.moveTo(padding, y);
-            ctx.lineTo(width - padding, y);
-            ctx.stroke();
-        }
-        
-        // Daten normalisieren
-        const maxBalance = Math.max(...balances);
-        const minBalance = Math.min(...balances);
-        const range = Math.max(maxBalance - minBalance, 1);
-        
-        const dataPoints = balances.map((value, index) => ({
-            x: padding + (index / (balances.length - 1 || 1)) * (width - 2 * padding),
-            y: height - padding - ((value - minBalance) / range) * (height - 2 * padding)
-        }));
-        
-        // Linie zeichnen
-        ctx.strokeStyle = '#28a745';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        
-        dataPoints.forEach((point, index) => {
-            if (index === 0) {
-                ctx.moveTo(point.x, point.y);
-            } else {
-                ctx.lineTo(point.x, point.y);
+
+        const initial = balances[0];
+
+        new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: balances.map((_, i) => i === 0 ? 'Start' : `Nach R${i}`),
+                datasets: [{
+                    label: 'Guthaben (Coins)',
+                    data: balances,
+                    borderColor: '#28a745',
+                    backgroundColor: 'rgba(40, 167, 69, 0.12)',
+                    tension: 0.35,
+                    fill: true,
+                    pointRadius: 5,
+                    pointHoverRadius: 8,
+                    pointBackgroundColor: balances.map(b => b >= initial ? '#28a745' : '#dc3545'),
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                }]
+            },
+            options: {
+                ...chartDefaults,
+                plugins: {
+                    ...chartDefaults.plugins,
+                    tooltip: {
+                        ...chartDefaults.plugins.tooltip,
+                        callbacks: { label: ctx => `${ctx.parsed.y.toFixed(2)} Coins` }
+                    }
+                }
             }
         });
-        ctx.stroke();
-        
-        // Punkte zeichnen
-        ctx.fillStyle = '#28a745';
-        dataPoints.forEach(point => {
-            ctx.beginPath();
-            ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
-            ctx.fill();
-        });
-        
-        // Beschriftungen
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        
-        // X-Achse (Runden)
-        balances.forEach((_, index) => {
-            const x = padding + (index / (balances.length - 1 || 1)) * (width - 2 * padding);
-            ctx.fillText(`R${index + 1}`, x, height - padding + 20);
-        });
-        
-        // Y-Achse (Coins)
-        ctx.textAlign = 'right';
-        for (let i = 0; i <= 5; i++) {
-            const value = minBalance + (i / 5) * range;
-            const y = height - padding - (i / 5) * (height - 2 * padding);
-            ctx.fillText(value.toFixed(1), padding - 5, y + 3);
-        }
-        
-        // Titel
-        ctx.textAlign = 'center';
-        ctx.fillText('Guthabenverlauf', width / 2, 20);
     }
     
     function animateStatistics() {

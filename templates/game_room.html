@@ -224,15 +224,6 @@
         }
     }
 
-    function checkRoomStatus() {
-        // API-Aufruf um Status zu prüfen
-        fetch(`/api/room/${roomId}/status`)
-            .then(response => response.json())
-            .then(data => {
-                updateRoomStatus(data.status);
-            });
-    }
-
     function removePlayer(playerId, playerName) {
         if (confirm(`Möchten Sie wirklich den Spieler "${playerName}" aus dem Raum entfernen?`)) {
             console.log('DEBUG: Entferne Spieler:', playerId);
@@ -280,14 +271,12 @@
 
         if (incognito && !leaderFlag && data.id !== currentPlayerId) {
             updatePlayerCount();
-            checkRoomStatus();
             checkRequirementsOnEvents();
             return;
         }
 
         updatePlayerList(data);
         updatePlayerCount();
-        checkRoomStatus();
         checkRequirementsOnEvents();
     });
     

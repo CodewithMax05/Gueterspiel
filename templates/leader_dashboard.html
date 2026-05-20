@@ -303,14 +303,6 @@
         }
     });
 
-    socket.on('contribution_submitted', function(data) {
-        // contribution_submitted kann relevant sein, auch vor initialStatusLoaded:
-        // Wir akzeptieren contribution_submitted immer, aber wenn initialStatusLoaded==false,
-        // dann übernehmen wir die Werte in die lokale store (nicht überschreiben).
-        submittedCount = Number(data.submitted_count) || submittedCount;
-        totalPlayers = Number(data.total_players) || totalPlayers;
-        updateProgress();
-    });
 
     socket.on('round_finished', function(data) {
         console.log('DEBUG: round_finished received on dashboard');
@@ -453,7 +445,7 @@
 
     // Initial laden
     loadGroupDetails();
-    // Alle 3 Sekunden aktualisieren
-    setInterval(loadGroupDetails, 3000);
+    // Fallback-Polling alle 10s (Socket-Events übernehmen die Echtzeit-Updates)
+    setInterval(loadGroupDetails, 10000);
 </script>
 {% endblock %}
