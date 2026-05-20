@@ -79,38 +79,16 @@
     </div>
 </div>
 
-<div id="results-data" 
+<div id="results-data"
      data-room-id="{{ room.id }}"
      data-player-id="{{ player.id }}"
      style="display: none;">
 </div>
-{% endblock %}
 
 {% block scripts %}
-<script>    
-    // WebSocket Events für round_results.html
-    socket.on('next_round_started', function(data) {
-        // Fallback
-        console.log('DEBUG: next_round_started received, redirecting to game');
-        showNotification('Nächste Runde startet!', 'success');
-        setTimeout(() => {
-            window.location.href = `/game/${data.room_id}`;
-        }, 1000);
-    });
-    
-    socket.on('game_finished', function(data) {
-        showNotification('Spiel beendet!', 'info');
-        setTimeout(() => {
-            window.location.href = `/evaluation/${data.room_id}`;
-        }, 1500);
-    });
-
-    socket.on('redirect_to_game', function(data) {
-        console.log('DEBUG: redirect_to_game received, redirecting to game');
-        showNotification('Nächste Runde startet!', 'success');
-        setTimeout(() => {
-            window.location.href = `/game/${data.room_id}`;
-        }, 1000);
-    });
+<script>
+    // Dem Server mitteilen, dass dieser Spieler round_results geladen hat
+    socket.emit('arrived_at_results');
 </script>
+{% endblock %}
 {% endblock %}

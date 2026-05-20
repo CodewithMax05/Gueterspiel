@@ -39,6 +39,10 @@
             <div class="status-value" id="submittedCount">0</div>
         </div>
         <div class="status-item">
+            <div class="status-label">In Auswertung</div>
+            <div class="status-value" id="inResultsCount">0 / 0</div>
+        </div>
+        <div class="status-item">
             <div class="status-label">Gruppengröße</div>
             <div class="status-value" id="groupSize">{{ room.settings.group_size }}</div>
         </div>
@@ -129,6 +133,8 @@
     let isLastRound = false;
     let localCountdownInterval = null;
     let initialStatusLoaded = false;
+    let playersInResults = 0;
+    let allPlayersInResults = false;
 
     document.addEventListener('DOMContentLoaded', function() {
         // Daten aus HTML data attributes lesen
@@ -161,6 +167,11 @@
                 socket.emit('next_round');
             });
         }
+
+        // Falls der Server einen Fehler zurückschickt: Button zurücksetzen
+        socket.on('error', function() {
+            updateButtonState();
+        });
     });
 
     function updateTimerDisplay() {
@@ -216,11 +227,12 @@
             return;
         }
 
-        // Button nur enabled wenn Zeit abgelaufen ist
+        // Button nur enabled wenn Zeit abgelaufen UND alle Spieler in round_results
         const timeExpired = serverTimeLeft <= 0;
-        nextRoundBtn.disabled = !timeExpired;
+        const canProceed = timeExpired && allPlayersInResults;
+        nextRoundBtn.disabled = !canProceed;
 
-        if (timeExpired) {
+        if (canProceed) {
             if (isLastRound) {
                 nextRoundBtn.textContent = '📊 Auswertung anzeigen';
             } else {
@@ -228,8 +240,13 @@
             }
             nextRoundBtn.classList.remove('btn-disabled');
             nextRoundBtn.classList.add('btn-pulse');
-        } else {
+        } else if (!timeExpired) {
             nextRoundBtn.textContent = `⏳ Nächste Runde starten (noch ${serverTimeLeft}s)`;
+            nextRoundBtn.classList.add('btn-disabled');
+            nextRoundBtn.classList.remove('btn-pulse');
+        } else {
+            // Zeit abgelaufen, aber noch nicht alle in round_results
+            nextRoundBtn.textContent = `⏳ Warte auf Spieler... (${playersInResults} / ${totalPlayers})`;
             nextRoundBtn.classList.add('btn-disabled');
             nextRoundBtn.classList.remove('btn-pulse');
         }
@@ -312,41 +329,44 @@
         serverTimeLeft = 0;
         submittedCount = totalPlayers || submittedCount;
 
+        // Ankunfts-Tracking zurücksetzen
+        playersInResults = 0;
+        allPlayersInResults = false;
+        const inResultsEl = document.getElementById('inResultsCount');
+        if (inResultsEl) inResultsEl.textContent = `0 / ${totalPlayers}`;
+
         updateProgress();
         updateTimerDisplay();
 
         initialStatusLoaded = true;
         checkIfLastRound();
+        updateButtonState();
+    });
 
-        // NEU: 3 Sekunden Countdown bevor Button aktiv wird
-        let countdown = 3;
-        const nextRoundBtn = document.getElementById('nextRoundBtn');
+    socket.on('results_arrival_update', function(data) {
+        playersInResults = data.arrived;
+        allPlayersInResults = data.all_ready;
 
-        const countdownInterval = setInterval(() => {
-            if (nextRoundBtn) {
-                nextRoundBtn.textContent = `⏳ Bitte warten... (${countdown}s)`;
-                nextRoundBtn.disabled = true;
-                nextRoundBtn.classList.add('btn-disabled');
-                nextRoundBtn.classList.remove('btn-pulse');
-            }
-            countdown--;
+        const inResultsEl = document.getElementById('inResultsCount');
+        if (inResultsEl) inResultsEl.textContent = `${data.arrived} / ${data.total}`;
 
-            if (countdown < 0) {
-                clearInterval(countdownInterval);
-                // Jetzt Button normal aktivieren
-                updateButtonState();
-            }
-        }, 1000);
+        updateButtonState();
     });
 
     socket.on('next_round_started', function(data) {
         showNotification('Nächste Runde startet!', 'success');
-    
+
         // Rundenzahl aktualisieren
         const roundEl = document.getElementById('currentRound');
         if (roundEl && data.current_round) {
             roundEl.textContent = data.current_round;
         }
+
+        // Ankunfts-Tracking für neue Runde zurücksetzen
+        playersInResults = 0;
+        allPlayersInResults = false;
+        const inResultsEl = document.getElementById('inResultsCount');
+        if (inResultsEl) inResultsEl.textContent = `0 / ${totalPlayers}`;
 
         submittedCount = 0;
         updateProgress();
@@ -359,7 +379,6 @@
             nextRoundBtn.classList.remove('btn-pulse');
         }
 
-        // Prüfe erneut ob letzte Runde (kleine Verzögerung)
         setTimeout(() => checkIfLastRound(), 500);
     });
 

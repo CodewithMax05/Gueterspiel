@@ -71,6 +71,7 @@ class GameRoom:
         self.access_code = settings.get('access_code')  # 6-stelliger Code für private Räume
         self.chat_enabled = settings.get('chat_enabled', True)  # Platzhalter für Chat-Funktion
         self.round_end_time = None
+        self.players_in_results = set()   # PIDs die round_results geladen haben
 
     def update_timer_status(self, time_left, submitted_count, total_players, timer_running):
         self.timer_remaining = time_left
@@ -407,6 +408,28 @@ def stop_game_timer(room_id):
                 if room.status == "round_results":
                     room.timer_remaining = 0
             print(f"Game-Timer für Raum {room_id} gestoppt")
+
+def simulate_test_players_at_results(room_id):
+    """Markiert Testspieler nach kurzem Delay als in round_results angekommen."""
+    sleep(0.5)  # Kurz warten, damit der Leader-Client round_finished verarbeitet hat
+    room = rooms.get(room_id)
+    if not room or room.status != 'round_results':
+        return
+
+    non_leader_ids = [pid for pid in room.players if pid in players and not players[pid].is_leader]
+    for pid in non_leader_ids:
+        player = players.get(pid)
+        if player and player.is_test:
+            room.players_in_results.add(pid)
+
+    total = len(non_leader_ids)
+    arrived = len(room.players_in_results)
+    socketio.emit('results_arrival_update', {
+        'arrived': arrived,
+        'total': total,
+        'all_ready': arrived >= total
+    }, room=room_id)
+
 
 def simulate_test_players(room_id):
     """Lässt Test-Spieler zu zufälligen Zeitpunkten zufällige Beiträge einreichen"""
@@ -1540,7 +1563,8 @@ def finish_round(room_id):
 
         # Setze Status *so früh wie möglich*, damit keine späteren submits mehr akzeptiert werden
         room.status = "round_results"
-        room.round_end_time = time.time() 
+        room.round_end_time = time.time()
+        room.players_in_results = set()   # Tracking für neue Runde zurücksetzen
         room.timer_running = False
         room.timer_remaining = 0
 
@@ -1615,7 +1639,40 @@ def finish_round(room_id):
         except Exception:
             pass
 
+        # Testspieler simulieren Ankunft in round_results (verzögert, damit
+        # der Leader-Client erst round_finished verarbeitet)
+        spawn(simulate_test_players_at_results, room_id)
+
         print(f"DEBUG: finish_round completed for room {room_id} (round {room.current_round})")
+
+@socketio.on('arrived_at_results')
+def handle_arrived_at_results():
+    """Spieler meldet, dass er round_results geladen hat."""
+    player_id = session.get('player_id')
+    if not player_id or player_id not in players:
+        return
+    player = players[player_id]
+    room_id = player.room_id
+    if not room_id or room_id not in rooms:
+        return
+    room = rooms[room_id]
+    if room.status != 'round_results':
+        return
+
+    room.players_in_results.add(player_id)
+
+    # Nur Nicht-Leader-Spieler zählen
+    non_leader_ids = [pid for pid in room.players if pid in players and not players[pid].is_leader]
+    total = len(non_leader_ids)
+    arrived = len(room.players_in_results)
+
+    # Leader informieren
+    socketio.emit('results_arrival_update', {
+        'arrived': arrived,
+        'total': total,
+        'all_ready': arrived >= total
+    }, room=room_id)
+
 
 @socketio.on('next_round')
 def handle_next_round():
@@ -1629,12 +1686,6 @@ def handle_next_round():
     if room_id and room_id in rooms and player.is_leader:
         room = rooms[room_id]
 
-        # NEU: Mindestens 3 Sekunden warten nach Rundenende
-        min_wait = 3
-        if hasattr(room, 'round_end_time') and time.time() - room.round_end_time < min_wait:
-            emit('error', {'message': 'Bitte warte noch einen Moment...'})
-            return
-        
         # Prüfe ob Spiel weitergeht
         if room.should_continue_game():
             # Nächste Runde starten

@@ -284,6 +284,40 @@
                 showNotification(`🔴 ${name} hat die Verbindung verloren.`, 'warning', 6000);
             }
         });
+
+        // ── Globale Navigation: funktioniert auf jeder Seite ──────────────────
+        // Spieler werden weitergeleitet egal auf welcher Seite sie gerade sind.
+        // Leader wird nie automatisch weitergeleitet (er steuert das Spiel).
+
+        socket.on('next_round_started', function(data) {
+            if (isLeader || !currentRoomId) return;
+            showNotification('Nächste Runde startet!', 'success');
+            setTimeout(() => {
+                window.location.href = `/game/${data.room_id}`;
+            }, 800);
+        });
+
+        socket.on('game_finished', function(data) {
+            if (isLeader || !currentRoomId) return;
+            showNotification('Spiel beendet!', 'info');
+            setTimeout(() => {
+                window.location.href = `/evaluation/${data.room_id}`;
+            }, 1500);
+        });
+
+        // Fallback: Falls ein Spieler ein Event verpasst hat (z.B. während
+        // einer Seitennavigation), prüft room_state_update den aktuellen Status
+        // und leitet bei Bedarf sofort weiter.
+        socket.on('room_state_update', function(data) {
+            if (isLeader || !currentRoomId) return;
+            const path = window.location.pathname;
+
+            if (data.status === 'playing' && !path.startsWith('/game/')) {
+                window.location.href = `/game/${currentRoomId}`;
+            } else if (data.status === 'finished' && !path.startsWith('/evaluation/')) {
+                window.location.href = `/evaluation/${currentRoomId}`;
+            }
+        });
     </script>
     
     {% block scripts %}{% endblock %}
