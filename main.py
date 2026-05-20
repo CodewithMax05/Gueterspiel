@@ -647,6 +647,45 @@ def create_game():
 def join_game():
     return render_template('join_game.html')
 
+@app.route('/rejoin')
+def rejoin():
+    """Stellt die Session aus localStorage-Daten wieder her und leitet weiter."""
+    player_id = request.args.get('player_id')
+    room_id   = request.args.get('room_id')
+
+    if not player_id or not room_id:
+        return redirect(url_for('index'))
+    if player_id not in players or room_id not in rooms:
+        return redirect(url_for('index'))
+
+    player = players[player_id]
+    room   = rooms[room_id]
+
+    # Sicherheitscheck: Spieler gehört wirklich zu diesem Raum
+    if player.room_id != room_id:
+        return redirect(url_for('index'))
+
+    # Session wiederherstellen
+    session['player_id'] = player_id
+    session['room_id']   = room_id
+    session['is_leader'] = player.is_leader
+    session.permanent    = True
+    session.modified     = True
+
+    # Zur richtigen Seite weiterleiten
+    if room.status in ['waiting', 'ready']:
+        return redirect(url_for('game_room', room_id=room_id))
+    elif room.status == 'playing':
+        if player.is_leader:
+            return redirect(url_for('leader_dashboard', room_id=room_id))
+        return redirect(url_for('game', room_id=room_id))
+    elif room.status == 'round_results':
+        return redirect(url_for('round_results', room_id=room_id))
+    elif room.status == 'finished':
+        return redirect(url_for('evaluation', room_id=room_id))
+
+    return redirect(url_for('game_room', room_id=room_id))
+
 @app.route('/game_room/<room_id>')
 def game_room(room_id):
     # Prüfe ob Spieler-ID als URL-Parameter übergeben wurde
@@ -868,6 +907,36 @@ def evaluation_export(room_id):
     return response
 
 # API Routes
+@app.route('/api/check_rejoin')
+def api_check_rejoin():
+    """Prüft ob ein Spieler (aus localStorage) noch rejoinen kann."""
+    player_id = request.args.get('player_id')
+    room_id   = request.args.get('room_id')
+
+    if not player_id or not room_id:
+        return jsonify({'valid': False})
+    if player_id not in players or room_id not in rooms:
+        return jsonify({'valid': False})
+
+    player = players[player_id]
+    room   = rooms[room_id]
+
+    if player.room_id != room_id or room.status == 'finished':
+        return jsonify({'valid': False})
+
+    status_labels = {
+        'waiting':       'Lobby',
+        'ready':         'Lobby',
+        'playing':       'Spiel läuft',
+        'round_results': 'Rundenauswertung',
+    }
+    return jsonify({
+        'valid':        True,
+        'status':       room.status,
+        'status_label': status_labels.get(room.status, room.status),
+    })
+
+
 @app.route('/api/rooms')
 def api_rooms():
     available_rooms = []

@@ -44,3 +44,44 @@
     </div>
 </div>
 {% endblock %}
+
+{% block scripts %}
+<script>
+    // Rejoin via localStorage, falls Flask-Session abgelaufen (z.B. Browser geschlossen)
+    document.addEventListener('DOMContentLoaded', function() {
+        // Nur prüfen wenn kein Server-seitiger Rejoin-Banner vorhanden ist
+        if (document.querySelector('.rejoin-banner')) return;
+
+        const raw = localStorage.getItem('gueterspiel_session');
+        if (!raw) return;
+
+        let stored;
+        try { stored = JSON.parse(raw); } catch(e) { return; }
+        if (!stored.player_id || !stored.room_id) return;
+
+        fetch(`/api/check_rejoin?player_id=${encodeURIComponent(stored.player_id)}&room_id=${encodeURIComponent(stored.room_id)}`)
+            .then(r => r.json())
+            .then(data => {
+                if (!data.valid) { localStorage.removeItem('gueterspiel_session'); return; }
+
+                const banner = document.createElement('div');
+                banner.className = 'rejoin-banner';
+                banner.innerHTML = `
+                    <div class="rejoin-info">
+                        <span class="rejoin-icon">🎮</span>
+                        <div>
+                            <div class="rejoin-title">Du bist noch in einem aktiven Raum</div>
+                            <div class="rejoin-sub">Raum ${stored.room_id} · ${data.status_label}</div>
+                        </div>
+                    </div>
+                    <a href="/rejoin?player_id=${encodeURIComponent(stored.player_id)}&room_id=${encodeURIComponent(stored.room_id)}"
+                       class="btn btn-rejoin">
+                        <i class="fas fa-play-circle"></i> Zurück zum Spiel
+                    </a>`;
+                const container = document.querySelector('.container');
+                if (container) container.prepend(banner);
+            })
+            .catch(() => {});
+    });
+</script>
+{% endblock %}

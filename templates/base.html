@@ -60,7 +60,16 @@
         const isLeader        = _sd.isLeader === true;
 
         console.log('DEBUG: Session-Daten - Raum:', currentRoomId, 'Spieler:', currentPlayerId, 'Leader:', isLeader);
-        
+
+        // localStorage-Persistenz: Speichert player_id + room_id damit Rejoin
+        // nach Browser-Schließen möglich ist (Session-Cookie kann gelöscht werden)
+        if (currentPlayerId && currentRoomId) {
+            localStorage.setItem('gueterspiel_session', JSON.stringify({
+                player_id: currentPlayerId,
+                room_id:   currentRoomId
+            }));
+        }
+
         // Verbindungsstatus
         let hasJoinedRoomViaSocket = false;
         let reconnectAttempts = 0;
@@ -319,6 +328,7 @@
         // Raum wurde vom Leader geschlossen – globaler Handler für alle Seiten
         socket.on('room_closed', function(data) {
             if (!currentRoomId) return;
+            localStorage.removeItem('gueterspiel_session');
             showNotification(data.message || 'Der Raum wurde geschlossen.', 'error', 5000);
             setTimeout(() => { window.location.href = '/'; }, 2000);
         });
