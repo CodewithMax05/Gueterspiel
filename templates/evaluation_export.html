@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spielauswertung – Raum {{ room.id }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -226,6 +227,40 @@
             border: 1px solid rgba(220, 53, 69, 0.3);
             color: #dc3545;
         }
+
+        /* ── Podium ── */
+        .podium-wrapper {
+            display: flex;
+            align-items: flex-end;
+            gap: 16px;
+            justify-content: center;
+            margin-bottom: 28px;
+        }
+
+        .podium-stage { flex: 1; max-width: 220px; display: flex; flex-direction: column; align-items: center; }
+
+        .podium-card {
+            width: 100%;
+            border-radius: 12px 12px 0 0;
+            padding: 18px 14px 14px;
+            text-align: center;
+        }
+        .podium-card.gold   { background: rgba(255,215,0,0.18);   border: 1px solid rgba(255,215,0,0.5);   border-bottom: none; }
+        .podium-card.silver { background: rgba(192,192,192,0.14); border: 1px solid rgba(192,192,192,0.4); border-bottom: none; }
+        .podium-card.bronze { background: rgba(205,127,50,0.14);  border: 1px solid rgba(205,127,50,0.4);  border-bottom: none; }
+
+        .podium-medal  { font-size: 2em; display: block; margin-bottom: 5px; }
+        .podium-name   { font-size: 1em; font-weight: 700; color: #fff; margin-bottom: 8px; }
+        .podium-profit { font-size: 1.3em; font-weight: 700; margin-bottom: 4px; }
+        .podium-profit.positive { color: #28a745; }
+        .podium-profit.negative { color: #dc3545; }
+        .podium-stats  { font-size: 0.78em; color: #aaa; }
+
+        .podium-base { width: 100%; border-radius: 0 0 8px 8px; text-align: center; font-weight: 700; color: rgba(255,255,255,0.85); font-size: 1em; display: flex; align-items: center; justify-content: center; }
+        .podium-base.gold   { background: rgba(255,215,0,0.55);   height: 80px; }
+        .podium-base.silver { background: rgba(192,192,192,0.45); height: 56px; }
+        .podium-base.bronze { background: rgba(205,127,50,0.45);  height: 40px; }
+
     </style>
 </head>
 <body>
@@ -240,9 +275,51 @@
     {% if now %}<span>Exportiert am: <strong>{{ now }}</strong></span>{% endif %}
 </p>
 
+<!-- Top-3-Podium -->
+{% if top_players %}
+{% set order_idx  = [1, 0, 2] %}
+{% set style_keys = ['silver', 'gold', 'bronze'] %}
+{# Maximalwert für relative Balkenhöhen (mind. 1 um Division durch 0 zu vermeiden) #}
+{% set max_profit = top_players | map(attribute='profit') | list | max %}
+{% set max_val    = max_profit if max_profit > 0 else 1 %}
+
+<div class="section-box">
+    <h2>🏆 Top-Spieler</h2>
+
+    <div class="podium-wrapper">
+        {% for idx in order_idx %}
+        {% if top_players | length > idx %}
+        {% set p = top_players[idx] %}
+        {% set style = style_keys[loop.index0] %}
+        <div class="podium-stage">
+            <div class="podium-card {{ style }}">
+                <span class="podium-medal">{{ p.medal }}</span>
+                <div class="podium-name">{{ p.name }}</div>
+                <div class="podium-profit {% if p.profit > 0 %}positive{% elif p.profit < 0 %}negative{% endif %}">
+                    {{ "%+.2f"|format(p.profit) }}
+                </div>
+                <div class="podium-stats">
+                    {% if p.group_number %}Gruppe {{ p.group_number }}<br>{% endif %}
+                    Koopquote: {{ p.coop_rate }}%
+                </div>
+            </div>
+            <div class="podium-base {{ style }}">Platz {{ p.rank }}</div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    <!-- Liniendiagramm: Gewinnverlauf pro Runde -->
+    <div style="background:rgba(255,255,255,0.05); border-radius:10px; padding:16px; margin-top:20px;">
+        <p style="color:#aaa; font-size:0.95em; margin-bottom:12px;">📈 Gewinnverlauf pro Runde</p>
+        <canvas id="podiumChart" height="90"></canvas>
+    </div>
+</div>
+{% endif %}
+
 <!-- Gruppenvergleich mit Accordion -->
 <div class="section-box">
-    <h2>Gruppenranking</h2>
+    <h2>Gruppenvergleich</h2>
     <div class="table-container">
         <table>
             <colgroup>
@@ -327,6 +404,8 @@
     </div>
 </div>
 
+<script type="application/json" id="top-players-data">{{ top_players | tojson }}</script>
+
 <script>
     const openGroups = new Set();
 
@@ -350,6 +429,66 @@
     document.querySelectorAll('.coop-bar-fill[data-width]').forEach(function(el) {
         el.style.width = (parseFloat(el.dataset.width) || 0) + '%';
     });
+
+    // Liniendiagramm: Gewinnverlauf der Top-3-Spieler
+    (function() {
+        const canvas = document.getElementById('podiumChart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        const topPlayers = JSON.parse(document.getElementById('top-players-data').textContent);
+        if (!topPlayers || topPlayers.length === 0) return;
+
+        const sorted = topPlayers.slice().sort(function(a, b) { return a.rank - b.rank; });
+        const borderColors = ['rgba(255,215,0,1)', 'rgba(192,192,192,1)', 'rgba(205,127,50,1)'];
+        const fillColors   = ['rgba(255,215,0,0.1)', 'rgba(192,192,192,0.08)', 'rgba(205,127,50,0.08)'];
+
+        const maxRounds = Math.max.apply(null, sorted.map(function(p) { return p.profit_history.length; }));
+        const labels = Array.from({ length: maxRounds }, function(_, i) { return 'Runde ' + (i + 1); });
+
+        const datasets = sorted.map(function(p, i) {
+            return {
+                label: p.medal + ' ' + p.name,
+                data: p.profit_history,
+                borderColor: borderColors[i],
+                backgroundColor: fillColors[i],
+                pointBackgroundColor: borderColors[i],
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                pointRadius: 5,
+                pointHoverRadius: 8,
+                tension: 0.35,
+                fill: false,
+            };
+        });
+
+        new Chart(canvas, {
+            type: 'line',
+            data: { labels: labels, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                animation: { duration: 0 },
+                plugins: {
+                    legend: { display: true, labels: { color: '#ccc', boxWidth: 14, padding: 16 } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                var val = ctx.parsed.y;
+                                return ' ' + ctx.dataset.label + ': ' + (val >= 0 ? '+' : '') + val.toFixed(2) + ' Coins';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+                    y: {
+                        ticks: { color: '#aaa', callback: function(val) { return (val >= 0 ? '+' : '') + val.toFixed(0); } },
+                        grid: { color: 'rgba(255,255,255,0.08)' }
+                    }
+                }
+            }
+        });
+    })();
 </script>
 
 </body>

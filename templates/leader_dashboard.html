@@ -35,14 +35,6 @@
             <div class="status-value" id="totalPlayers">{{ room.players|length }}</div>
         </div>
         <div class="status-item">
-            <div class="status-label">Eingereichte Beiträge</div>
-            <div class="status-value" id="submittedCount">0</div>
-        </div>
-        <div class="status-item">
-            <div class="status-label">In Auswertung</div>
-            <div class="status-value" id="inResultsCount">0 / 0</div>
-        </div>
-        <div class="status-item">
             <div class="status-label">Gruppengröße</div>
             <div class="status-value" id="groupSize">{{ room.settings.group_size }}</div>
         </div>
@@ -202,16 +194,18 @@
     function updateProgress() {
         const progressFill = document.getElementById('progressFill');
         const progressText = document.getElementById('progressText');
-        const submittedCountElement = document.getElementById('submittedCount');
 
-        if (progressFill && progressText && submittedCountElement) {
+        if (progressFill) {
             const percentage = totalPlayers > 0 ? (submittedCount / totalPlayers) * 100 : 0;
-            // Clamp 0..100 um visuelle Glitches zu vermeiden
             const clamped = Math.min(100, Math.max(0, Math.round(percentage * 100) / 100));
             progressFill.style.width = clamped + '%';
-            progressText.textContent = submittedCount + ' von ' + totalPlayers + ' Spielern haben eingereicht';
-            submittedCountElement.textContent = submittedCount;
         }
+        if (progressText) {
+            progressText.textContent = submittedCount + ' von ' + totalPlayers + ' Spielern haben eingereicht';
+        }
+        // Optional: separates Element falls vorhanden
+        const submittedCountElement = document.getElementById('submittedCount');
+        if (submittedCountElement) submittedCountElement.textContent = submittedCount;
     }
 
     function updateButtonState() {

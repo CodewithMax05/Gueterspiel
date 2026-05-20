@@ -37,25 +37,14 @@
                 </div>
             </div>
         </div>
-    </div>
-    {% endif %}
-
-    <!-- Detaillierte Gruppenstatistiken -->
-    <div class="detailed-stats">        
-        <!-- Diagramme nur für Spieler, nicht für Leader -->
-        {% if not is_leader %}
-        <h2>Detaillierte Statistiken</h2>
 
         <div class="stats-grid">
-            <!-- Einzahlungsverlauf -->
             <div class="stat-chart">
-                <h3>Einzahlungsverlauf deiner Gruppe</h3>
+                <h3>Einzahlungsverlauf</h3>
                 <div class="chart-container">
                     <canvas id="contributionChart"></canvas>
                 </div>
             </div>
-            
-            <!-- Guthabenverlauf -->
             <div class="stat-chart">
                 <h3>Guthabenverlauf</h3>
                 <div class="chart-container">
@@ -63,8 +52,50 @@
                 </div>
             </div>
         </div>
-        {% endif %}
-        
+    </div>
+    {% endif %}
+
+    <!-- Top-3-Podium -->
+    {% if top_players %}
+    <div class="podium-section">
+        <h2>🏆 Top-Spieler</h2>
+
+        {# Reihenfolge: 2. – 1. – 3. (klassisches Podium) #}
+        {% set order = [1, 0, 2] %}
+        {% set style_keys = ['silver', 'gold', 'bronze'] %}
+
+        <div class="podium-wrapper">
+            {% for idx in order %}
+            {% if top_players|length > idx %}
+            {% set p = top_players[idx] %}
+            {% set style = style_keys[loop.index0] %}
+            <div class="podium-stage">
+                <div class="podium-card {{ style }}">
+                    <span class="podium-medal">{{ p.medal }}</span>
+                    <div class="podium-name">{{ p.name }}</div>
+                    <div class="podium-profit {% if p.profit > 0 %}positive{% elif p.profit < 0 %}negative{% else %}neutral{% endif %}">
+                        {{ "%+.2f"|format(p.profit) }}
+                    </div>
+                    <div class="podium-stats">
+                        {% if p.group_number %}<span>Gruppe {{ p.group_number }}</span>{% endif %}
+                        <span>Koopquote: {{ p.coop_rate }}%</span>
+                    </div>
+                </div>
+                <div class="podium-base {{ style }}">Platz {{ p.rank }}</div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        <div class="podium-chart-container">
+            <h3 style="color:#aaa; font-size:0.95em; margin-bottom:12px;">📈 Gewinnverlauf pro Runde</h3>
+            <canvas id="podiumChart" height="80"></canvas>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Gruppenvergleich & Detailtabellen -->
+    <div class="detailed-stats">
         <!-- Vergleichstabelle mit Rang -->
         <div class="comparison-table">
             <h2>Gruppenvergleich</h2>
@@ -143,6 +174,7 @@
      data-rounds="{{ room.current_round }}"
      class="hidden">
 </div>
+<script type="application/json" id="top-players-data">{{ top_players | tojson }}</script>
 {% endblock %}
 
 {% block scripts %}
@@ -160,9 +192,12 @@
             renderBalanceChart(balances);
         }
         
+        // Podium-Chart
+        renderPodiumChart();
+
         // Animierte Zahlen für Statistiken
         animateStatistics();
-        
+
         // Kooperations-Balken initialisieren
         initCooperationBars();
     });
@@ -270,6 +305,75 @@
         });
     }
     
+    function renderPodiumChart() {
+        const canvas = document.getElementById('podiumChart');
+        if (!canvas) return;
+
+        const topPlayers = JSON.parse(document.getElementById('top-players-data').textContent);
+        if (!topPlayers || topPlayers.length === 0) return;
+
+        // Reihenfolge 1. → 2. → 3. für Legende
+        const sorted = [...topPlayers].sort((a, b) => a.rank - b.rank);
+
+        const borderColors = ['rgba(255,215,0,1)', 'rgba(192,192,192,1)', 'rgba(205,127,50,1)'];
+        const fillColors   = ['rgba(255,215,0,0.12)', 'rgba(192,192,192,0.08)', 'rgba(205,127,50,0.08)'];
+        const pointColors  = ['rgba(255,215,0,1)', 'rgba(192,192,192,1)', 'rgba(205,127,50,1)'];
+
+        // X-Achse: Runde 1, 2, 3 ... (Länge aus längstem Verlauf)
+        const maxRounds = Math.max(...sorted.map(p => p.profit_history.length));
+        const labels = Array.from({ length: maxRounds }, (_, i) => `Runde ${i + 1}`);
+
+        const datasets = sorted.map((p, i) => ({
+            label: `${p.medal} ${p.name}`,
+            data: p.profit_history,
+            borderColor: borderColors[i],
+            backgroundColor: fillColors[i],
+            pointBackgroundColor: pointColors[i],
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 5,
+            pointHoverRadius: 8,
+            tension: 0.35,
+            fill: false,
+        }));
+
+        new Chart(canvas, {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                ...chartDefaults,
+                plugins: {
+                    ...chartDefaults.plugins,
+                    legend: {
+                        display: true,
+                        labels: { color: '#ccc', boxWidth: 14, padding: 16 }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                const val = ctx.parsed.y;
+                                return ` ${ctx.dataset.label}: ${val >= 0 ? '+' : ''}${val.toFixed(2)} Coins`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#aaa' },
+                        grid: { color: 'rgba(255,255,255,0.06)' },
+                    },
+                    y: {
+                        ticks: {
+                            color: '#aaa',
+                            callback: val => (val >= 0 ? '+' : '') + val.toFixed(0)
+                        },
+                        grid: { color: 'rgba(255,255,255,0.08)' },
+                    }
+                }
+            }
+        });
+    }
+
     function animateStatistics() {
         // Einfache Animation für die Statistik-Karten
         const statCards = document.querySelectorAll('.stat-card .stat-value');

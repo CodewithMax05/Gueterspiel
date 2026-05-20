@@ -184,6 +184,102 @@
     font-weight: bold;
 }
 
+/* ── Top-3-Podium ─────────────────────────────────────────────────────── */
+.podium-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 15px;
+    padding: 30px;
+    margin-bottom: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.podium-section h2 {
+    color: #667eea;
+    margin-bottom: 24px;
+}
+
+.podium-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+@media (min-width: 768px) {
+    .podium-wrapper { flex-direction: row; align-items: flex-end; gap: 24px; }
+}
+
+/* Podium-Stufen: 2., 1., 3. */
+.podium-stage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+}
+
+.podium-card {
+    width: 100%;
+    border-radius: 12px 12px 0 0;
+    padding: 20px 16px 16px;
+    text-align: center;
+    position: relative;
+}
+
+.podium-card.gold   { background: rgba(255, 215, 0,   0.18); border: 1px solid rgba(255, 215, 0,   0.5); border-bottom: none; }
+.podium-card.silver { background: rgba(192, 192, 192, 0.14); border: 1px solid rgba(192, 192, 192, 0.4); border-bottom: none; }
+.podium-card.bronze { background: rgba(205, 127, 50,  0.14); border: 1px solid rgba(205, 127, 50,  0.4); border-bottom: none; }
+
+.podium-medal { font-size: 2.2em; display: block; margin-bottom: 6px; }
+
+.podium-name {
+    font-size: 1.05em;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 10px;
+    word-break: break-word;
+}
+
+.podium-profit {
+    font-size: 1.4em;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+.podium-profit.positive { color: #28a745; }
+.podium-profit.negative { color: #dc3545; }
+.podium-profit.neutral  { color: #e0e0e0; }
+
+.podium-stats {
+    font-size: 0.8em;
+    color: #aaa;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* Sockel (farbige Balken unter den Karten) */
+.podium-base {
+    width: 100%;
+    border-radius: 0 0 8px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1em;
+    font-weight: 700;
+    color: rgba(255,255,255,0.85);
+}
+
+.podium-base.gold   { background: rgba(255, 215, 0,   0.55); height: 80px; }
+.podium-base.silver { background: rgba(192, 192, 192, 0.45); height: 56px; }
+.podium-base.bronze { background: rgba(205, 127, 50,  0.45); height: 40px; }
+
+/* Chart-Container */
+.podium-chart-container {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 16px;
+    margin-top: 20px;
+}
+
 /* Detaillierte Statistiken */
 .detailed-stats {
     background: rgba(255, 255, 255, 0.05);
@@ -197,6 +293,7 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
     gap: 30px;
+    margin-top: 30px;
     margin-bottom: 30px;
 }
 
@@ -222,7 +319,13 @@
 
 /* Vergleichstabelle */
 .comparison-table {
-    margin-top: 30px;
+    margin-top: 0;
+}
+
+.comparison-table h2 {
+    color: #667eea;
+    margin-top: 0;
+    margin-bottom: 16px;
 }
 
 .table-container {

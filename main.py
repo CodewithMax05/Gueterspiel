@@ -726,6 +726,42 @@ def leader_dashboard(room_id):
                          player=player,
                          is_leader=is_leader)
 
+def get_top_players(room, players_dict, initial_coins, n=3):
+    """Gibt die n Spieler mit dem höchsten Gesamtgewinn zurück."""
+    medals = ['🥇', '🥈', '🥉']
+
+    # Gruppen-Lookup: PID → Gruppennummer
+    pid_to_group = {}
+    for g in room.groups:
+        for pid in g.get('player_ids', []):
+            pid_to_group[pid] = g['group_number']
+
+    result = []
+    for pid in room.players:
+        p = players_dict.get(pid)
+        if not p or p.is_leader:
+            continue
+        contributions = p.game_history.get('contributions', [])
+        coop_rate = round(
+            (sum(1 for c in contributions if c > 0) / len(contributions)) * 100, 1
+        ) if contributions else 0
+        # Kumulierter Gewinn pro Runde (für Liniendiagramm)
+        balances = p.game_history.get('balances', [])
+        profit_history = [round(b - initial_coins, 2) for b in balances]
+        result.append({
+            'name': p.name,
+            'profit': round(p.coins - initial_coins, 2),
+            'coop_rate': coop_rate,
+            'group_number': pid_to_group.get(pid),
+            'profit_history': profit_history,
+        })
+    result.sort(key=lambda x: x['profit'], reverse=True)
+    for i, entry in enumerate(result[:n]):
+        entry['rank'] = i + 1
+        entry['medal'] = medals[i] if i < len(medals) else ''
+    return result[:n]
+
+
 @app.route('/evaluation/<room_id>')
 def evaluation(room_id):
     room, player = check_room_access(room_id)
@@ -739,11 +775,14 @@ def evaluation(room_id):
     # Gruppenvergleichsdaten berechnen
     group_comparison = room.get_group_comparison_data(players, initial_coins)
     
+    top_players = get_top_players(room, players, initial_coins)
+
     return render_template('evaluation.html',
                          room=room,
                          player=player,
                          initial_coins=initial_coins,
                          group_comparison=group_comparison,
+                         top_players=top_players,
                          is_leader=player.id == room.leader_id)
 
 @app.route('/evaluation/<room_id>/export')
@@ -782,10 +821,13 @@ def evaluation_export(room_id):
             'members': members_data,
         })
 
+    top_players = get_top_players(room, players, initial_coins)
+
     html = render_template('evaluation_export.html',
                            room=room,
                            group_comparison=group_comparison,
                            groups_details=groups_details,
+                           top_players=top_players,
                            initial_coins=initial_coins,
                            num_rounds=room.current_round,
                            now=datetime.now().strftime('%d.%m.%Y %H:%M Uhr'))
