@@ -8,6 +8,8 @@ import time
 import secrets
 import string
 import math
+import logging
+from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify, make_response
 from flask_socketio import SocketIO, emit, join_room
@@ -19,6 +21,58 @@ load_dotenv()
 
 app = Flask(__name__)
 is_production = os.environ.get('FLASK_ENV') == 'production'
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+def setup_logging(production: bool) -> logging.Logger:
+    """Richtet das Application-Logging ein.
+
+    - Datei: logs/gueterspiel.log (RotatingFileHandler, max 5 MB × 5 Backups)
+    - Konsole: immer aktiv; Level DEBUG in Dev, WARNING in Prod
+    - Datei-Level:  DEBUG in Dev, INFO in Prod
+    - Format: Zeitstempel | Level | Modul | Nachricht
+    """
+    os.makedirs('logs', exist_ok=True)
+
+    log = logging.getLogger('gueterspiel')
+    log.setLevel(logging.DEBUG)          # Root-Level: alles durchlassen, Handler filtern
+
+    fmt = logging.Formatter(
+        '%(asctime)s [%(levelname)-8s] %(name)s: %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    # --- Datei-Handler ---
+    file_handler = RotatingFileHandler(
+        'logs/gueterspiel.log',
+        maxBytes=5 * 1024 * 1024,   # 5 MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    file_handler.setLevel(logging.INFO if production else logging.DEBUG)
+    file_handler.setFormatter(fmt)
+
+    # --- Konsolen-Handler ---
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.WARNING if production else logging.DEBUG)
+    console_handler.setFormatter(fmt)
+
+    log.addHandler(file_handler)
+    log.addHandler(console_handler)
+
+    # Flask-SocketIO und engineio loggen per-Paket-Spam auf DEBUG-Ebene.
+    # Wir reduzieren sie auf WARNING, damit nur echte Fehler sichtbar bleiben.
+    # (Das gilt unabhängig davon, ob production=True/False.)
+    for noisy in ('socketio', 'engineio', 'engineio.server', 'socketio.server'):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+    log.info("Logging initialisiert (production=%s)", production)
+    return log
+
+
+logger = setup_logging(is_production)
+# ---------------------------------------------------------------------------
 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
 if not app.config['SECRET_KEY']:
@@ -97,7 +151,7 @@ class GameRoom:
                 'total_players': len([pid for pid in self.players if not players[pid].is_leader])
             }, room=self.id)
         except Exception as e:
-            print(f"Fehler beim Senden des Status-Updates: {e}")
+            logger.error("Fehler beim Senden des Status-Updates: %s", e)
         
     def add_player(self, player_id):
         if player_id not in self.players:
@@ -348,7 +402,7 @@ class GameTimer:
                         }
                         self.socketio.emit('game_timer_update', payload, room=self.room_id)
                     except Exception as e:
-                        print(f"Fehler beim Senden des Timer-Updates für Raum {self.room_id}: {e}")
+                        logger.warning("Fehler beim Senden des Timer-Updates für Raum %s: %s", self.room_id, e)
 
                 if self.time_left <= 0:
                     try:
@@ -360,7 +414,7 @@ class GameTimer:
                     try:
                         finish_round(self.room_id)
                     except Exception as e:
-                        print(f"Fehler beim automatischen Beenden der Runde für Raum {self.room_id}: {e}")
+                        logger.error("Fehler beim automatischen Beenden der Runde für Raum %s: %s", self.room_id, e)
                     finally:
                         self.is_running = False
                         if self.room_id in rooms:
@@ -409,7 +463,7 @@ def stop_game_timer(room_id):
                 # Setze verbleibende Zeit auf 0 wenn Runde bereits in Ergebnissen ist
                 if room.status == "round_results":
                     room.timer_remaining = 0
-            print(f"Game-Timer für Raum {room_id} gestoppt")
+            logger.debug("Game-Timer für Raum %s gestoppt", room_id)
 
 def simulate_test_players_at_results(room_id):
     """Markiert Testspieler nach kurzem Delay als in round_results angekommen."""
@@ -500,7 +554,7 @@ def get_or_create_game_timer(room_id, duration=60):
                                    True)
         
         timer.start()
-        print(f"Neuer Game-Timer für Raum {room_id} gestartet (Dauer: {duration}s)")
+        logger.info("Neuer Game-Timer für Raum %s gestartet (Dauer: %ss)", room_id, duration)
         return timer
 
 # Hilfsfunktion zum Überprüfen der Raum-Zugriffsberechtigung
@@ -638,7 +692,12 @@ def create_game():
             'action': 'created',
             'room_id': room_id
         })
-        
+
+        logger.info("Raum erstellt – id=%s, leader='%s', Modus=%s, Gruppen=%d, Multiplikator=%.2f, Startguthaben=%.2f",
+                    room_id, leader_name,
+                    settings['end_mode'], settings['group_size'],
+                    settings['multiplier'], settings['initial_coins'])
+
         return redirect(url_for('game_room', room_id=room_id))
     
     return render_template('create_game.html')
@@ -697,7 +756,7 @@ def game_room(room_id):
         session['room_id'] = room_id
         session['is_leader'] = False
         session.modified = True
-        print(f"DEBUG: Session gesetzt von URL-Parameter: player_id={player_id_from_param}, room_id={room_id}")
+        logger.debug("Session gesetzt von URL-Parameter: player_id=%s, room_id=%s", player_id_from_param, room_id)
     
     room, player = check_room_access(room_id)
     if room is None:
@@ -1188,7 +1247,8 @@ def api_evaluation_details(room_id):
 # WebSocket Events
 @socketio.on('connect')
 def handle_connect():
-    print(f"Client connected: {request.sid}")
+    player_id = session.get('player_id')
+    logger.debug("Client verbunden: sid=%s, player_id=%s", request.sid, player_id)
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -1202,7 +1262,7 @@ def handle_disconnect():
 
     # Wenn noch andere Sockets/Tabs dieses Players existieren -> nichts tun
     if player_sids[player_id]:
-        print(f"Disconnect: Player {player_id} hat noch offene Sockets. Nichts tun.")
+        logger.debug("Disconnect: Player %s hat noch offene Sockets – kein Entfernen", player_id)
         return
 
     # --- Vollständiger Disconnect (alle SIDs/Tabs für diesen Player sind weg) ---
@@ -1254,7 +1314,7 @@ def handle_join_room(data):
     player_name = data.get('player_name')
     access_code = data.get('access_code', '')
     
-    print(f"DEBUG: join_room aufgerufen - Raum: {room_id}, Spieler: {player_name}")
+    logger.debug("join_room aufgerufen – Raum: %s, Spieler: %s", room_id, player_name)
     
     if not room_id or not player_name:
         emit('error', {'message': 'Ungültige Daten'})
@@ -1302,7 +1362,8 @@ def handle_join_room(data):
                 time_left = timer.get_time_left()
                 emit('game_timer_update', {'time_left': time_left}, room=request.sid)
         
-        print(f"DEBUG: Spieler {player_name} zu Raum {room_id} hinzugefügt. Aktuelle Spieler: {room.players}")
+        logger.info("Spieler '%s' (id=%s) zu Raum %s hinzugefügt – Spieleranzahl: %d",
+                    player_name, player_id, room_id, len(room.players))
         
         # Benachrichtige andere Spieler über neuen Spieler
         player_data = {
@@ -1319,7 +1380,7 @@ def handle_join_room(data):
             'player_id': player_id
         })
         
-        print(f"DEBUG: room_joined Event gesendet für Raum {room_id} mit player_id {player_id}")
+        logger.debug("room_joined Event gesendet – Raum %s, player_id %s", room_id, player_id)
 
 @socketio.on('join_game_room')
 def handle_join_game_room(data):
@@ -1418,7 +1479,7 @@ def handle_join_game_room(data):
                     }, room=request.sid)
 
     except Exception as e:
-        print(f"Fehler in join_game_room: {e}")
+        logger.error("Fehler in join_game_room (sid=%s): %s", request.sid, e, exc_info=True)
 
 @socketio.on('player_ready')
 def handle_player_ready():
@@ -1464,8 +1525,10 @@ def handle_start_game():
 
             duration = room.settings.get('round_duration', 60)
             get_or_create_game_timer(room_id, duration)
-            simulate_test_players(room_id) 
-            print(f"DEBUG: Spiel gestartet - Timer für Raum {room_id} mit {duration}s gestartet")
+            simulate_test_players(room_id)
+            logger.info("Spiel gestartet – Raum %s, Runde %d, Timer %ds, Spieler: %d",
+                        room_id, room.current_round, duration,
+                        len([pid for pid in room.players if not players[pid].is_leader]))
             
             # Setze alle Spieler auf nicht bereit für nächste Runde
             for pid in room.players:
@@ -1511,11 +1574,6 @@ def handle_submit_contribution(data):
     with finish_round_lock:
         # Falls die Runde bereits in Ergebnissen ist, IGNORIERE dieses Submit (zu spät)
         if room.status in ["round_results", "finished"]:
-            # optional: sende ein kurzes Feedback an den Client
-            try:
-                emit('error', {'message': 'Runde bereits beendet — Einreichung nicht mehr möglich'}, room=request.sid)
-            except Exception:
-                pass
             return
 
         # Prüfe ob genügend Coins vorhanden sind
@@ -1561,7 +1619,7 @@ def handle_submit_contribution(data):
         try:
             finish_round(room_id)
         except Exception as e:
-            print(f"Fehler beim Beenden der Runde nach vollem Submit: {e}")
+            logger.error("Fehler beim Beenden der Runde nach vollem Submit (Raum %s): %s", room_id, e, exc_info=True)
 
 @socketio.on('retract_contribution')
 def handle_retract_contribution():
@@ -1603,7 +1661,7 @@ def delayed_remove_player(player_id, room_id, delay_seconds=10):
     with removal_lock:
         # Prüfen, ob der Task bereits abgebrochen wurde (durch reconnect)
         if player_id not in pending_removals:
-            print(f"DEBUG: delayed_remove für {player_id} abgebrochen (reconnected).")
+            logger.debug("delayed_remove für %s abgebrochen (bereits reconnected)", player_id)
             return
         
         # Entferne den Task-Eintrag
@@ -1618,17 +1676,17 @@ def delayed_remove_player(player_id, room_id, delay_seconds=10):
         
     # Hat sich der Spieler in der Zwischenzeit mit einer neuen SID verbunden?
     if player_sids.get(player_id):
-        print(f"DEBUG: delayed_remove für {player_id} abgebrochen (neue SID gefunden).")
+        logger.debug("delayed_remove für %s abgebrochen (neue SID gefunden)", player_id)
         return
-        
+
     # Ist das Spiel in der Zwischenzeit gestartet? Dann nicht entfernen.
     if room.status not in ["waiting", "ready"]:
-        print(f"DEBUG: delayed_remove für {player_id} abgebrochen (Spiel läuft).")
+        logger.debug("delayed_remove für %s abgebrochen (Spiel läuft, Status: %s)", player_id, room.status)
         return
 
     # --- OK, Spieler ist weg, 10s sind um, Spiel ist noch in der Lobby ---
     # Jetzt den Spieler wirklich entfernen
-    print(f"DEBUG: Gnadenfrist für {player.name} abgelaufen. Entferne aus Raum {room_id}.")
+    logger.info("Gnadenfrist für Spieler '%s' abgelaufen – entferne aus Raum %s", player.name, room_id)
     
     try:
         room.remove_player(player_id)
@@ -1652,7 +1710,7 @@ def delayed_remove_player(player_id, room_id, delay_seconds=10):
             pass
             
     except Exception as e:
-        print(f"Fehler bei delayed_remove_player: {e}")
+        logger.error("Fehler bei delayed_remove_player (player_id=%s): %s", player_id, e, exc_info=True)
 
 def delayed_leader_disconnect(player_id, room_id, delay_seconds=90):
     """
@@ -1697,7 +1755,7 @@ def cleanup_old_rooms():
                 for pid in list(room.players) + [room.leader_id]:
                     players.pop(pid, None)
                     player_sids.pop(pid, None)
-                print(f"Raum {room_id} nach 2h automatisch aufgeräumt.")
+                logger.info("Raum %s nach 2 h automatisch aufgeräumt", room_id)
 
 def finish_round(room_id):
     """Beendet die Runde sicher: fehlende Beiträge auf 0 setzen, finale Submit-Status senden,
@@ -1746,7 +1804,7 @@ def finish_round(room_id):
         try:
             socketio.emit('contribution_submitted', payload, room=room_id)
         except Exception as e:
-            print(f"Fehler beim Senden des finalen contribution_submitted an room {room_id}: {e}")
+            logger.warning("Fehler beim Senden des finalen contribution_submitted an Raum %s: %s", room_id, e)
 
         try:
             # Zusätzlich: Emit an die persönlichen Rooms der Spieler (Fallback falls jemand nicht im room_id ist)
@@ -1765,7 +1823,7 @@ def finish_round(room_id):
         try:
             results = room.calculate_round_results()
         except Exception as e:
-            print(f"Fehler beim Berechnen der Ergebnisse für Raum {room_id}: {e}")
+            logger.error("Fehler beim Berechnen der Ergebnisse für Raum %s: %s", room_id, e, exc_info=True)
             results = {}
 
         # 5) History update & reset temporäre contribution (safety)
@@ -1783,7 +1841,7 @@ def finish_round(room_id):
                 'room_id': room_id
             }, room=room_id)
         except Exception as e:
-            print(f"Fehler beim Senden von round_finished für Raum {room_id}: {e}")
+            logger.error("Fehler beim Senden von round_finished für Raum %s: %s", room_id, e)
 
         # 7) Redirect für Nicht-Leader an deren persönliche Rooms (wie vorher)
         for player_id in room.players:
@@ -1803,7 +1861,8 @@ def finish_round(room_id):
         # der Leader-Client erst round_finished verarbeitet)
         spawn(simulate_test_players_at_results, room_id)
 
-        print(f"DEBUG: finish_round completed for room {room_id} (round {room.current_round})")
+        logger.info("Runde %d in Raum %s abgeschlossen – %d/%d Einreichungen",
+                    room.current_round, room_id, submitted_count, total_players)
 
 @socketio.on('arrived_at_results')
 def handle_arrived_at_results():
@@ -1856,6 +1915,7 @@ def handle_next_round():
             get_or_create_game_timer(room_id, duration)
             simulate_test_players(room_id) 
             
+            logger.info("Nächste Runde gestartet – Raum %s, Runde %d", room_id, room.current_round)
             emit('next_round_started', {
                 'current_round': room.current_round,
                 'room_id': room_id
@@ -1871,6 +1931,7 @@ def handle_next_round():
         else:
             # Spiel beenden
             room.status = "finished"
+            logger.info("Spiel beendet – Raum %s nach %d Runde(n)", room_id, room.current_round)
             emit('game_finished', {
                 'room_id': room_id
             }, room=room_id)
@@ -2056,7 +2117,7 @@ def handle_remove_player(data):
 
     try:
         del players[target_player_id]
-        print(f"DEBUG: Spieler {target_player_id} vollständig aus players gelöscht")
+        logger.debug("Spieler %s vollständig aus players-Dict entfernt", target_player_id)
     except KeyError:
         pass
     
@@ -2080,7 +2141,8 @@ def handle_remove_player(data):
         'message': 'Sie wurden aus dem Raum entfernt.'
     }, room=target_player_id)
     
-    print(f"Spieler {target_player.name} wurde von {requesting_player.name} aus Raum {room_id} entfernt")
+    logger.info("Spieler '%s' wurde von Leader '%s' aus Raum %s entfernt",
+                target_player.name, requesting_player.name, room_id)
 
 # Hintergrund-Cleanup starten
 spawn(cleanup_old_rooms)

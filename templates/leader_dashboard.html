@@ -318,8 +318,6 @@
     socket.on('round_finished', function(data) {
         console.log('DEBUG: round_finished received on dashboard');
         stopSharedLocalCountdown();
-        showNotification('Runde beendet! Alle Spieler haben eingereicht.', 'success');
-
         serverTimeLeft = 0;
         submittedCount = totalPlayers || submittedCount;
 
@@ -348,8 +346,6 @@
     });
 
     socket.on('next_round_started', function(data) {
-        showNotification('Nächste Runde startet!', 'success');
-
         // Rundenzahl aktualisieren
         const roundEl = document.getElementById('currentRound');
         if (roundEl && data.current_round) {
@@ -377,10 +373,9 @@
     });
 
     socket.on('game_finished', function(data) {
-        showNotification('Spiel beendet!', 'info');
         setTimeout(() => {
             window.location.href = `/evaluation/${data.room_id}`;
-        }, 1500);
+        }, 500);
     });
 
     // --- Gruppen Accordion ---

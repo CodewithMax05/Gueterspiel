@@ -21,12 +21,6 @@
         </div>
     </header>
 
-    <!-- Leader-Status-Banner: wird per Socket ein-/ausgeblendet -->
-    <div id="leader-status-banner" class="leader-banner hidden" role="alert">
-        <span id="leader-banner-icon"></span>
-        <span id="leader-banner-text"></span>
-    </div>
-
     <!-- Session-Daten sicher als JSON-Block – kein direktes Einbetten in JS-Strings -->
     <script type="application/json" id="session-data">
     {
@@ -253,42 +247,12 @@
             }
         }
 
-        /* --- Leader-Status-Banner --- */
-        function setLeaderBanner(icon, text, cssClass, autohideMs = 0) {
-            const banner = document.getElementById('leader-status-banner');
-            const bannerIcon = document.getElementById('leader-banner-icon');
-            const bannerText = document.getElementById('leader-banner-text');
-            if (!banner) return;
-            bannerIcon.textContent = icon;
-            bannerText.textContent = text;
-            banner.className = `leader-banner ${cssClass}`;
-            if (autohideMs > 0) {
-                setTimeout(() => { banner.className = 'leader-banner hidden'; }, autohideMs);
-            }
-        }
-
-        socket.on('leader_disconnected', function(data) {
-            setLeaderBanner('⚠️', data.message, 'warning');
-        });
-
-        socket.on('leader_reconnected', function(data) {
-            setLeaderBanner('✅', data.message, 'success', 4000);
-        });
-
-        socket.on('leader_offline', function(data) {
-            setLeaderBanner('🔴', data.message, 'danger');
-        });
+        socket.on('leader_disconnected', function(data) {});
+        socket.on('leader_reconnected', function(data) {});
+        socket.on('leader_offline', function(data) {});
 
         socket.on('player_connection_changed', function(data) {
-            // Nicht anzeigen wenn wir selbst der betroffene Spieler sind
-            if (data.player_id && data.player_id === currentPlayerId) return;
-
-            const name = data.player_name || data.name || 'Ein Spieler';
-            if (data.connected) {
-                showNotification(`🟢 ${name} hat sich wieder verbunden.`, 'success', 4000);
-            } else {
-                showNotification(`🔴 ${name} hat die Verbindung verloren.`, 'warning', 6000);
-            }
+            // Stille Verarbeitung – keine Popup-Benachrichtigung
         });
 
         // ── Globale Navigation: funktioniert auf jeder Seite ──────────────────
@@ -297,18 +261,16 @@
 
         socket.on('next_round_started', function(data) {
             if (isLeader || !currentRoomId) return;
-            showNotification('Nächste Runde startet!', 'success');
             setTimeout(() => {
                 window.location.href = `/game/${data.room_id}`;
-            }, 800);
+            }, 300);
         });
 
         socket.on('game_finished', function(data) {
             if (isLeader || !currentRoomId) return;
-            showNotification('Spiel beendet!', 'info');
             setTimeout(() => {
                 window.location.href = `/evaluation/${data.room_id}`;
-            }, 1500);
+            }, 500);
         });
 
         // Fallback: Falls ein Spieler ein Event verpasst hat (z.B. während
@@ -338,17 +300,15 @@
         socket.on('room_closed', function(data) {
             if (!currentRoomId) return;
             localStorage.removeItem('gueterspiel_session');
-            showNotification(data.message || 'Der Raum wurde geschlossen.', 'error', 5000);
-            setTimeout(() => { window.location.href = '/'; }, 2000);
+            setTimeout(() => { window.location.href = '/'; }, 500);
         });
 
         // Leader hat Raum zurück in die Lobby versetzt
         socket.on('return_to_lobby', function(data) {
             if (!currentRoomId) return;
-            showNotification('Der Raum wurde zurückgesetzt. Weiterleitung zur Lobby...', 'info', 3000);
             setTimeout(() => {
                 window.location.href = `/game_room/${data.room_id}`;
-            }, 1200);
+            }, 300);
         });
     </script>
     

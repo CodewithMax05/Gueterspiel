@@ -377,16 +377,11 @@
         // Aktualisiere Spieleranzahl
         updatePlayerCount();
         
-        // Zeige Benachrichtigung
         if (data.removed_player_id === currentPlayerId) {
-            // Dieser Spieler wurde entfernt
-            showNotification('Sie wurden aus dem Raum entfernt.', 'error', 5000);
+            // Dieser Spieler wurde entfernt – sofort weiterleiten
             setTimeout(() => {
                 window.location.href = '/';
-            }, 3000);
-        } else {
-            // Ein anderer Spieler wurde entfernt
-            showNotification(`Spieler ${data.player_name} wurde entfernt.`, 'info', 3000);
+            }, 300);
         }
         
         checkRequirementsOnEvents();
@@ -410,8 +405,6 @@
     
     socket.on('game_started', function(data) {
         console.log('DEBUG: game_started Event empfangen, leite weiter');
-        showNotification('Spiel startet!', 'success');
-        
         if (isLeader) {
             // Leader geht zum Dashboard
             window.location.href = `/leader_dashboard/${data.room_id}`;

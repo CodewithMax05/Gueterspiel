@@ -160,7 +160,7 @@
     <div class="action-buttons">
         {% if is_leader %}
         <a href="{{ url_for('index') }}" class="btn btn-large btn-secondary">Zur Startseite</a>
-        <a href="{{ url_for('evaluation_export', room_id=room.id) }}" class="btn btn-large btn-secondary">
+        <a href="{{ url_for('evaluation_export', room_id=room.id) }}" class="btn btn-large btn-secondary" target="_blank">
             Daten exportieren
         </a>
         <button class="btn btn-large" id="returnToLobbyBtn" onclick="returnToLobby()">
@@ -537,5 +537,9 @@
         }
         socket.emit('return_to_lobby');
     }
+
+    socket.on('return_to_lobby', function(data) {
+        window.location.href = '/game_room/' + data.room_id;
+    });
 </script>
 {% endblock %}

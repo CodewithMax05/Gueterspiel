@@ -483,26 +483,21 @@
 
     socket.on('game_time_out', function() {
         console.log('DEBUG: game_time_out received');
-        showNotification('Zeit abgelaufen! Beiträge werden automatisch eingereicht.', 'warning');
-
         handleTimeExpiredOnce();
     });
 
     socket.on('round_finished', function(data) {
         console.log('DEBUG: round_finished received, redirecting to round results');
-        showNotification('Runde beendet! Zeige Ergebnisse...', 'success');
-        // kleine Verzögerung damit UI Meldung wahrnehmbar ist
         setTimeout(() => {
             window.location.href = `/round_results/${data.room_id}`;
-        }, 800);
+        }, 300);
     });
 
     socket.on('redirect_to_results', function(data) {
         console.log('DEBUG: redirect_to_results received');
-        showNotification('Runde beendet! Zeige Ergebnisse...', 'success');
         setTimeout(() => {
             window.location.href = `/round_results/${data.room_id}`;
-        }, 600);
+        }, 300);
     });
 
     // next_round_started und game_finished werden global in base.html behandelt
