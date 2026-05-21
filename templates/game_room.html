@@ -23,27 +23,23 @@
     
     <!-- Einheitlicher Raum-Informationen Block -->
     <div class="room-info">
-        <p><strong>Status:</strong> 
+        <p><strong>Status:</strong>
             <span id="roomStatus" class="status-{{ room.status }}">
                 {% if room.status == 'waiting' %}🔴 Wartet auf Spieler
                 {% elif room.status == 'ready' %}🟢 Startbereit
                 {% else %}{{ room.status }}{% endif %}
             </span>
         </p>
-        <p><strong>Raumtyp:</strong> 
-            {% if room.room_type == 'public' %}
-                🌐 Öffentlich
-            {% else %}
-                🔒 Privat
-            {% endif %}
+        <p><strong>Raumtyp:</strong>
+            {% if room.room_type == 'public' %}🌐 Öffentlich
+            {% else %}🔒 Privat{% endif %}
         </p>
         {% if room.room_type == 'private' %}
-        <p><strong>Zugangscode: </strong>{{ room.access_code }}</p>
+        <p><strong>Zugangscode:</strong> {{ room.access_code }}</p>
         {% endif %}
         <p><strong>Spieler:</strong> <span id="totalPlayers">{{ players|length }}</span></p>
         <p><strong>Bereit:</strong> <span id="readyCount">{{ ready_count }}</span></p>
         <p><strong>Gruppengröße:</strong> <span id="groupSize">{{ room.settings.get('group_size', 4) }}</span> Spieler</p>
-        <p><strong>Erstellt von:</strong> {{ room.leader_name }}</p>
     </div>
 
     <!-- Buttons über den Spielern -->
@@ -65,21 +61,13 @@
         </div>
         {% else %}
         <div class="player-actions">
-            <button class="ready-toggle {% for p in players %}{% if p.id == session.player_id %}{% if p.ready %}ready{% endif %}{% endif %}{% endfor %}" id="readyBtn">
+            <button class="ready-toggle {% if current_player_ready %}ready{% endif %}" id="readyBtn">
                 <span class="checkbox-icon">
                     <i class="far fa-square"></i>
                     <i class="fas fa-check-square"></i>
                 </span>
                 <span class="ready-text">
-                    {% for p in players %}
-                        {% if p.id == session.player_id %}
-                            {% if p.ready %}
-                                Bereit
-                            {% else %}
-                                Bereit machen
-                            {% endif %}
-                        {% endif %}
-                    {% endfor %}
+                    {% if current_player_ready %}Bereit{% else %}Bereit machen{% endif %}
                 </span>
             </button>
             <button class="btn btn-danger btn-leave" onclick="leaveRoom()">
@@ -195,36 +183,32 @@
 
 {% block scripts %}
 <script>
+    // Modul-Level-Variablen: werden in DOMContentLoaded befüllt und
+    // sind dann für alle Socket-Handler erreichbar.
+    let roomId       = '';
+    let isLeaderRoom = false;
+    let isIncognito  = false;
+
     document.addEventListener('DOMContentLoaded', function() {
         const roomData = document.getElementById('room-data');
-        const roomId = roomData.dataset.roomId;
-        const isLeader = roomData.dataset.isLeader === 'true';
-        const roomLeaderId = roomData.dataset.roomLeaderId;
-        const isIncognito = roomData.dataset.incognito === 'true'; 
-        
-        // Prüfe Startbedingungen (nur für Leader)
-        if (isLeader) {
-            checkStartRequirements(roomId);
-        }
-        
-        // Bereit-Button Event mit Debugging
+        roomId       = roomData.dataset.roomId;
+        isLeaderRoom = roomData.dataset.isLeader === 'true';
+        isIncognito  = roomData.dataset.incognito === 'true';
+
+        if (isLeaderRoom) checkStartRequirements(roomId);
+
+        // Bereit-Button
         const readyBtn = document.getElementById('readyBtn');
         if (readyBtn) {
             readyBtn.addEventListener('click', function() {
-                console.log('DEBUG: Ready-Button geklickt');
-                console.log('DEBUG: Socket connected:', socket.connected);
-                console.log('DEBUG: Session player_id:', currentPlayerId);
-                
-                // Button in Ladezustand versetzen
                 const readyText = this.querySelector('.ready-text');
-                const btn = this;
                 readyText.textContent = '⏳ Wird verarbeitet...';
-                btn.classList.add('loading');
-                btn.disabled = true;
-
+                this.classList.add('loading');
+                this.disabled = true;
                 socket.emit('player_ready');
 
-                // Sicherheits-Timeout: Button nach 5s entsperren falls keine Antwort kommt
+                // Sicherheits-Timeout: entsperren falls keine Server-Antwort kommt
+                const btn = this;
                 setTimeout(() => {
                     if (btn.disabled) {
                         btn.disabled = false;
@@ -234,16 +218,13 @@
                 }, 5000);
             });
         }
-        
-        // Start-Button Event mit Flash-Message bei Fehler
+
+        // Start-Button
         const startBtn = document.getElementById('startBtn');
         if (startBtn) {
             startBtn.addEventListener('click', function() {
-                console.log('DEBUG: Start-Button geklickt');
-                
-                // Prüfe erneut, ob Start möglich ist
                 fetch(`/api/room/${roomId}/requirements`)
-                    .then(response => response.json())
+                    .then(r => r.json())
                     .then(data => {
                         if (data.can_start) {
                             socket.emit('start_game');
@@ -251,10 +232,7 @@
                             showNotification(data.message, 'error', 5000);
                         }
                     })
-                    .catch(error => {
-                        console.error('Fehler beim Prüfen der Startvoraussetzungen:', error);
-                        showNotification('Fehler beim Starten des Spiels', 'error', 5000);
-                    });
+                    .catch(() => showNotification('Fehler beim Starten des Spiels', 'error', 5000));
             });
         }
     });
@@ -301,7 +279,6 @@
         const btn = document.getElementById('removePlayerConfirmBtn');
         btn.disabled = true;
         btn.innerHTML = '⏳ Wird entfernt…';
-        console.log('DEBUG: Entferne Spieler:', _removeTargetId);
         socket.emit('remove_player', { player_id: _removeTargetId });
         closeRemovePlayerModal();
     }
@@ -311,119 +288,72 @@
         if (e.target === this) closeRemovePlayerModal();
     });
 
-    function checkStartRequirements(roomId) {
-        fetch(`/api/room/${roomId}/requirements`)
-            .then(response => response.json())
+    function checkStartRequirements(id) {
+        fetch(`/api/room/${id}/requirements`)
+            .then(r => r.json())
             .then(data => {
-                const reqElement = document.getElementById('reqMinPlayers');
+                const reqEl   = document.getElementById('reqMinPlayers');
                 const startBtn = document.getElementById('startBtn');
-                
-                if (!reqElement || !startBtn) return;
-                
+                if (!reqEl || !startBtn) return;
+
                 if (data.can_start) {
-                    reqElement.innerHTML = '✅ Alle Voraussetzungen erfüllt!';
+                    reqEl.innerHTML = '✅ Alle Voraussetzungen erfüllt!';
                     startBtn.disabled = false;
-                    startBtn.classList.remove('btn-disabled');
-                    startBtn.classList.add('btn-success');
+                    startBtn.classList.replace('btn-disabled', 'btn-success');
                 } else {
-                    reqElement.innerHTML = `❌ ${data.message}`;
+                    reqEl.innerHTML = `❌ ${data.message}`;
                     startBtn.disabled = true;
-                    startBtn.classList.remove('btn-success');
-                    startBtn.classList.add('btn-disabled');
+                    startBtn.classList.replace('btn-success', 'btn-disabled');
                 }
             })
-            .catch(error => {
-                console.error('Fehler beim Prüfen der Startvoraussetzungen:', error);
-            });
+            .catch(err => console.error('Fehler beim Prüfen der Startvoraussetzungen:', err));
     }
 
-    function checkRequirementsOnEvents() {
-        const roomData = document.getElementById('room-data');
-        const roomId = roomData.dataset.roomId;
-        const isLeader = roomData.dataset.isLeader === 'true';
-        
-        if (isLeader) {
-            checkStartRequirements(roomId);
-        }
-    }
-    
-    // WebSocket Events für game_room.html
+    // Socket-Handler
+
     socket.on('player_joined', function(data) {
-        const roomData = document.getElementById('room-data');
-        const incognito = roomData ? roomData.dataset.incognito === 'true' : false;
-        const leaderFlag = roomData ? roomData.dataset.isLeader === 'true' : false;
-
-        if (incognito && !leaderFlag && data.id !== currentPlayerId) {
+        if (isIncognito && !isLeaderRoom && data.id !== currentPlayerId) {
             updatePlayerCount();
-            checkRequirementsOnEvents();
-            return;
+        } else {
+            updatePlayerList(data);
+            updatePlayerCount();
         }
-
-        updatePlayerList(data);
-        updatePlayerCount();
-        checkRequirementsOnEvents();
+        if (isLeaderRoom) checkStartRequirements(roomId);
     });
-    
+
     socket.on('player_left', function(data) {
-        const playerElement = document.getElementById(`player-${data.player_id}`);
-        if (playerElement) {
-            playerElement.remove();
-        }
-
+        document.getElementById(`player-${data.player_id}`)?.remove();
         updatePlayerCount();
-        checkRequirementsOnEvents();
+        if (isLeaderRoom) checkStartRequirements(roomId);
     });
-    
+
     socket.on('player_ready_changed', function(data) {
-        console.log('DEBUG: player_ready_changed Event empfangen:', data);
-        
-        // Aktualisiere Spieler in der Liste
-        const playerElement = document.getElementById(`player-${data.player_id}`);
-        if (playerElement) {
-            if (data.ready) {
-                playerElement.classList.add('ready');
-                const statusElement = playerElement.querySelector('.player-status');
-                if (statusElement) {
-                    statusElement.innerHTML = '<span class="text-success">✅ Bereit</span>';
-                }
-            } else {
-                playerElement.classList.remove('ready');
-                const statusElement = playerElement.querySelector('.player-status');
-                if (statusElement) {
-                    statusElement.innerHTML = '<span class="text-danger">❌ Nicht bereit</span>';
-                }
+        const playerEl = document.getElementById(`player-${data.player_id}`);
+        if (playerEl) {
+            playerEl.classList.toggle('ready', data.ready);
+            const statusEl = playerEl.querySelector('.player-status');
+            if (statusEl) {
+                statusEl.innerHTML = data.ready
+                    ? '<span class="text-success">✅ Bereit</span>'
+                    : '<span class="text-danger">❌ Nicht bereit</span>';
             }
         }
-        
-        // Aktualisiere Ready-Count
-        const readyCountElement = document.getElementById('readyCount');
-        if (readyCountElement) {
-            readyCountElement.textContent = data.ready_count;
-        }
-        
-        // Aktualisiere Ready-Button Text für den aktuellen Spieler
+
+        const readyCountEl = document.getElementById('readyCount');
+        if (readyCountEl) readyCountEl.textContent = data.ready_count;
+
         const readyBtn = document.getElementById('readyBtn');
         if (readyBtn && data.player_id === currentPlayerId) {
-            if (data.ready) {
-                readyBtn.classList.add('ready');
-                readyBtn.querySelector('.ready-text').textContent = 'Bereit';
-            } else {
-                readyBtn.classList.remove('ready');
-                readyBtn.querySelector('.ready-text').textContent = 'Bereit machen';
-            }
-            
-            // Button wieder aktivieren
+            readyBtn.classList.toggle('ready', data.ready);
+            readyBtn.querySelector('.ready-text').textContent = data.ready ? 'Bereit' : 'Bereit machen';
             readyBtn.classList.remove('loading');
             readyBtn.disabled = false;
         }
 
-        // Raumstatus aktualisieren
         updateRoomStatus(data.room_status);
-
-        checkRequirementsOnEvents();
+        if (isLeaderRoom) checkStartRequirements(roomId);
     });
 
-    // Fehler beim Ready – Button entsperren
     socket.on('player_ready_error', function() {
         const readyBtn = document.getElementById('readyBtn');
         if (readyBtn) {
@@ -434,58 +364,30 @@
         }
     });
 
-    // WebSocket Event für entfernte Spieler
     socket.on('player_removed', function(data) {
-        console.log('DEBUG: player_removed Event empfangen:', data);
-        
-        // Entferne Spieler aus der Liste
-        const playerElement = document.getElementById(`player-${data.player_id}`);
-        if (playerElement) {
-            playerElement.remove();
-        }
-        
-        // Aktualisiere Spieleranzahl
+        document.getElementById(`player-${data.player_id}`)?.remove();
         updatePlayerCount();
-        
         if (data.removed_player_id === currentPlayerId) {
-            // Dieser Spieler wurde entfernt – sofort weiterleiten
-            setTimeout(() => {
-                window.location.href = '/';
-            }, 300);
+            setTimeout(() => { window.location.href = '/'; }, 300);
         }
-        
-        checkRequirementsOnEvents();
+        if (isLeaderRoom) checkStartRequirements(roomId);
     });
 
     socket.on('room_status_updated', function(data) {
         updateRoomStatus(data.status);
-
-        const readyCountElement = document.getElementById('readyCount');
-        if (readyCountElement) {
-            readyCountElement.textContent = data.ready_count;
-        }
-
-        // NEU: Spieleranzahl direkt vom Server übernehmen
-        if (typeof data.total_players !== 'undefined') {
-            updatePlayerCount(data.total_players);
-        }
-
-        checkRequirementsOnEvents();
+        const readyCountEl = document.getElementById('readyCount');
+        if (readyCountEl) readyCountEl.textContent = data.ready_count;
+        if (typeof data.total_players !== 'undefined') updatePlayerCount(data.total_players);
+        if (isLeaderRoom) checkStartRequirements(roomId);
     });
-    
+
     socket.on('game_started', function(data) {
-        console.log('DEBUG: game_started Event empfangen, leite weiter');
-        if (isLeader) {
-            // Leader geht zum Dashboard
-            window.location.href = `/leader_dashboard/${data.room_id}`;
-        } else {
-            // Spieler gehen zum Spiel
-            window.location.href = `/game/${data.room_id}`;
-        }
+        window.location.href = isLeaderRoom
+            ? `/leader_dashboard/${data.room_id}`
+            : `/game/${data.room_id}`;
     });
 
     socket.on('error', function(data) {
-        console.error('DEBUG: WebSocket Error:', data);
         showNotification(data.message, 'error', 5000);
     });
     
@@ -517,12 +419,8 @@
         // Erstelle den HTML-Inhalt mit Lösch-Button für Leader (außer für sich selbst)
         let actionsHtml = '';
         
-        // sichere, zuverlässige Abfrage, ob dieser Client Leader ist
-        const roomDataEl = document.getElementById('room-data');
-        const leaderFlag = roomDataEl ? roomDataEl.dataset.isLeader === 'true' : (typeof isLeader !== 'undefined' && isLeader);
-
-        // nur Leader (und nicht der aktuelle Spieler selbst) sehen den Lösch-Button
-        if (leaderFlag && !isCurrentPlayer) {
+        // Nur Leader (und nicht der aktuelle Spieler selbst) sehen den Lösch-Button
+        if (isLeaderRoom && !isCurrentPlayer) {
             actionsHtml = `
                 <button class="delete-player-btn" onclick="removePlayer('${playerData.id}', '${playerData.name}')" 
                         title="Spieler entfernen">
@@ -576,15 +474,12 @@
     }
 
     function leaveRoom() {
-        const roomData = document.getElementById('room-data');
-        const isLeaderLocal = roomData ? roomData.dataset.isLeader === 'true' : false;
-
         const icon  = document.getElementById('leaveModalIcon');
         const title = document.getElementById('leaveModalTitle');
         const text  = document.getElementById('leaveModalText');
         const btn   = document.getElementById('leaveModalConfirm');
 
-        if (isLeaderLocal) {
+        if (isLeaderRoom) {
             icon.textContent  = '⚠️';
             title.textContent = 'Raum schließen?';
             text.textContent  = 'Der Raum wird für alle Spieler sofort geschlossen. Diese Aktion kann nicht rückgängig gemacht werden.';

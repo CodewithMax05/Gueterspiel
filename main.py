@@ -17,7 +17,6 @@ from collections import defaultdict
 from threading import Lock 
 from dotenv import load_dotenv
 load_dotenv()
-# Test
 
 app = Flask(__name__)
 is_production = os.environ.get('FLASK_ENV') == 'production'
@@ -110,76 +109,61 @@ class GameRoom:
         self.leader_id = leader_id
         self.settings = settings
         self.players = []
-        self.status = "waiting"  # waiting, ready, playing, round_results, finished
+        self.status = "waiting"  # waiting | ready | playing | round_results | finished
         self.current_round = 0
         self.groups = []
-        self.group_cooperation = {} 
+        self.group_cooperation = {}
         self.round_start_time = None
         self.submitted_players = set()
         self.round_results = None
-        self.leader_name = "Leader"  # Füge leader_name hinzu
+        self.leader_name = "Leader"
         self.timer_remaining = settings.get('round_duration', 60)
         self.submitted_count = 0
         self.total_players = 0
         self.timer_running = False
         self.incognito_mode = settings.get('incognito_mode', False)
-        self.room_type = settings.get('room_type', 'public')  # 'public' oder 'private'
-        self.access_code = settings.get('access_code')  # 6-stelliger Code für private Räume
-        self.chat_enabled = settings.get('chat_enabled', True)  # Platzhalter für Chat-Funktion
+        self.room_type = settings.get('room_type', 'public')
+        self.access_code = settings.get('access_code')
+        self.chat_enabled = settings.get('chat_enabled', True)
         self.round_end_time = None
-        self.players_in_results = set()   # PIDs die round_results geladen haben
+        self.players_in_results = set()
 
-    def update_timer_status(self, time_left, submitted_count, total_players, timer_running):
-        self.timer_remaining = time_left
-        self.submitted_count = submitted_count
-        self.total_players = total_players
-        self.timer_running = timer_running
+    # ------------------------------------------------------------------
+    # Spieler-Hilfsmethoden
+    # ------------------------------------------------------------------
 
-    def update_status_based_on_conditions(self):
-        """Aktualisiert den Status basierend auf den aktuellen Bedingungen"""
-        if self.status in ["waiting", "ready"]:
-            if self.can_start_game():
-                self.status = "ready"
-            else:
-                self.status = "waiting"
+    def non_leader_pids(self):
+        """Gibt alle Nicht-Leader-Spieler-IDs zurück, die im players-Dict existieren."""
+        return [pid for pid in self.players if pid in players and not players[pid].is_leader]
 
-        # Sende Status-Update an alle Clients
-        try:
-            socketio.emit('room_status_updated', {
-                'status': self.status,
-                'ready_count': sum(1 for pid in self.players if players[pid].ready and not players[pid].is_leader),
-                'total_players': len([pid for pid in self.players if not players[pid].is_leader])
-            }, room=self.id)
-        except Exception as e:
-            logger.error("Fehler beim Senden des Status-Updates: %s", e)
-        
     def add_player(self, player_id):
         if player_id not in self.players:
             self.players.append(player_id)
             return True
         return False
-    
+
     def remove_player(self, player_id):
         if player_id in self.players:
             self.players.remove(player_id)
             return True
         return False
-    
+
     def can_start_game(self):
+        """True wenn genug Spieler bereit sind und die Anzahl durch die Gruppengröße teilbar ist."""
         group_size = self.settings.get('group_size', 4)
-        # Nur normale Spieler zählen (keine Leader)
-        normal_players = [pid for pid in self.players if pid in players and not players[pid].is_leader]
-        
-        has_correct_player_count = len(normal_players) >= group_size and len(normal_players) % group_size == 0
-        all_players_ready = all(players[pid].ready for pid in normal_players)
-        
-        return has_correct_player_count and all_players_ready
-    
+        normal_players = self.non_leader_pids()
+        return (
+            len(normal_players) >= group_size
+            and len(normal_players) % group_size == 0
+            and all(players[pid].ready for pid in normal_players)
+        )
+
     def create_groups(self):
+        """Teilt alle Nicht-Leader-Spieler zufällig in Gruppen ein."""
         group_size = self.settings.get('group_size', 4)
-        player_list = self.players.copy()
+        player_list = self.non_leader_pids()
         random.shuffle(player_list)
-        
+
         self.groups = []
         for i in range(0, len(player_list), group_size):
             group = player_list[i:i + group_size]
@@ -188,90 +172,110 @@ class GameRoom:
                 'members': [players[pid].name for pid in group],
                 'player_ids': group
             })
-    
+
     def get_player_group(self, player_id):
         for group in self.groups:
             if player_id in group['player_ids']:
                 return group
         return None
+
+    # ------------------------------------------------------------------
+    # Status & Timer
+    # ------------------------------------------------------------------
+
+    def update_timer_status(self, time_left, submitted_count, total_players, timer_running):
+        self.timer_remaining = time_left
+        self.submitted_count = submitted_count
+        self.total_players = total_players
+        self.timer_running = timer_running
+
+    def update_status_based_on_conditions(self):
+        """Aktualisiert den Raumstatus und informiert alle Clients."""
+        if self.status in ["waiting", "ready"]:
+            self.status = "ready" if self.can_start_game() else "waiting"
+
+        non_leaders = self.non_leader_pids()
+        try:
+            socketio.emit('room_status_updated', {
+                'status': self.status,
+                'ready_count': sum(1 for pid in non_leaders if players[pid].ready),
+                'total_players': len(non_leaders)
+            }, room=self.id)
+        except Exception as e:
+            logger.error("Fehler beim Senden des Status-Updates: %s", e)
     
+    # ------------------------------------------------------------------
+    # Auswertung
+    # ------------------------------------------------------------------
+
     def get_group_comparison_data(self, players_dict, initial_coins):
-        """Berechnet Vergleichsdaten für alle Gruppen"""
+        """Berechnet aggregierte Vergleichsdaten für alle Gruppen (Auswertungsseite)."""
         groups_data = []
-        
+
         for group in self.groups:
             group_balances = []
             group_contributions = []
             group_cooperation_rates = []
-            
+
             for player_id in group['player_ids']:
                 if player_id in players_dict:
                     player = players_dict[player_id]
                     group_balances.append(player.coins)
                     group_contributions.extend(player.game_history['contributions'])
-            
-            # Sammle Kooperationsraten
+
             for round_num in range(1, self.current_round + 1):
-                if (self.group_cooperation.get(round_num, {})
-                        .get(group['group_number']) is not None):
-                    cooperation_rate = self.group_cooperation[round_num][group['group_number']]
-                    group_cooperation_rates.append(cooperation_rate)
-            
-            # Berechne Kennzahlen
-            avg_balance = (sum(group_balances) / len(group_balances)) if group_balances else 0
-            avg_contribution = (sum(group_contributions) / len(group_contributions)) if group_contributions else 0
-            total_profit = sum(group_balances) - (initial_coins * len(group_balances))
+                rate = self.group_cooperation.get(round_num, {}).get(group['group_number'])
+                if rate is not None:
+                    group_cooperation_rates.append(rate)
+
+            avg_balance     = (sum(group_balances)        / len(group_balances))        if group_balances        else 0
+            avg_contribution= (sum(group_contributions)   / len(group_contributions))   if group_contributions   else 0
+            total_profit    = sum(group_balances) - (initial_coins * len(group_balances))
             avg_cooperation = (sum(group_cooperation_rates) / len(group_cooperation_rates)) if group_cooperation_rates else 0
-            
+
             groups_data.append({
-                'group': group,
-                'avg_balance': round(avg_balance, 2),
+                'group':            group,
+                'avg_balance':      round(avg_balance, 2),
                 'avg_contribution': round(avg_contribution, 2),
-                'total_profit': round(total_profit, 2),
-                'avg_cooperation': round(avg_cooperation, 2),
-                'total_wealth': sum(group_balances)
+                'total_profit':     round(total_profit, 2),
+                'avg_cooperation':  round(avg_cooperation, 2),
+                'total_wealth':     sum(group_balances)
             })
-        
-        # Sortiere nach Gesamtguthaben absteigend
+
         return sorted(groups_data, key=lambda x: x['total_wealth'], reverse=True)
     
     def should_continue_game(self):
-        """Prüft ob das Spiel weitergehen soll basierend auf den Einstellungen"""
-        # Wenn noch keine Runde gespielt wurde, soll weitergemacht werden
+        """True wenn das Spiel laut Einstellungen eine weitere Runde spielen soll."""
         if self.current_round == 0:
             return True
-            
-        end_mode = self.settings['end_mode']
-        
+
+        end_mode = self.settings.get('end_mode', 'fixed_rounds')
+
         if end_mode == 'fixed_rounds':
-            return self.current_round < self.settings['max_rounds']
+            return self.current_round < self.settings.get('max_rounds', 5)
         elif end_mode == 'probability':
-            # Mindestrunden garantieren
-            if self.current_round < self.settings['min_rounds']:
+            if self.current_round < self.settings.get('min_rounds', 1):
                 return True
-            # Maximalrunden begrenzen
-            if self.current_round >= self.settings['max_rounds_probability']:
+            if self.current_round >= self.settings.get('max_rounds_probability', 10):
                 return False
-            # Zwischen min_rounds und max_rounds_probability: Wahrscheinlichkeit prüfen
-            return random.random() <= self.settings['continue_probability']
+            return random.random() <= self.settings.get('continue_probability', 0.5)
         return False
-    
+
     def reset_for_next_round(self):
-        """Bereitet den Raum für die nächste Runde vor"""
+        """Setzt den Raum für eine neue Runde zurück."""
         self.status = "playing"
         self.current_round += 1
-        
-        if not self.settings['fixed_groups']:
+
+        if not self.settings.get('fixed_groups', False):
             self.create_groups()
-        
-        # Setze Beiträge zurück
+
         for pid in self.players:
-            players[pid].current_contribution = 0
-        
+            p = players.get(pid)
+            if p:
+                p.current_contribution = 0
+
         self.submitted_players.clear()
         self.round_results = None
-        
-        # Setze Timer-Status für neue Runde
         self.timer_remaining = self.settings.get('round_duration', 60)
         self.submitted_count = 0
         self.timer_running = True
@@ -389,8 +393,7 @@ class GameTimer:
                 if self.room_id in rooms:
                     room = rooms[self.room_id]
                     submitted_count = len(room.submitted_players)
-                    total_players = len([pid for pid in room.players
-                                         if not players.get(pid, Player(pid, '')).is_leader])
+                    total_players   = len(room.non_leader_pids())
                     try:
                         room.update_timer_status(self.time_left, submitted_count, total_players, True)
                     except Exception:
@@ -439,8 +442,51 @@ class GameTimer:
 game_timers = {}
 game_timer_lock = Lock()
 
+def close_room(room_id, message, reason=None):
+    """Schließt einen Raum vollständig: benachrichtigt alle Spieler, stoppt den
+    Timer, bricht laufende Gnadenfrist-Greenlets ab und räumt alle Daten auf."""
+    room = rooms.get(room_id)
+    if not room:
+        return
+
+    payload = {'message': message}
+    if reason:
+        payload['reason'] = reason
+    socketio.emit('room_closed', payload, room=room_id)
+
+    timer = game_timers.pop(room_id, None)
+    if timer:
+        try:
+            timer.stop()
+        except Exception:
+            pass
+
+    all_pids = list(room.players) + [room.leader_id]
+    with removal_lock:
+        for pid in all_pids:
+            greenlet = pending_removals.pop(pid, None)
+            if greenlet:
+                try:
+                    greenlet.kill()
+                except Exception:
+                    pass
+
+    for pid in list(room.players):
+        p = players.pop(pid, None)
+        player_sids.pop(pid, None)
+        if p:
+            p.room_id = None
+
+    players.pop(room.leader_id, None)
+    player_sids.pop(room.leader_id, None)
+    rooms.pop(room_id, None)
+
+    socketio.emit('room_list_updated', {'action': 'deleted', 'room_id': room_id})
+    logger.info("Raum %s geschlossen (Grund: %s)", room_id, reason or 'manuell')
+
+
 def stop_game_timer(room_id):
-    """Stoppt und entfernt Timer sicher"""
+    """Stoppt und entfernt Timer sicher."""
     with game_timer_lock:
         if room_id in game_timers:
             game_timers[room_id].stop()
@@ -508,8 +554,7 @@ def _test_player_submit(player_id, room_id):
     room.submitted_players.add(player_id)
 
     submitted_count = len(room.submitted_players)
-    total_players = len([pid for pid in room.players
-                         if not players.get(pid, Player(pid, '')).is_leader])
+    total_players   = len(room.non_leader_pids())
 
     socketio.emit('contribution_submitted', {
         'submitted_count': submitted_count,
@@ -535,12 +580,9 @@ def get_or_create_game_timer(room_id, duration=60):
         timer = GameTimer(socketio, room_id, duration)
         game_timers[room_id] = timer
         
-        # Initialisiere Timer-Status im Raum
         if room_id in rooms:
             room = rooms[room_id]
-            room.update_timer_status(duration, 0, 
-                                   len([pid for pid in room.players if not players[pid].is_leader]), 
-                                   True)
+            room.update_timer_status(duration, 0, len(room.non_leader_pids()), True)
         
         timer.start()
         logger.info("Neuer Game-Timer für Raum %s gestartet (Dauer: %ss)", room_id, duration)
@@ -622,7 +664,6 @@ def create_game():
             'end_mode': end_mode,
             'incognito_mode': request.form.get('incognito_mode') == 'true',
             
-            # NEUE EINSTELLUNGEN
             'room_type': request.form.get('room_type', 'public'),
             'chat_enabled': request.form.get('chat_enabled') == 'true'
         }
@@ -661,18 +702,16 @@ def create_game():
         session['room_id'] = room_id
         session['is_leader'] = True
         
-        # TEST: 6 Test-Spieler mit Ready-Status erstellen
-        test_names = [f"Test-Spieler {i}" for i in range(1, 39)]  # 1 bis 38
+        test_names = [f"Test-Spieler {i}" for i in range(1, 39)]
         for name in test_names:
-            player_id = str(uuid.uuid4())
-            player = Player(player_id, name, is_test=True) 
-            player.room_id = room_id
-            player.coins = room.settings['initial_coins']
-            player.game_history['balances'].append(player.coins)
-            player.ready = True
-            
-            players[player_id] = player
-            room.add_player(player_id)
+            test_id = str(uuid.uuid4())
+            test_player = Player(test_id, name, is_test=True)
+            test_player.room_id = room_id
+            test_player.coins = room.settings['initial_coins']
+            test_player.game_history['balances'].append(test_player.coins)
+            test_player.ready = True
+            players[test_id] = test_player
+            room.add_player(test_id)
 
         socketio.emit('room_list_updated', {
             'action': 'created',
@@ -773,11 +812,12 @@ def game_room(room_id):
             'ready': p.ready
         })
     
-    return render_template('game_room.html', 
-                         room=room, 
+    return render_template('game_room.html',
+                         room=room,
                          players=player_list,
                          ready_count=sum(1 for pid in room.players if players[pid].ready),
-                         is_leader=is_leader)
+                         is_leader=is_leader,
+                         current_player_ready=player.ready if not is_leader else False)
 
 @app.route('/game/<room_id>')
 def game(room_id):
@@ -1267,7 +1307,7 @@ def handle_disconnect():
     # --- Leader-Disconnect ---
     if player.is_leader:
         if room.status not in ["finished"]:
-            # 2-Minuten-Gnadenfrist starten – danach Raum schließen
+            # 5-Minuten-Gnadenfrist starten – danach Raum schließen
             with removal_lock:
                 if player_id in pending_removals:
                     pending_removals[player_id].kill()
@@ -1326,7 +1366,7 @@ def handle_join_room(data):
     # Neuen Spieler erstellen
     player_id = str(uuid.uuid4())
     player = Player(player_id, player_name)
-    player.room_id = room_id  # WICHTIG: Raum-ID setzen
+    player.room_id = room_id
     player.coins = room.settings['initial_coins']
     player.game_history['balances'].append(player.coins)
 
@@ -1344,8 +1384,12 @@ def handle_join_room(data):
         with game_timer_lock:
             timer = game_timers.get(room_id)
             if timer and timer.is_running:
-                time_left = timer.get_time_left()
-                emit('game_timer_update', {'time_left': time_left}, room=request.sid)
+                emit('game_timer_update', {
+                    'start_time': int(timer.start_time * 1000) if timer.start_time else None,
+                    'duration':   timer.duration,
+                    'time_left':  timer.get_time_left(),
+                    'timer_running': True
+                }, room=request.sid)
         
         logger.info("Spieler '%s' (id=%s) zu Raum %s hinzugefügt – Spieleranzahl: %d",
                     player_name, player_id, room_id, len(room.players))
@@ -1430,13 +1474,13 @@ def handle_join_game_room(data):
                         'timer_running': bool(room.timer_running)
                     }
 
-                non_leader_ids = [pid for pid in room.players if pid in players and not players[pid].is_leader]
+                non_leader_ids = room.non_leader_pids()
                 if room.status == 'round_results':
                     submitted_c = getattr(room, 'submitted_count', len(room.submitted_players))
-                    total_p = getattr(room, 'total_players', len(non_leader_ids))
+                    total_p     = getattr(room, 'total_players', len(non_leader_ids))
                 else:
                     submitted_c = len(room.submitted_players)
-                    total_p = len(non_leader_ids)
+                    total_p     = len(non_leader_ids)
 
                 # Prüfen ob Spieler bereits eingereicht hat
                 player = players.get(player_id)
@@ -1515,11 +1559,9 @@ def handle_start_game():
 
             duration = room.settings.get('round_duration', 60)
             get_or_create_game_timer(room_id, duration)
-            if not is_production:
-                simulate_test_players(room_id)
+            simulate_test_players(room_id)
             logger.info("Spiel gestartet – Raum %s, Runde %d, Timer %ds, Spieler: %d",
-                        room_id, room.current_round, duration,
-                        len([pid for pid in room.players if not players[pid].is_leader]))
+                        room_id, room.current_round, duration, len(room.non_leader_pids()))
             
             # Setze alle Spieler auf nicht bereit für nächste Runde
             for pid in room.players:
@@ -1530,18 +1572,18 @@ def handle_start_game():
                 'current_round': room.current_round
             }, room=room_id)
         else:
-            # Detaillierte Fehlermeldung
-            group_size = room.settings.get('group_size', 4)
-            player_count = len(room.players)
-            ready_count = sum(1 for pid in room.players if players[pid].ready)
-            
+            group_size    = room.settings.get('group_size', 4)
+            non_leaders   = room.non_leader_pids()
+            player_count  = len(non_leaders)
+            ready_count   = sum(1 for pid in non_leaders if players[pid].ready)
+
             if player_count < group_size:
                 error_msg = f"Zu wenige Spieler. Benötigt mindestens {group_size}, haben {player_count}"
             elif player_count % group_size != 0:
                 error_msg = f"Spieleranzahl muss durch {group_size} teilbar sein. Aktuell: {player_count}"
             else:
                 error_msg = f"Nicht alle Spieler sind bereit. Bereit: {ready_count}/{player_count}"
-            
+
             emit('error', {'message': error_msg})
 
 @socketio.on('submit_contribution')
@@ -1576,9 +1618,8 @@ def handle_submit_contribution(data):
         player.current_contribution = contribution
         room.submitted_players.add(player_id)
 
-        # Aktuelle Zähler ermitteln
         submitted_count = len(room.submitted_players)
-        total_players = len([pid for pid in room.players if not players.get(pid, Player(pid, '')).is_leader])
+        total_players   = len(room.non_leader_pids())
 
         # Aktiviere Timer-Status Update
         if room_id in game_timers:
@@ -1634,8 +1675,7 @@ def handle_retract_contribution():
     room.submitted_players.discard(player_id)
 
     submitted_count = len(room.submitted_players)
-    total_players = len([pid for pid in room.players
-                         if not players.get(pid, Player(pid, '')).is_leader])
+    total_players   = len(room.non_leader_pids())
 
     socketio.emit('contribution_submitted', {
         'submitted_count': submitted_count,
@@ -1724,36 +1764,7 @@ def delayed_leader_disconnect(player_id, room_id, delay_seconds=300):
         return
 
     logger.info("Leader %s seit %ds offline – Raum %s wird geschlossen", player_id, delay_seconds, room_id)
-
-    # Alle Spieler benachrichtigen und Raum schließen
-    socketio.emit('room_closed', {
-        'message': 'Der Spielleiter war zu lange offline. Der Raum wurde geschlossen.',
-        'reason': 'leader_timeout'
-    }, room=room_id)
-
-    # Timer stoppen
-    timer = game_timers.pop(room_id, None)
-    if timer:
-        try:
-            timer.stop()
-        except Exception:
-            pass
-
-    # Alle Spieler-Daten aufräumen
-    for pid in list(room.players):
-        p = players.pop(pid, None)
-        player_sids.pop(pid, None)
-        if p:
-            p.room_id = None
-
-    # Leader aufräumen
-    players.pop(player_id, None)
-    player_sids.pop(player_id, None)
-
-    # Raum entfernen
-    rooms.pop(room_id, None)
-
-    socketio.emit('room_list_updated', {'action': 'deleted', 'room_id': room_id})
+    close_room(room_id, 'Der Spielleiter war zu lange offline. Der Raum wurde geschlossen.', reason='leader_timeout')
 
 def cleanup_old_rooms():
     """Hintergrund-Task: räumt beendete Räume nach 2 Stunden auf."""
@@ -1813,7 +1824,7 @@ def finish_round(room_id):
 
         # 2) Formuliere payload (einmal) und sende finalen Submit-Status
         submitted_count = len(room.submitted_players)
-        total_players = len([pid for pid in room.players if pid in players and not players[pid].is_leader])
+        total_players   = len(room.non_leader_pids())
         payload = {
             'submitted_count': submitted_count,
             'total_players': total_players
@@ -1845,7 +1856,7 @@ def finish_round(room_id):
                 # setze auf None, wie zuvor (wird in reset_for_next_round wieder auf 0 gesetzt)
                 p.current_contribution = None
 
-        # 5) Sende Ergebnisse an den Raum
+        # 5) Sende Ergebnisse an den Raum — Spieler leiten sich via base.html selbst weiter
         try:
             socketio.emit('round_finished', {
                 'results': results,
@@ -1855,15 +1866,7 @@ def finish_round(room_id):
         except Exception as e:
             logger.error("Fehler beim Senden von round_finished für Raum %s: %s", room_id, e)
 
-        # 6) Redirect für Nicht-Leader an deren persönliche Rooms (wie vorher)
-        for player_id in room.players:
-            if player_id in players and not players[player_id].is_leader:
-                try:
-                    socketio.emit('redirect_to_results', {'room_id': room_id}, room=player_id)
-                except Exception:
-                    pass
-
-        # 7) Aufräumen: submitted_players erst jetzt leeren
+        # 6) Aufräumen: submitted_players erst jetzt leeren
         try:
             room.submitted_players.clear()
         except Exception:
@@ -1892,9 +1895,7 @@ def handle_arrived_at_results():
 
     room.players_in_results.add(player_id)
 
-    # Nur Nicht-Leader-Spieler zählen
-    non_leader_ids = [pid for pid in room.players if pid in players and not players[pid].is_leader]
-    total = len(non_leader_ids)
+    total   = len(room.non_leader_pids())
     arrived = len(room.players_in_results)
 
     # Leader informieren
@@ -1925,10 +1926,8 @@ def handle_next_round():
             # Timer für neue Runde starten
             duration = room.settings.get('round_duration', 60)
             get_or_create_game_timer(room_id, duration)
-            if not is_production:
-                simulate_test_players(room_id)
+            simulate_test_players(room_id)
 
-            logger.info("Nächste Runde gestartet – Raum %s, Runde %d", room_id, room.current_round)
             _t = game_timers.get(room_id)
             emit('next_round_started', {
                 'current_round': room.current_round,
@@ -1939,14 +1938,8 @@ def handle_next_round():
                     'timer_running': True
                 }
             }, room=room_id)
-            
-            # Leite Spieler zurück zum Spiel
-            for pid in room.players:
-                if pid in players and not players[pid].is_leader:
-                    socketio.emit('redirect_to_game', {
-                        'room_id': room_id
-                    }, room=pid)
-                    
+            logger.info("Nächste Runde gestartet – Raum %s, Runde %d", room_id, room.current_round)
+
         else:
             # Spiel beenden
             room.status = "finished"
@@ -1973,34 +1966,7 @@ def handle_leave_room():
     room = rooms[room_id]
 
     if player.is_leader:
-        # Raum sofort schließen: alle Spieler rauswerfen und benachrichtigen
-        socketio.emit('room_closed', {
-            'message': 'Der Spielleiter hat den Raum verlassen. Der Raum wurde geschlossen.'
-        }, room=room_id)
-
-        # Alle Spieler-Daten aufräumen
-        for pid in list(room.players):
-            p = players.pop(pid, None)
-            player_sids.pop(pid, None)
-            if p:
-                p.room_id = None
-
-        # Raum selbst entfernen
-        rooms.pop(room_id, None)
-
-        # Timer stoppen falls aktiv
-        timer = game_timers.pop(room_id, None)
-        if timer:
-            try:
-                timer.stop()
-            except Exception:
-                pass
-
-        # Raumliste global aktualisieren (join_game.html reagiert darauf)
-        socketio.emit('room_list_updated', {
-            'action': 'deleted',
-            'room_id': room_id
-        })
+        close_room(room_id, 'Der Spielleiter hat den Raum verlassen. Der Raum wurde geschlossen.')
 
     else:
         lobby_statuses = ['waiting', 'ready', 'finished']
@@ -2052,46 +2018,8 @@ def handle_abort_game():
     if not room_id or room_id not in rooms:
         return
 
-    room = rooms[room_id]
     logger.info("Leader %s hat Spiel in Raum %s manuell abgebrochen", player_id, room_id)
-
-    # Spieler benachrichtigen
-    socketio.emit('room_closed', {
-        'message': 'Das Spiel wurde vom Spielleiter abgebrochen.',
-        'reason': 'leader_abort'
-    }, room=room_id)
-
-    # Timer stoppen
-    timer = game_timers.pop(room_id, None)
-    if timer:
-        try:
-            timer.stop()
-        except Exception:
-            pass
-
-    # Laufenden Disconnect-Timer des Leaders abbrechen (falls vorhanden)
-    with removal_lock:
-        greenlet = pending_removals.pop(player_id, None)
-        if greenlet:
-            try:
-                greenlet.kill()
-            except Exception:
-                pass
-
-    # Alle Spieler-Daten aufräumen
-    for pid in list(room.players):
-        p = players.pop(pid, None)
-        player_sids.pop(pid, None)
-        if p:
-            p.room_id = None
-
-    # Leader aufräumen
-    players.pop(player_id, None)
-    player_sids.pop(player_id, None)
-
-    # Raum entfernen
-    rooms.pop(room_id, None)
-    socketio.emit('room_list_updated', {'action': 'deleted', 'room_id': room_id})
+    close_room(room_id, 'Das Spiel wurde vom Spielleiter abgebrochen.', reason='leader_abort')
 
 
 @socketio.on('return_to_lobby')

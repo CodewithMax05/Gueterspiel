@@ -48,7 +48,6 @@
 
 .timer-time.danger {
     color: #dc3545;
-    animation: pulse 1s infinite;
 }
 
 @keyframes pulse {
@@ -151,21 +150,6 @@
     font-size: 18px;
 }
 
-.group-members {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.member-badge {
-    background: rgba(102, 126, 234, 0.2);
-    padding: 8px 15px;
-    border-radius: 20px;
-    font-size: 14px;
-    border: 1px solid #667eea;
-}
-
 .status-overview {
     background: rgba(255, 255, 255, 0.05);
     border-radius: 12px;
@@ -238,14 +222,6 @@
     box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
 }
 
-.btn-disabled {
-    background: linear-gradient(45deg, #6c757d, #495057) !important;
-    opacity: 0.7 !important;
-    cursor: not-allowed !important;
-    transform: none !important;
-    box-shadow: none !important;
-}
-
 @keyframes pulse-button {
     0% {
         transform: scale(1);
@@ -259,11 +235,6 @@
         transform: scale(1);
         box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
     }
-}
-
-/* Timer Animation */
-.timer-time.danger {
-    animation: none;
 }
 
 /* Incognito Mode Notification */
@@ -281,11 +252,6 @@
     padding: 40px;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 12px;
-}
-
-/* Hidden Elements */
-.hidden {
-    display: none;
 }
 
 /* Tabellenzellen */
