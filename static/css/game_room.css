@@ -348,6 +348,111 @@
     justify-content: center;
 }
 
+/* ================================================================
+   Responsive Design
+   ================================================================ */
+
+/* --- Tablet (max 768px) --- */
+@media (max-width: 768px) {
+    /* Spieler-Items: kompakter */
+    .player-item {
+        padding: 12px;
+        gap: 8px;
+    }
+
+    .player-item .player-status {
+        min-width: 90px;
+        font-size: 0.9em;
+    }
+
+    /* Leader-Item: volle Breite */
+    .leader-item {
+        min-width: unset;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    /* Aktions-Buttons: untereinander */
+    .action-buttons .player-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .ready-toggle,
+    .btn-leave {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Leader-Aktionen: volle Breite */
+    .leader-actions {
+        width: 100%;
+    }
+
+    /* Requirements-Box */
+    .requirements {
+        max-width: 100%;
+    }
+
+    /* Room-Info */
+    .room-info {
+        padding: 14px;
+    }
+
+    /* Timer-Anzeige (Leader) */
+    .timer-display {
+        padding: 14px;
+    }
+}
+
+/* --- Mobile (max 480px) --- */
+@media (max-width: 480px) {
+    .player-item {
+        flex-wrap: wrap;
+        padding: 10px;
+    }
+
+    .player-item .player-status {
+        min-width: unset;
+        font-size: 0.85em;
+    }
+
+    .player-item .player-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .leader-avatar {
+        font-size: 1.6rem;
+    }
+
+    .leader-name {
+        font-size: 1em;
+    }
+
+    .leave-modal {
+        padding: 24px 18px 20px;
+    }
+
+    .leave-modal-icon {
+        font-size: 2.4em;
+    }
+
+    .leave-modal-title {
+        font-size: 1.1em;
+    }
+
+    .leave-modal-actions {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .leave-modal-actions .btn {
+        width: 100%;
+        min-width: unset;
+    }
+}
+
 /* Inkognito-Hinweis in der Spielerliste */
 .incognito-notice {
     text-align: center;

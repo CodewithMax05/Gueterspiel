@@ -198,6 +198,7 @@ footer {
     background: linear-gradient(45deg, #28a745, #20c997);
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
 }
 
@@ -363,22 +364,121 @@ input::placeholder {
     50%       { opacity: 0.7; }
 }
 
-/* Responsive Design */
+/* ================================================================
+   Responsive Design
+   ================================================================ */
+
+/* --- Tablet / kleiner Laptop (max 1024px) --- */
+@media (max-width: 1024px) {
+    .navbar {
+        padding: 0 16px;
+    }
+
+    .logo {
+        font-size: 1.35rem;
+    }
+}
+
+/* --- Tablet Portrait / kleines Laptop (max 768px) --- */
 @media (max-width: 768px) {
     .container {
         padding: 10px;
     }
-    
+
+    .logo {
+        font-size: 1.2rem;
+        gap: 8px;
+    }
+
     .nav-links {
         gap: 10px;
     }
-    
+
+    /* Flash-Messages: ganze Breite auf Mobile */
     .flash-messages {
         right: 10px;
         left: 10px;
+        max-width: none;
     }
-    
+
+    .flash {
+        font-size: 0.9em;
+        padding: 12px 15px;
+    }
+
     .connection-status {
         left: 10px;
+        font-size: 12px;
+        padding: 6px 12px;
+    }
+
+    /* Buttons: Mindest-Touch-Target */
+    .btn {
+        min-height: 44px;
+        padding: 10px 18px;
+    }
+
+    .btn-danger {
+        min-height: 44px;
+    }
+
+    /* Titelzeile mit Back-Button: bleibt nebeneinander, aber wrapped */
+    .page-title-row {
+        gap: 12px;
+    }
+
+    .page-title-row h1 {
+        font-size: 1.4em;
+    }
+
+    /* Aktions-Button-Zeile: vertikal stapeln auf Mobile */
+    .action-buttons-row {
+        flex-direction: column;
+    }
+
+    .action-buttons-row .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Leader-Banner: kleineres Font */
+    .leader-banner {
+        font-size: 0.88rem;
+        padding: 10px 16px;
+    }
+
+    /* Card */
+    .card {
+        padding: 16px;
+    }
+}
+
+/* --- Mobile (max 480px) --- */
+@media (max-width: 480px) {
+    header {
+        padding: 0.7rem 0;
+    }
+
+    .logo {
+        font-size: 1.05rem;
+        gap: 6px;
+    }
+
+    .logo i {
+        font-size: 1em;
+    }
+
+    .page-title-row h1 {
+        font-size: 1.2em;
+    }
+
+    .btn-back {
+        font-size: 0.82em;
+        padding: 8px 12px;
+    }
+
+    footer {
+        padding: 0.7rem 1rem;
+        font-size: 0.8em;
     }
 }

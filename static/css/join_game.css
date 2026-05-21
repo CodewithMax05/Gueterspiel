@@ -219,28 +219,64 @@
 @media (max-width: 768px) {
     .room-item {
         flex-direction: column;
-        gap: 16px;
+        gap: 12px;
         text-align: center;
+        padding: 14px;
     }
-    
+
+    .room-info strong {
+        font-size: 1.1rem;
+    }
+
     .join-form {
         flex-direction: column;
     }
-    
+
     .join-btn {
         width: 100%;
+        min-height: 44px;
     }
 
     .modal-content {
         width: 95%;
         margin: 10px;
     }
-    
+
     .modal-footer {
         flex-direction: column;
     }
-    
+
     .modal-footer .btn {
         width: 100%;
+    }
+
+    .direct-join {
+        padding: 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    .direct-join {
+        padding: 12px;
+    }
+
+    .direct-join h3 {
+        font-size: 1.05rem;
+    }
+
+    .room-item {
+        padding: 12px;
+    }
+
+    .modal-body {
+        padding: 16px;
+    }
+
+    .modal-header {
+        padding: 14px 16px 12px;
+    }
+
+    .modal-footer {
+        padding: 12px 16px 16px;
     }
 }

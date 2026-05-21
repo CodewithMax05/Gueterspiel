@@ -95,19 +95,75 @@
 }
 
 @media (max-width: 768px) {
+    .results-container {
+        padding: 12px;
+    }
+
+    .group-card {
+        padding: 16px;
+    }
+
     .group-stats {
         grid-template-columns: 1fr;
+        gap: 10px;
     }
-    
+
+    .stat-value {
+        font-size: 20px;
+    }
+
+    /* Tabellen-Header ausblenden, Rows als Karten */
+    .player-row.header {
+        display: none;
+    }
+
     .player-row {
-        grid-template-columns: 1fr;
-        gap: 5px;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px 12px;
         font-size: 0.9em;
+        padding: 12px;
     }
-    
+
     .player-row > div:before {
         content: attr(data-label);
         font-weight: bold;
-        margin-right: 10px;
+        display: block;
+        color: #aaa;
+        font-size: 0.8em;
+        margin-bottom: 2px;
+    }
+
+    /* Spielername nimmt volle Breite */
+    .player-row > div:first-child {
+        grid-column: 1 / -1;
+        font-weight: 600;
+        font-size: 1em;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        padding-bottom: 6px;
+        margin-bottom: 2px;
+    }
+
+    .player-row > div:first-child:before {
+        display: none;
+    }
+
+    .waiting-message {
+        padding: 14px;
+        margin: 16px 0;
+    }
+}
+
+@media (max-width: 480px) {
+    .results-container {
+        padding: 8px;
+    }
+
+    .group-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .player-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
     }
 }

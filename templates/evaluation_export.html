@@ -261,6 +261,71 @@
         .podium-base.silver { background: rgba(192,192,192,0.45); height: 56px; }
         .podium-base.bronze { background: rgba(205,127,50,0.45);  height: 40px; }
 
+        /* ── Chart-Wrapper (Canvas-only-Container für Chart.js) ── */
+        .podium-chart-wrapper {
+            position: relative;
+            height: 260px;
+        }
+
+        /* ── Responsive ── */
+
+        /* Gruppen-Tabelle: horizontal scrollen unter 920px */
+        @media (max-width: 920px) {
+            table {
+                table-layout: auto;
+                min-width: 640px;
+                width: auto;
+            }
+            table colgroup col:nth-child(1),
+            table colgroup col:nth-child(2),
+            table colgroup col:nth-child(3),
+            table colgroup col:nth-child(4),
+            table colgroup col:nth-child(5),
+            table colgroup col:nth-child(6) { width: auto; }
+            th, td { white-space: nowrap; padding: 10px 12px; }
+        }
+
+        @media (max-width: 768px) {
+            body { padding: 16px 12px 40px; }
+
+            .evaluation-title { font-size: 1.8em; margin-bottom: 6px; }
+
+            .meta { font-size: 0.82em; }
+            .meta span { display: inline-block; margin: 2px 8px; }
+
+            .section-box { padding: 18px 14px; margin-bottom: 20px; }
+            .section-box h2 { font-size: 1.2em; margin-bottom: 14px; }
+
+            /* Podium: untereinander stapeln */
+            .podium-wrapper {
+                flex-direction: column;
+                align-items: center;
+                gap: 12px;
+            }
+            .podium-stage { max-width: 100%; width: 100%; }
+            .podium-base.gold   { height: 56px; }
+            .podium-base.silver { height: 44px; }
+            .podium-base.bronze { height: 36px; }
+
+            .podium-chart-wrapper { height: 220px; }
+
+            .table-container { padding: 8px; }
+        }
+
+        @media (max-width: 480px) {
+            body { padding: 10px 8px 30px; }
+
+            .evaluation-title { font-size: 1.4em; }
+
+            .section-box { padding: 12px 10px; }
+
+            .podium-medal  { font-size: 1.8em; }
+            .podium-name   { font-size: 0.92em; }
+            .podium-profit { font-size: 1.15em; }
+
+            .podium-chart-wrapper { height: 240px; }
+        }
+
     </style>
 </head>
 <body>
@@ -312,7 +377,9 @@
     <!-- Liniendiagramm: Gewinnverlauf pro Runde -->
     <div style="background:rgba(255,255,255,0.05); border-radius:10px; padding:16px; margin-top:20px;">
         <p style="color:#aaa; font-size:0.95em; margin-bottom:12px;">📈 Gewinnverlauf pro Runde (kumuliert)</p>
-        <canvas id="podiumChart" height="90"></canvas>
+        <div class="podium-chart-wrapper">
+            <canvas id="podiumChart"></canvas>
+        </div>
     </div>
 </div>
 {% endif %}
@@ -443,7 +510,7 @@
         const fillColors   = ['rgba(255,215,0,0.1)', 'rgba(192,192,192,0.08)', 'rgba(205,127,50,0.08)'];
 
         const maxRounds = Math.max.apply(null, sorted.map(function(p) { return p.profit_history.length; }));
-        const labels = Array.from({ length: maxRounds }, function(_, i) { return i === 0 ? 'Start' : 'Nach Runde ' + i; });
+        const labels = Array.from({ length: maxRounds }, function(_, i) { return i === 0 ? 'Start' : 'Nach R ' + i; });
 
         const datasets = sorted.map(function(p, i) {
             return {
@@ -466,11 +533,17 @@
             data: { labels: labels, datasets: datasets },
             options: {
                 responsive: true,
-                maintainAspectRatio: true,
+                maintainAspectRatio: false,
                 animation: { duration: 0 },
                 plugins: {
                     legend: { display: true, labels: { color: '#ccc', boxWidth: 14, padding: 16 } },
                     tooltip: {
+                        backgroundColor: 'rgba(20,20,40,0.9)',
+                        titleColor: '#ccc',
+                        bodyColor: '#fff',
+                        borderColor: 'rgba(255,255,255,0.15)',
+                        borderWidth: 1,
+                        padding: 10,
                         callbacks: {
                             label: function(ctx) {
                                 var val = ctx.parsed.y;
@@ -480,10 +553,21 @@
                     }
                 },
                 scales: {
-                    x: { ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+                    x: {
+                        display: true,
+                        ticks: { color: '#aaa', font: { size: 12 } },
+                        grid: { color: 'rgba(255,255,255,0.06)' },
+                        border: { color: 'rgba(255,255,255,0.15)' }
+                    },
                     y: {
-                        ticks: { color: '#aaa', callback: function(val) { return (val >= 0 ? '+' : '') + val.toFixed(0); } },
-                        grid: { color: 'rgba(255,255,255,0.08)' }
+                        display: true,
+                        ticks: {
+                            color: '#aaa',
+                            font: { size: 12 },
+                            callback: function(val) { return (val >= 0 ? '+' : '') + val.toFixed(0); }
+                        },
+                        grid: { color: 'rgba(255,255,255,0.08)' },
+                        border: { color: 'rgba(255,255,255,0.15)' }
                     }
                 }
             }

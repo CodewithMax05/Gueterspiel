@@ -102,16 +102,43 @@
 }
 
 @media (max-width: 768px) {
+    .form-container {
+        padding: 12px;
+    }
+
+    .settings-section {
+        padding: 18px;
+        margin: 14px 0;
+    }
+
     .form-row {
         grid-template-columns: 1fr;
     }
-    
+
     .button-row {
         flex-direction: column;
-        gap: 15px;
+        gap: 12px;
+        margin-top: 20px;
     }
-    
+
     .button-row .btn {
         width: 100%;
+        min-height: 48px;
+    }
+}
+
+@media (max-width: 480px) {
+    .form-container {
+        padding: 8px;
+    }
+
+    .settings-section {
+        padding: 14px;
+        margin: 10px 0;
+    }
+
+    .settings-section h3 {
+        font-size: 1em;
+        margin-bottom: 14px;
     }
 }
