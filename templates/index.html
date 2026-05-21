@@ -24,3 +24,40 @@
     </div>
 </div>
 {% endblock %}
+
+{% block scripts %}
+<script>
+    (function() {
+        // 1) Benachrichtigung anzeigen wenn Raum wegen Leader-Problem geschlossen wurde
+        const params = new URLSearchParams(window.location.search);
+        const reason = params.get('reason');
+        if (reason === 'leader_timeout') {
+            showNotification('Das Spiel wurde beendet, weil der Spielleiter zu lange offline war.', 'error', 8000);
+        } else if (reason === 'leader_abort') {
+            showNotification('Das Spiel wurde vom Spielleiter abgebrochen.', 'error', 8000);
+        }
+        // URL bereinigen damit die Meldung beim Neuladen nicht nochmal erscheint
+        if (reason) {
+            history.replaceState(null, '', '/');
+        }
+
+        // 2) Fallback: Session-Cookie abgelaufen, aber localStorage hat noch Daten
+        const raw = localStorage.getItem('gueterspiel_session');
+        if (!raw) return;
+        try {
+            const s = JSON.parse(raw);
+            if (!s.player_id || !s.room_id) return;
+            fetch(`/api/check_rejoin?player_id=${encodeURIComponent(s.player_id)}&room_id=${encodeURIComponent(s.room_id)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.valid) {
+                        window.location.href = `/rejoin?player_id=${encodeURIComponent(s.player_id)}&room_id=${encodeURIComponent(s.room_id)}`;
+                    } else {
+                        localStorage.removeItem('gueterspiel_session');
+                    }
+                })
+                .catch(() => {});
+        } catch(e) {}
+    })();
+</script>
+{% endblock %}

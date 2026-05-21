@@ -55,7 +55,7 @@
                 <div id="reqMinPlayers">Prüfe...</div>
             </div>
             <div class="action-buttons-row">
-                <button class="btn btn-success" id="startBtn" disabled>
+                <button class="btn btn-disabled" id="startBtn" disabled>
                     <i class="fas fa-play"></i> Spiel starten
                 </button>
                 <button class="btn btn-danger" onclick="leaveRoom()">
@@ -159,6 +159,23 @@
      class="hidden">
 </div>
 
+<!-- Bestätigungs-Modal: Spieler entfernen -->
+<div class="leave-modal-overlay hidden" id="removePlayerModal">
+    <div class="leave-modal remove-player-modal">
+        <div class="leave-modal-icon">🚫</div>
+        <h3 class="leave-modal-title">Spieler entfernen?</h3>
+        <p class="leave-modal-text">
+            Möchtest du <strong id="removePlayerName"></strong> wirklich aus dem Raum entfernen?
+        </p>
+        <div class="leave-modal-actions">
+            <button class="btn btn-secondary" onclick="closeRemovePlayerModal()">Abbrechen</button>
+            <button class="btn btn-danger" id="removePlayerConfirmBtn" onclick="executeRemovePlayer()">
+                <i class="fas fa-user"></i> Entfernen
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Bestätigungs-Modal: Raum verlassen -->
 <div class="leave-modal-overlay hidden" id="leaveModal">
     <div class="leave-modal">
@@ -200,11 +217,21 @@
                 
                 // Button in Ladezustand versetzen
                 const readyText = this.querySelector('.ready-text');
+                const btn = this;
                 readyText.textContent = '⏳ Wird verarbeitet...';
-                this.classList.add('loading');
-                this.disabled = true;
-                
+                btn.classList.add('loading');
+                btn.disabled = true;
+
                 socket.emit('player_ready');
+
+                // Sicherheits-Timeout: Button nach 5s entsperren falls keine Antwort kommt
+                setTimeout(() => {
+                    if (btn.disabled) {
+                        btn.disabled = false;
+                        btn.classList.remove('loading');
+                        readyText.textContent = 'Bereit machen';
+                    }
+                }, 5000);
             });
         }
         
@@ -249,12 +276,40 @@
         }
     }
 
+    let _removeTargetId   = null;
+    let _removeTargetName = null;
+
     function removePlayer(playerId, playerName) {
-        if (confirm(`Möchten Sie wirklich den Spieler "${playerName}" aus dem Raum entfernen?`)) {
-            console.log('DEBUG: Entferne Spieler:', playerId);
-            socket.emit('remove_player', { player_id: playerId });
-        }
+        _removeTargetId   = playerId;
+        _removeTargetName = playerName;
+        document.getElementById('removePlayerName').textContent = playerName;
+        // Button-Zustand zurücksetzen falls er vom letzten Mal noch disabled ist
+        const btn = document.getElementById('removePlayerConfirmBtn');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-user"></i> Entfernen';
+        document.getElementById('removePlayerModal').classList.remove('hidden');
     }
+
+    function closeRemovePlayerModal() {
+        document.getElementById('removePlayerModal').classList.add('hidden');
+        _removeTargetId   = null;
+        _removeTargetName = null;
+    }
+
+    function executeRemovePlayer() {
+        if (!_removeTargetId) return;
+        const btn = document.getElementById('removePlayerConfirmBtn');
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Wird entfernt…';
+        console.log('DEBUG: Entferne Spieler:', _removeTargetId);
+        socket.emit('remove_player', { player_id: _removeTargetId });
+        closeRemovePlayerModal();
+    }
+
+    // Modal schließen bei Klick auf Overlay
+    document.getElementById('removePlayerModal').addEventListener('click', function(e) {
+        if (e.target === this) closeRemovePlayerModal();
+    });
 
     function checkStartRequirements(roomId) {
         fetch(`/api/room/${roomId}/requirements`)
@@ -268,9 +323,13 @@
                 if (data.can_start) {
                     reqElement.innerHTML = '✅ Alle Voraussetzungen erfüllt!';
                     startBtn.disabled = false;
+                    startBtn.classList.remove('btn-disabled');
+                    startBtn.classList.add('btn-success');
                 } else {
                     reqElement.innerHTML = `❌ ${data.message}`;
                     startBtn.disabled = true;
+                    startBtn.classList.remove('btn-success');
+                    startBtn.classList.add('btn-disabled');
                 }
             })
             .catch(error => {
@@ -362,6 +421,17 @@
         updateRoomStatus(data.room_status);
 
         checkRequirementsOnEvents();
+    });
+
+    // Fehler beim Ready – Button entsperren
+    socket.on('player_ready_error', function() {
+        const readyBtn = document.getElementById('readyBtn');
+        if (readyBtn) {
+            readyBtn.disabled = false;
+            readyBtn.classList.remove('loading');
+            const readyText = readyBtn.querySelector('.ready-text');
+            if (readyText) readyText.textContent = 'Bereit machen';
+        }
     });
 
     // WebSocket Event für entfernte Spieler
@@ -543,16 +613,20 @@
         if (e.target === this) closeLeaveModal();
     });
 
+    // Escape schließt beide Modals
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeRemovePlayerModal();
+            closeLeaveModal();
+        }
+    });
+
     // Server bestätigt erfolgreiches Verlassen
     socket.on('left_room', function() {
         localStorage.removeItem('gueterspiel_session');
         window.location.href = '/';
     });
 
-    // Raum wurde vom Leader geschlossen (für Spieler)
-    socket.on('room_closed', function(data) {
-        showNotification(data.message || 'Der Raum wurde geschlossen.', 'error', 5000);
-        setTimeout(() => { window.location.href = '/'; }, 2000);
-    });
+
 </script>
 {% endblock %}

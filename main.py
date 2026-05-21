@@ -587,27 +587,24 @@ def check_room_access(room_id):
 # Routen
 @app.route('/')
 def index():
-    active_room = None
     player_id = session.get('player_id')
     if player_id and player_id in players:
         p = players[player_id]
         if p.room_id and p.room_id in rooms:
             r = rooms[p.room_id]
             if r.status not in ['finished']:
-                # Ziel-URL je nach Raumstatus
-                status_urls = {
-                    'waiting':       url_for('game_room',        room_id=r.id),
-                    'ready':         url_for('game_room',        room_id=r.id),
-                    'playing':       url_for('game',             room_id=r.id),
-                    'round_results': url_for('round_results',    room_id=r.id),
-                }
-                rejoin_url = status_urls.get(r.status, url_for('game_room', room_id=r.id))
-                active_room = {
-                    'id':     r.id,
-                    'status': r.status,
-                    'url':    rejoin_url,
-                }
-    return render_template('index.html', active_room=active_room)
+                # Sofort zur richtigen Seite weiterleiten
+                if r.status in ['waiting', 'ready']:
+                    return redirect(url_for('game_room', room_id=r.id))
+                elif r.status == 'playing':
+                    if p.is_leader:
+                        return redirect(url_for('leader_dashboard', room_id=r.id))
+                    return redirect(url_for('game', room_id=r.id))
+                elif r.status == 'round_results':
+                    if p.is_leader:
+                        return redirect(url_for('leader_dashboard', room_id=r.id))
+                    return redirect(url_for('round_results', room_id=r.id))
+    return render_template('index.html')
 
 @app.route('/create_game', methods=['GET', 'POST'])
 def create_game():
@@ -739,6 +736,8 @@ def rejoin():
             return redirect(url_for('leader_dashboard', room_id=room_id))
         return redirect(url_for('game', room_id=room_id))
     elif room.status == 'round_results':
+        if player.is_leader:
+            return redirect(url_for('leader_dashboard', room_id=room_id))
         return redirect(url_for('round_results', room_id=room_id))
     elif room.status == 'finished':
         return redirect(url_for('evaluation', room_id=room_id))
@@ -1279,16 +1278,13 @@ def handle_disconnect():
     # --- Leader-Disconnect ---
     if player.is_leader:
         if room.status not in ["finished"]:
-            # Spieler im Raum informieren
-            socketio.emit('leader_disconnected', {
-                'message': 'Der Spielleiter hat die Verbindung verloren. Bitte warten…'
-            }, room=room_id)
-            # Gnadenfrist starten: nach 90s dringendere Warnung
+            # 2-Minuten-Gnadenfrist starten – danach Raum schließen
             with removal_lock:
                 if player_id in pending_removals:
                     pending_removals[player_id].kill()
-                greenlet = spawn(delayed_leader_disconnect, player_id, room_id, 90)
+                greenlet = spawn(delayed_leader_disconnect, player_id, room_id, 300)
                 pending_removals[player_id] = greenlet
+            logger.info("Leader %s disconnected – Raum %s hat 300s Gnadenfrist", player_id, room_id)
         return
 
     # --- Normaler Spieler ---
@@ -1483,27 +1479,32 @@ def handle_join_game_room(data):
 
 @socketio.on('player_ready')
 def handle_player_ready():
-    player_id = session.get('player_id')
+    # sid_to_player ist zuverlässiger als die Session (die beim WS-Handshake eingefroren ist)
+    player_id = sid_to_player.get(request.sid) or session.get('player_id')
     if not player_id or player_id not in players:
+        # Spieler nicht gefunden – Button-Reset an Client schicken damit er nicht hängt
+        emit('player_ready_error', {}, room=request.sid)
         return
-    
+
     player = players[player_id]
     room_id = player.room_id
-    
+
     if room_id and room_id in rooms and not player.is_leader:
         player.ready = not player.ready
-        
+
         room = rooms[room_id]
-        room.update_status_based_on_conditions()  # Status aktualisieren
-        
-        ready_count = sum(1 for pid in room.players if players[pid].ready and not players[pid].is_leader)
-        
+        room.update_status_based_on_conditions()
+
+        ready_count = sum(1 for pid in room.players if pid in players and players[pid].ready and not players[pid].is_leader)
+
         emit('player_ready_changed', {
             'player_id': player_id,
             'ready': player.ready,
             'ready_count': ready_count,
             'room_status': room.status
         }, room=room_id)
+    else:
+        emit('player_ready_error', {}, room=request.sid)
 
 @socketio.on('start_game')
 def handle_start_game():
@@ -1712,11 +1713,10 @@ def delayed_remove_player(player_id, room_id, delay_seconds=10):
     except Exception as e:
         logger.error("Fehler bei delayed_remove_player (player_id=%s): %s", player_id, e, exc_info=True)
 
-def delayed_leader_disconnect(player_id, room_id, delay_seconds=90):
+def delayed_leader_disconnect(player_id, room_id, delay_seconds=300):
     """
-    Wartet delay_seconds. Ist der Leader danach immer noch weg,
-    wird eine dringendere Warnung an alle Spieler gesendet.
-    Der Raum bleibt erhalten — das Spiel pausiert nur.
+    Wartet delay_seconds (Standard: 2 Minuten). Ist der Leader danach
+    immer noch weg, wird der Raum geschlossen und alle Spieler gekickt.
     """
     sleep(delay_seconds)
 
@@ -1733,9 +1733,37 @@ def delayed_leader_disconnect(player_id, room_id, delay_seconds=90):
     if not room or room.status == "finished":
         return
 
-    socketio.emit('leader_offline', {
-        'message': 'Der Spielleiter ist seit längerer Zeit offline. Das Spiel ist pausiert.'
+    logger.info("Leader %s seit %ds offline – Raum %s wird geschlossen", player_id, delay_seconds, room_id)
+
+    # Alle Spieler benachrichtigen und Raum schließen
+    socketio.emit('room_closed', {
+        'message': 'Der Spielleiter war zu lange offline. Der Raum wurde geschlossen.',
+        'reason': 'leader_timeout'
     }, room=room_id)
+
+    # Timer stoppen
+    timer = game_timers.pop(room_id, None)
+    if timer:
+        try:
+            timer.stop()
+        except Exception:
+            pass
+
+    # Alle Spieler-Daten aufräumen
+    for pid in list(room.players):
+        p = players.pop(pid, None)
+        player_sids.pop(pid, None)
+        if p:
+            p.room_id = None
+
+    # Leader aufräumen
+    players.pop(player_id, None)
+    player_sids.pop(player_id, None)
+
+    # Raum entfernen
+    rooms.pop(room_id, None)
+
+    socketio.emit('room_list_updated', {'action': 'deleted', 'room_id': room_id})
 
 def cleanup_old_rooms():
     """Hintergrund-Task: räumt beendete Räume nach 2 Stunden auf."""
@@ -2018,6 +2046,63 @@ def handle_leave_room():
     emit('left_room', {})
 
 
+@socketio.on('abort_game')
+def handle_abort_game():
+    """Leader bricht das laufende Spiel manuell ab."""
+    player_id = session.get('player_id')
+    if not player_id or player_id not in players:
+        return
+
+    player = players[player_id]
+    if not player.is_leader:
+        return
+
+    room_id = player.room_id
+    if not room_id or room_id not in rooms:
+        return
+
+    room = rooms[room_id]
+    logger.info("Leader %s hat Spiel in Raum %s manuell abgebrochen", player_id, room_id)
+
+    # Spieler benachrichtigen
+    socketio.emit('room_closed', {
+        'message': 'Das Spiel wurde vom Spielleiter abgebrochen.',
+        'reason': 'leader_abort'
+    }, room=room_id)
+
+    # Timer stoppen
+    timer = game_timers.pop(room_id, None)
+    if timer:
+        try:
+            timer.stop()
+        except Exception:
+            pass
+
+    # Laufenden Disconnect-Timer des Leaders abbrechen (falls vorhanden)
+    with removal_lock:
+        greenlet = pending_removals.pop(player_id, None)
+        if greenlet:
+            try:
+                greenlet.kill()
+            except Exception:
+                pass
+
+    # Alle Spieler-Daten aufräumen
+    for pid in list(room.players):
+        p = players.pop(pid, None)
+        player_sids.pop(pid, None)
+        if p:
+            p.room_id = None
+
+    # Leader aufräumen
+    players.pop(player_id, None)
+    player_sids.pop(player_id, None)
+
+    # Raum entfernen
+    rooms.pop(room_id, None)
+    socketio.emit('room_list_updated', {'action': 'deleted', 'room_id': room_id})
+
+
 @socketio.on('return_to_lobby')
 def handle_return_to_lobby():
     """Leader setzt den Raum auf Lobby-Zustand zurück (nach Auswertung)."""
@@ -2098,51 +2183,61 @@ def handle_remove_player(data):
         return
     
     target_player_id = data.get('player_id')
-    
-    # Prüfe ob der Ziel-Spieler existiert
-    if target_player_id not in players or target_player_id not in room.players:
+
+    # Spieler muss zumindest in der Raumliste sein um entfernt werden zu können
+    if target_player_id not in room.players:
         emit('error', {'message': 'Spieler nicht gefunden'})
         return
-    
-    target_player = players[target_player_id]
-    
+
+    target_player = players.get(target_player_id)
+
     # Leader kann sich nicht selbst entfernen
-    if target_player.is_leader:
+    if target_player and target_player.is_leader:
         emit('error', {'message': 'Der Spielleiter kann sich nicht selbst entfernen'})
         return
-    
-    # Entferne Spieler aus dem Raum UND setze room_id zurück
-    room.remove_player(target_player_id)
-    target_player.room_id = None  # WICHTIG: Raum-ID zurücksetzen
 
-    try:
-        del players[target_player_id]
-        logger.debug("Spieler %s vollständig aus players-Dict entfernt", target_player_id)
-    except KeyError:
-        pass
-    
-    # Aktualisiere Raumstatus
+    player_name = target_player.name if target_player else f'Spieler ({target_player_id[:8]})'
+
+    # Aus Raumliste entfernen (auch wenn players-Dict inkonsistent ist)
+    room.remove_player(target_player_id)
+
+    if target_player:
+        target_player.room_id = None
+
+    # Laufenden Gnadenfrist-Timer abbrechen
+    with removal_lock:
+        greenlet = pending_removals.pop(target_player_id, None)
+        if greenlet:
+            try:
+                greenlet.kill()
+            except Exception:
+                pass
+
+    players.pop(target_player_id, None)
+    player_sids.pop(target_player_id, None)
+
+    logger.info("Spieler '%s' wurde von Leader '%s' aus Raum %s entfernt",
+                player_name, requesting_player.name, room_id)
+
+    # Raumstatus aktualisieren
     room.update_status_based_on_conditions()
-    
-    # Benachrichtige alle im Raum
+
+    # Alle im Raum benachrichtigen
     emit('player_removed', {
         'player_id': target_player_id,
-        'player_name': target_player.name,
+        'player_name': player_name,
         'removed_player_id': target_player_id,
         'removed_by': requesting_player.name
     }, room=room_id)
-    
-    # Separate Benachrichtigung an den entfernten Spieler
+
+    # Separate Benachrichtigung an den entfernten Spieler selbst
     emit('player_removed', {
         'player_id': target_player_id,
-        'player_name': target_player.name,
+        'player_name': player_name,
         'removed_player_id': target_player_id,
         'removed_by': requesting_player.name,
         'message': 'Sie wurden aus dem Raum entfernt.'
     }, room=target_player_id)
-    
-    logger.info("Spieler '%s' wurde von Leader '%s' aus Raum %s entfernt",
-                target_player.name, requesting_player.name, room_id)
 
 # Hintergrund-Cleanup starten
 spawn(cleanup_old_rooms)

@@ -300,7 +300,10 @@
         socket.on('room_closed', function(data) {
             if (!currentRoomId) return;
             localStorage.removeItem('gueterspiel_session');
-            setTimeout(() => { window.location.href = '/'; }, 500);
+            const reason = data.reason ? encodeURIComponent(data.reason) : '';
+            setTimeout(() => {
+                window.location.href = reason ? `/?reason=${reason}` : '/';
+            }, 500);
         });
 
         // Leader hat Raum zurück in die Lobby versetzt

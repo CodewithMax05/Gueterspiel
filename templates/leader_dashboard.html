@@ -49,11 +49,34 @@
         <div id="progressText">0 von <span id="totalPlayersCount">{{ room.players|length }}</span> Spielern haben eingereicht</div>
     </div>
     
-    <!-- Aktions-Button -->
+    <!-- Aktions-Buttons -->
     <div class="action-buttons">
         <button class="btn btn-large btn-success" id="nextRoundBtn" disabled>
             ⏳ Nächste Runde starten (Timer läuft noch)
         </button>
+        <button class="btn btn-large btn-danger" id="abortGameBtn" onclick="openAbortModal()">
+            ✕ Spiel abbrechen
+        </button>
+    </div>
+
+    <!-- Abort-Bestätigungsmodal -->
+    <div id="abortModal" class="abort-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="abortModalTitle">
+        <div class="abort-modal">
+            <div class="abort-modal-icon">⚠️</div>
+            <h2 class="abort-modal-title" id="abortModalTitle">Spiel wirklich abbrechen?</h2>
+            <p class="abort-modal-text">
+                Alle Spieler werden sofort aus dem Raum entfernt.<br>
+                Die Spieldaten gehen verloren und können nicht wiederhergestellt werden.
+            </p>
+            <div class="abort-modal-actions">
+                <button class="btn abort-modal-cancel" onclick="closeAbortModal()">
+                    Abbrechen
+                </button>
+                <button class="btn btn-danger abort-modal-confirm" id="abortConfirmBtn" onclick="executeAbortGame()">
+                    ✕ Ja, Spiel beenden
+                </button>
+            </div>
+        </div>
     </div>
     
     <!-- Gruppen-Übersicht -->
@@ -376,6 +399,34 @@
         setTimeout(() => {
             window.location.href = `/evaluation/${data.room_id}`;
         }, 500);
+    });
+
+    function openAbortModal() {
+        document.getElementById('abortModal').classList.add('visible');
+    }
+
+    function closeAbortModal() {
+        document.getElementById('abortModal').classList.remove('visible');
+    }
+
+    function executeAbortGame() {
+        const confirmBtn = document.getElementById('abortConfirmBtn');
+        const abortBtn   = document.getElementById('abortGameBtn');
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Wird abgebrochen…';
+        if (abortBtn) { abortBtn.disabled = true; }
+        socket.emit('abort_game');
+        setTimeout(() => { window.location.href = '/'; }, 600);
+    }
+
+    // Modal schließen bei Klick auf Overlay
+    document.getElementById('abortModal').addEventListener('click', function(e) {
+        if (e.target === this) closeAbortModal();
+    });
+
+    // Modal schließen mit Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeAbortModal();
     });
 
     // --- Gruppen Accordion ---

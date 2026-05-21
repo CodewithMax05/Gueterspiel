@@ -348,6 +348,12 @@
     justify-content: center;
 }
 
+/* Remove-Player-Modal: roter Akzent statt blauem */
+.remove-player-modal {
+    border-color: rgba(220, 53, 69, 0.35);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(220, 53, 69, 0.12);
+}
+
 /* ================================================================
    Responsive Design
    ================================================================ */
