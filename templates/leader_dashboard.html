@@ -42,7 +42,7 @@
     
     <!-- Einreichungs-Fortschritt -->
     <div class="submission-progress">
-        <h4>📊 Beiträge der Spieler</h4>
+        <h4>Beiträge der Spieler</h4>
         <div class="progress-bar">
             <div class="progress-fill" id="progressFill"></div>
         </div>
@@ -292,13 +292,16 @@
         }
 
         if (data.timer) {
-            serverTimeLeft = computeServerTimeLeftFromServerTimer(data.timer);
+            const expiresAtMs = computeExpiresAtMs(data.timer);
+            serverTimeLeft = expiresAtMs !== null
+                ? Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000))
+                : undefined;
             updateTimerDisplay();
             updateButtonState();
 
             stopSharedLocalCountdown();
-            if (data.timer.timer_running && serverTimeLeft > 0) {
-                startSharedLocalCountdown(serverTimeLeft,
+            if (data.timer.timer_running && expiresAtMs !== null && expiresAtMs > Date.now()) {
+                startSharedLocalCountdown(expiresAtMs,
                     (sec, ms) => { serverTimeLeft = sec; updateTimerDisplay(); updateButtonState(); },
                     () => { serverTimeLeft = 0; updateTimerDisplay(); updateButtonState(); }
                 );
@@ -317,19 +320,13 @@
     });
 
     socket.on('game_timer_update', function(data) {
-        let computed = null;
-        if (data.start_time && data.duration) {
-            computed = computeServerTimeLeftFromServerTimer(data);
-        } else if (typeof data.time_left !== 'undefined') {
-            computed = Number(data.time_left);
-        }
-
-        if (computed !== null) {
-            serverTimeLeft = computed;
+        const expiresAtMs = computeExpiresAtMs(data);
+        if (expiresAtMs !== null) {
+            serverTimeLeft = Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000));
             updateTimerDisplay();
             stopSharedLocalCountdown();
-            if (serverTimeLeft > 0) {
-                startSharedLocalCountdown(serverTimeLeft,
+            if (expiresAtMs > Date.now()) {
+                startSharedLocalCountdown(expiresAtMs,
                     (sec, ms) => { serverTimeLeft = sec; updateTimerDisplay(); updateButtonState(); },
                     () => { serverTimeLeft = 0; updateTimerDisplay(); updateButtonState(); }
                 );
@@ -390,6 +387,24 @@
             nextRoundBtn.textContent = '⏳ Nächste Runde starten (Timer läuft noch)';
             nextRoundBtn.classList.add('btn-disabled');
             nextRoundBtn.classList.remove('btn-pulse');
+        }
+
+        // Timer für neue Runde neu starten
+        if (data.timer) {
+            const expiresAtMs = computeExpiresAtMs(data.timer);
+            serverTimeLeft = expiresAtMs !== null
+                ? Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000))
+                : undefined;
+            updateTimerDisplay();
+            updateButtonState();
+
+            stopSharedLocalCountdown();
+            if (expiresAtMs !== null && expiresAtMs > Date.now()) {
+                startSharedLocalCountdown(expiresAtMs,
+                    (sec, ms) => { serverTimeLeft = sec; updateTimerDisplay(); updateButtonState(); },
+                    () => { serverTimeLeft = 0; updateTimerDisplay(); updateButtonState(); }
+                );
+            }
         }
 
         setTimeout(() => checkIfLastRound(), 500);

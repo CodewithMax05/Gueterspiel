@@ -171,73 +171,56 @@
         window.sharedLocalInterval = null;
 
         /**
-         * Berechnet verbleibende Sekunden anhand von server-seitiger start_time (ms) und duration (s).
-         * Wenn start_time fehlt, kann time_left (s) verwendet werden.
+         * Berechnet den absoluten Ablaufzeitpunkt (ms seit Epoch) aus dem Server-Timer-Payload.
+         * Der Server sendet start_time (ms) + duration (s) einmalig beim Rundenstart / Reconnect.
+         * Der Client rechnet daraus die verbleibende Zeit selbst – kein per-Sekunde-Push nötig.
          */
-        function computeServerTimeLeftFromServerTimer(timer) {
+        function computeExpiresAtMs(timer) {
             if (!timer) return null;
+            if (timer.start_time && timer.duration) {
+                return timer.start_time + timer.duration * 1000;
+            }
+            // Fallback: time_left vorhanden (z.B. bei gestopptem Timer)
             if (typeof timer.time_left !== 'undefined') {
-                return Number(timer.time_left);
+                return Date.now() + Number(timer.time_left) * 1000;
             }
             return null;
         }
 
+        // Alias für alten Namen – verhindert Fehler falls noch irgendwo genutzt
+        function computeServerTimeLeftFromServerTimer(timer) {
+            const exp = computeExpiresAtMs(timer);
+            if (exp === null) return null;
+            return Math.max(0, Math.ceil((exp - Date.now()) / 1000));
+        }
+
         /**
-         * Startet einen lokalen Countdown, der auf dem übergebenen serverSeconds basiert.
-         * - updateCb(seconds) wird bei jeder UI-Aktualisierung (mind. 200ms) gerufen.
-         * - expireCb() wird genau einmal beim Ablauf aufgerufen.
+         * Startet einen lokalen Countdown bis zum absoluten Zeitpunkt expiresAtMs.
+         * - updateCb(seconds, ms) wird bei jedem Tick aufgerufen.
+         * - expireCb() wird einmalig beim Ablauf aufgerufen.
          * Rückgabe: Objekt mit stop()-Methode.
          */
-        function startSharedLocalCountdown(serverSeconds, updateCb, expireCb, tickMs = 200) {
+        function startSharedLocalCountdown(expiresAtMs, updateCb, expireCb, tickMs = 200) {
             if (window.sharedLocalInterval) {
                 clearInterval(window.sharedLocalInterval);
                 window.sharedLocalInterval = null;
             }
-            const startMs = Date.now();
-            // Wichtig: Wir nehmen die Millisekunden vom Server als Basis (z.B. 10.000ms)
-            const startMsTotal = serverSeconds * 1000;
 
             window.sharedLocalInterval = setInterval(() => {
-                const elapsed = Date.now() - startMs;
-                const remainingMs = startMsTotal - elapsed;
-
-                // --- KORREKTUR 1: Flimmern stoppen ---
-                // Zurück zu Math.ceil.
-                // Jetzt sind Server (math.ceil) und Client-Interpolation (Math.ceil)
-                // wieder konsistent. Das Flimmern hört auf.
+                const remainingMs  = expiresAtMs - Date.now();
                 const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
 
-                if (typeof updateCb === 'function') {
-                    updateCb(remainingSec, remainingMs);
-                }
+                if (typeof updateCb === 'function') updateCb(remainingSec, remainingMs);
 
-                // --- KORREKTUR 2: "Stoppt bei 1" beheben ---
                 if (remainingMs <= 0) {
                     clearInterval(window.sharedLocalInterval);
                     window.sharedLocalInterval = null;
-                    
-                    // ZWINGE die UI, die "0" anzuzeigen,
-                    // bevor der expireCb das Overlay startet.
-                    if (typeof updateCb === 'function') {
-                        updateCb(0, 0);
-                    }
-                    
-                    // Gib dem Browser 10ms Zeit, die "0" zu rendern,
-                    // BEVOR der expireCb (handleTimeExpiredOnce) aufgerufen wird.
-                    if (typeof expireCb === 'function') {
-                        setTimeout(expireCb, 10);
-                    }
+                    if (typeof updateCb === 'function') updateCb(0, 0);
+                    if (typeof expireCb === 'function') setTimeout(expireCb, 10);
                 }
             }, tickMs);
 
-            return {
-                stop: () => {
-                    if (window.sharedLocalInterval) {
-                        clearInterval(window.sharedLocalInterval);
-                        window.sharedLocalInterval = null;
-                    }
-                }
-            };
+            return { stop: stopSharedLocalCountdown };
         }
 
         function stopSharedLocalCountdown() {

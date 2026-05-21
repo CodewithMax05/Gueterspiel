@@ -377,44 +377,35 @@ class GameTimer:
             self.greenlet = spawn(self._run_timer)
 
     def _run_timer(self):
-        start_time = time.time()
-        end_time = start_time + self.duration
-        
+        end_time = time.time() + self.duration
+
         while self.is_running:
+            sleep(1)
             with self.lock:
                 now = time.time()
                 self.time_left = math.ceil(max(0, end_time - now))
 
+                # Raum-Metadaten aktualisieren (für Reconnect-Snapshots)
                 if self.room_id in rooms:
                     room = rooms[self.room_id]
                     submitted_count = len(room.submitted_players)
-                    total_players = len([pid for pid in room.players if not players.get(pid, Player(pid,'')).is_leader])
+                    total_players = len([pid for pid in room.players
+                                         if not players.get(pid, Player(pid, '')).is_leader])
                     try:
                         room.update_timer_status(self.time_left, submitted_count, total_players, True)
                     except Exception:
                         pass
-                    try:
-                        payload = {
-                            'time_left': self.time_left,
-                            'start_time': int(self.start_time * 1000),
-                            'duration': self.duration,
-                            'timer_running': True
-                        }
-                        self.socketio.emit('game_timer_update', payload, room=self.room_id)
-                    except Exception as e:
-                        logger.warning("Fehler beim Senden des Timer-Updates für Raum %s: %s", self.room_id, e)
 
                 if self.time_left <= 0:
                     try:
                         self.socketio.emit('game_time_out', room=self.room_id)
                     except Exception:
                         pass
-
-                    # zentrale Runde beenden
                     try:
                         finish_round(self.room_id)
                     except Exception as e:
-                        logger.error("Fehler beim automatischen Beenden der Runde für Raum %s: %s", self.room_id, e)
+                        logger.error("Fehler beim automatischen Beenden der Runde für Raum %s: %s",
+                                     self.room_id, e)
                     finally:
                         self.is_running = False
                         if self.room_id in rooms:
@@ -423,9 +414,7 @@ class GameTimer:
                                 rooms[self.room_id].timer_remaining = 0
                             except Exception:
                                 pass
-                        break
-
-            sleep(1)
+                    break
 
     def stop(self):
         with self.lock:
@@ -444,7 +433,7 @@ class GameTimer:
             
             elapsed = time.time() - self.start_time
 
-            return int(max(0, self.duration - elapsed))
+            return math.ceil(max(0, self.duration - elapsed))
         
 # Globale Variablen für Game-Timer
 game_timers = {}
@@ -1508,7 +1497,7 @@ def handle_player_ready():
 
 @socketio.on('start_game')
 def handle_start_game():
-    player_id = session.get('player_id')
+    player_id = sid_to_player.get(request.sid) or session.get('player_id')
     if not player_id or player_id not in players:
         return
     
@@ -1526,7 +1515,8 @@ def handle_start_game():
 
             duration = room.settings.get('round_duration', 60)
             get_or_create_game_timer(room_id, duration)
-            simulate_test_players(room_id)
+            if not is_production:
+                simulate_test_players(room_id)
             logger.info("Spiel gestartet – Raum %s, Runde %d, Timer %ds, Spieler: %d",
                         room_id, room.current_round, duration,
                         len([pid for pid in room.players if not players[pid].is_leader]))
@@ -1556,7 +1546,7 @@ def handle_start_game():
 
 @socketio.on('submit_contribution')
 def handle_submit_contribution(data):
-    player_id = session.get('player_id')
+    player_id = sid_to_player.get(request.sid) or session.get('player_id')
     if not player_id or player_id not in players:
         return
 
@@ -1624,7 +1614,7 @@ def handle_submit_contribution(data):
 
 @socketio.on('retract_contribution')
 def handle_retract_contribution():
-    player_id = session.get('player_id')
+    player_id = sid_to_player.get(request.sid) or session.get('player_id')
     if not player_id or player_id not in players:
         return
 
@@ -1783,6 +1773,13 @@ def cleanup_old_rooms():
                 for pid in list(room.players) + [room.leader_id]:
                     players.pop(pid, None)
                     player_sids.pop(pid, None)
+                    with removal_lock:
+                        greenlet = pending_removals.pop(pid, None)
+                        if greenlet:
+                            try:
+                                greenlet.kill()
+                            except Exception:
+                                pass
                 logger.info("Raum %s nach 2 h automatisch aufgeräumt", room_id)
 
 def finish_round(room_id):
@@ -1834,19 +1831,6 @@ def finish_round(room_id):
         except Exception as e:
             logger.warning("Fehler beim Senden des finalen contribution_submitted an Raum %s: %s", room_id, e)
 
-        try:
-            # Zusätzlich: Emit an die persönlichen Rooms der Spieler (Fallback falls jemand nicht im room_id ist)
-            for pid in room.players:
-                # nur normale Spieler (kein Leader)
-                if pid in players and not players[pid].is_leader:
-                    try:
-                        socketio.emit('contribution_submitted', payload, room=pid)
-                    except Exception:
-                        pass
-        except Exception:
-            # robuste Fehlerbehandlung: falls eine einzelne Emit-Schleife fehlschlägt, trotzdem weiter machen
-            pass
-
         # 3) Berechne Ergebnisse
         try:
             results = room.calculate_round_results()
@@ -1854,14 +1838,14 @@ def finish_round(room_id):
             logger.error("Fehler beim Berechnen der Ergebnisse für Raum %s: %s", room_id, e, exc_info=True)
             results = {}
 
-        # 5) History update & reset temporäre contribution (safety)
+        # 4) History update & reset temporäre contribution (safety)
         for pid in room.players:
             if pid in players:
                 p = players[pid]
                 # setze auf None, wie zuvor (wird in reset_for_next_round wieder auf 0 gesetzt)
                 p.current_contribution = None
 
-        # 6) Sende Ergebnisse an den Raum
+        # 5) Sende Ergebnisse an den Raum
         try:
             socketio.emit('round_finished', {
                 'results': results,
@@ -1871,7 +1855,7 @@ def finish_round(room_id):
         except Exception as e:
             logger.error("Fehler beim Senden von round_finished für Raum %s: %s", room_id, e)
 
-        # 7) Redirect für Nicht-Leader an deren persönliche Rooms (wie vorher)
+        # 6) Redirect für Nicht-Leader an deren persönliche Rooms (wie vorher)
         for player_id in room.players:
             if player_id in players and not players[player_id].is_leader:
                 try:
@@ -1879,7 +1863,7 @@ def finish_round(room_id):
                 except Exception:
                     pass
 
-        # 8) Aufräumen: submitted_players erst jetzt leeren
+        # 7) Aufräumen: submitted_players erst jetzt leeren
         try:
             room.submitted_players.clear()
         except Exception:
@@ -1895,7 +1879,7 @@ def finish_round(room_id):
 @socketio.on('arrived_at_results')
 def handle_arrived_at_results():
     """Spieler meldet, dass er round_results geladen hat."""
-    player_id = session.get('player_id')
+    player_id = sid_to_player.get(request.sid) or session.get('player_id')
     if not player_id or player_id not in players:
         return
     player = players[player_id]
@@ -1923,7 +1907,7 @@ def handle_arrived_at_results():
 
 @socketio.on('next_round')
 def handle_next_round():
-    player_id = session.get('player_id')
+    player_id = sid_to_player.get(request.sid) or session.get('player_id')
     if not player_id or player_id not in players:
         return
     
@@ -1941,12 +1925,19 @@ def handle_next_round():
             # Timer für neue Runde starten
             duration = room.settings.get('round_duration', 60)
             get_or_create_game_timer(room_id, duration)
-            simulate_test_players(room_id) 
-            
+            if not is_production:
+                simulate_test_players(room_id)
+
             logger.info("Nächste Runde gestartet – Raum %s, Runde %d", room_id, room.current_round)
+            _t = game_timers.get(room_id)
             emit('next_round_started', {
                 'current_round': room.current_round,
-                'room_id': room_id
+                'room_id': room_id,
+                'timer': {
+                    'start_time': int(_t.start_time * 1000) if _t and _t.start_time else None,
+                    'duration': _t.duration if _t else duration,
+                    'timer_running': True
+                }
             }, room=room_id)
             
             # Leite Spieler zurück zum Spiel
@@ -1967,7 +1958,7 @@ def handle_next_round():
 @socketio.on('leave_room')
 def handle_leave_room():
     """Spieler oder Leader verlässt den Raum freiwillig."""
-    player_id = session.get('player_id')
+    player_id = sid_to_player.get(request.sid) or session.get('player_id')
     if not player_id or player_id not in players:
         emit('left_room', {})
         return
@@ -2049,7 +2040,7 @@ def handle_leave_room():
 @socketio.on('abort_game')
 def handle_abort_game():
     """Leader bricht das laufende Spiel manuell ab."""
-    player_id = session.get('player_id')
+    player_id = sid_to_player.get(request.sid) or session.get('player_id')
     if not player_id or player_id not in players:
         return
 
@@ -2106,7 +2097,7 @@ def handle_abort_game():
 @socketio.on('return_to_lobby')
 def handle_return_to_lobby():
     """Leader setzt den Raum auf Lobby-Zustand zurück (nach Auswertung)."""
-    player_id = session.get('player_id')
+    player_id = sid_to_player.get(request.sid) or session.get('player_id')
     if not player_id or player_id not in players:
         return
 
@@ -2165,7 +2156,7 @@ def handle_return_to_lobby():
 
 @socketio.on('remove_player')
 def handle_remove_player(data):
-    player_id = session.get('player_id')
+    player_id = sid_to_player.get(request.sid) or session.get('player_id')
     if not player_id or player_id not in players:
         return
     

@@ -398,14 +398,16 @@
         console.log('DEBUG: room_state_update empfangen:', data);
 
         if (data.timer) {
-            const computed = computeServerTimeLeftFromServerTimer(data.timer);
-            serverTimeLeft = computed;
+            const expiresAtMs = computeExpiresAtMs(data.timer);
+            serverTimeLeft = expiresAtMs !== null
+                ? Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000))
+                : null;
             updateTimerDisplay();
 
             stopSharedLocalCountdown();
 
-            if (data.timer.timer_running && serverTimeLeft > 0) {
-                startSharedLocalCountdown(serverTimeLeft,
+            if (data.timer.timer_running && expiresAtMs !== null && expiresAtMs > Date.now()) {
+                startSharedLocalCountdown(expiresAtMs,
                     (sec, ms) => {
                         serverTimeLeft = sec;
                         updateTimerDisplay();
@@ -458,22 +460,14 @@
     });
 
     socket.on('game_timer_update', function(data) {
-        // Server ist authoritative
-        let computed = null;
-        if (data.start_time && data.duration) {
-            computed = computeServerTimeLeftFromServerTimer(data);
-        } else if (typeof data.time_left !== 'undefined') {
-            computed = Number(data.time_left);
-        }
-
-        if (computed !== null) {
-            serverTimeLeft = computed;
+        const expiresAtMs = computeExpiresAtMs(data);
+        if (expiresAtMs !== null) {
+            serverTimeLeft = Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000));
             updateTimerDisplay();
 
-            // restart local countdown to stay in sync
             stopSharedLocalCountdown();
-            if (serverTimeLeft > 0) {
-                startSharedLocalCountdown(serverTimeLeft,
+            if (expiresAtMs > Date.now()) {
+                startSharedLocalCountdown(expiresAtMs,
                     (sec, ms) => { serverTimeLeft = sec; updateTimerDisplay(); },
                     () => { serverTimeLeft = 0; updateTimerDisplay(); handleTimeExpiredOnce(); }
                 );
@@ -488,13 +482,6 @@
 
     socket.on('round_finished', function(data) {
         console.log('DEBUG: round_finished received, redirecting to round results');
-        setTimeout(() => {
-            window.location.href = `/round_results/${data.room_id}`;
-        }, 300);
-    });
-
-    socket.on('redirect_to_results', function(data) {
-        console.log('DEBUG: redirect_to_results received');
         setTimeout(() => {
             window.location.href = `/round_results/${data.room_id}`;
         }, 300);
