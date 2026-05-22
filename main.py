@@ -1795,7 +1795,7 @@ def handle_start_game():
 
             # Timer erst nach Grace-Period starten, damit alle Clients die
             # neue Seite geladen haben, bevor der Countdown beginnt.
-            GRACE_PERIOD = 1  # Sekunden – bei Bedarf anpassen
+            GRACE_PERIOD = 4  # Sekunden – bei Bedarf anpassen
 
             def _start_timer_delayed(rid, dur):
                 sleep(GRACE_PERIOD)
