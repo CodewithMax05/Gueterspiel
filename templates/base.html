@@ -189,7 +189,11 @@
         function computeExpiresAtMs(timer) {
             if (!timer) return null;
             if (timer.start_time && timer.duration) {
-                return timer.start_time + timer.duration * 1000;
+                // server_now_ms kompensiert Clock-Skew zwischen Server und Client-Browser.
+                // Render-Server läuft typischerweise einige Sekunden hinter dem Client.
+                // skew > 0  → Server ist hinter Client  → expiresAt muss weiter in der Zukunft liegen
+                const skew = timer.server_now_ms ? (Date.now() - timer.server_now_ms) : 0;
+                return timer.start_time + timer.duration * 1000 + skew;
             }
             // Fallback: time_left vorhanden (z.B. bei gestopptem Timer)
             if (typeof timer.time_left !== 'undefined') {

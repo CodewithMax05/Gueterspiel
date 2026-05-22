@@ -1609,10 +1609,11 @@ def handle_join_room(data):
             timer = game_timers.get(room_id)
             if timer and timer.is_running:
                 emit('game_timer_update', {
-                    'start_time': int(timer.start_time * 1000) if timer.start_time else None,
-                    'duration':   timer.duration,
-                    'time_left':  timer.get_time_left(),
-                    'timer_running': True
+                    'start_time':    int(timer.start_time * 1000) if timer.start_time else None,
+                    'duration':      timer.duration,
+                    'time_left':     timer.get_time_left(),
+                    'timer_running': True,
+                    'server_now_ms': int(time.time() * 1000),
                 }, room=request.sid)
         
         logger.info("Spieler '%s' (id=%s) zu Raum %s hinzugefügt – Spieleranzahl: %d",
@@ -1697,10 +1698,11 @@ def handle_join_game_room(data):
                 timer = game_timers.get(room_id)
                 if timer and timer.is_running:
                     payload = {
-                        'time_left': timer.get_time_left(),
-                        'start_time': int(timer.start_time * 1000) if timer.start_time else None,
-                        'duration': timer.duration,
-                        'timer_running': True
+                        'time_left':     timer.get_time_left(),
+                        'start_time':    int(timer.start_time * 1000) if timer.start_time else None,
+                        'duration':      timer.duration,
+                        'timer_running': True,
+                        'server_now_ms': int(time.time() * 1000),
                     }
                 else:
                     payload = {
@@ -1837,6 +1839,7 @@ def handle_start_game():
                         'duration':      dur,
                         'time_left':     t.get_time_left(),
                         'timer_running': True,
+                        'server_now_ms': int(time.time() * 1000),
                     }, room=rid)
                 logger.info("Timer Raum %s gestartet – %d/%d Spieler geladen",
                             rid, len(r.players_arrived_for_round), len(expected))
@@ -2239,9 +2242,10 @@ def handle_next_round():
                 'current_round': room.current_round,
                 'room_id': room_id,
                 'timer': {
-                    'start_time': int(_t.start_time * 1000) if _t and _t.start_time else None,
-                    'duration': _t.duration if _t else duration,
-                    'timer_running': True
+                    'start_time':    int(_t.start_time * 1000) if _t and _t.start_time else None,
+                    'duration':      _t.duration if _t else duration,
+                    'timer_running': True,
+                    'server_now_ms': int(time.time() * 1000),
                 }
             }, room=room_id)
             logger.info("Nächste Runde gestartet – Raum %s, Runde %d", room_id, room.current_round)
