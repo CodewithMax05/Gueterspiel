@@ -127,7 +127,9 @@ class GameRoom:
         self.chat_enabled = settings.get('chat_enabled', True)
         self.round_end_time = None
         self.players_in_results = set()
-        self.created_at = time.time()   # für 7-Tage-Cleanup aktiver Räume
+        self.created_at = time.time()           # für 7-Tage-Cleanup aktiver Räume
+        self.players_arrived_for_round = set()  # Spieler, die die Spielseite geladen haben
+        self.players_waiting_for_round = set()  # Spieler, auf die der Timer wartet
 
     # ------------------------------------------------------------------
     # Spieler-Hilfsmethoden
@@ -1676,8 +1678,20 @@ def handle_join_game_room(data):
         # Join game room
         if room_id:
             join_room(room_id)
-            
+
             room = rooms.get(room_id)
+            if room:
+                # Ankunft registrieren – löst den Timer-Start aus, sobald alle da sind
+                player = players.get(player_id)
+                if (player
+                        and room.status == 'playing'
+                        and player_id in room.players_waiting_for_round):
+                    room.players_arrived_for_round.add(player_id)
+                    logger.debug("Spieler %s angekommen – %d/%d",
+                                 player_id,
+                                 len(room.players_arrived_for_round),
+                                 len(room.players_waiting_for_round))
+
             if room:
                 # Timer-Status
                 timer = game_timers.get(room_id)
@@ -1780,39 +1794,54 @@ def handle_start_game():
             room.create_groups()
             duration = room.settings.get('round_duration', 60)
 
-            # Setze alle Spieler auf nicht bereit für nächste Runde
             for pid in room.players:
                 players[pid].ready = False
+
+            # Timer startet, sobald der Leader seine Seite geladen hat.
+            # Der Leader sendet join_game_room wenn leader_dashboard bereit ist.
+            waiting_for = frozenset([room.leader_id]) if room.leader_id in players else frozenset()
+            room.players_arrived_for_round = set()
+            room.players_waiting_for_round = waiting_for
 
             logger.info("Spiel gestartet – Raum %s, Runde %d, Timer %ds, Spieler: %d",
                         room_id, room.current_round, duration, len(room.non_leader_pids()))
 
-            # game_started zuerst – Clients beginnen sofort mit dem Seitenaufruf
+            # game_started zuerst – Clients starten sofort die Seiten-Navigation
             emit('game_started', {
                 'room_id': room_id,
                 'current_round': room.current_round
             }, room=room_id)
 
-            # Timer erst nach Grace-Period starten, damit alle Clients die
-            # neue Seite geladen haben, bevor der Countdown beginnt.
-            GRACE_PERIOD = 4  # Sekunden – bei Bedarf anpassen
+            # Timer startet erst, wenn alle echten Spieler join_game_room gesendet
+            # haben (= Spielseite vollständig geladen). Fallback nach 15s.
+            def _wait_for_players_and_start(rid, dur, expected):
+                deadline = time.time() + 5
+                while time.time() < deadline:
+                    r = rooms.get(rid)
+                    if not r or r.status != 'playing':
+                        return
+                    if not expected or expected.issubset(r.players_arrived_for_round):
+                        break
+                    sleep(0.2)
 
-            def _start_timer_delayed(rid, dur):
-                sleep(GRACE_PERIOD)
-                if rid not in rooms or rooms[rid].status != 'playing':
+                r = rooms.get(rid)
+                if not r or r.status != 'playing':
                     return
+
                 get_or_create_game_timer(rid, dur)
                 simulate_test_players(rid)
                 t = game_timers.get(rid)
-                socketio.emit('game_timer_update', {
-                    'start_time':    int(t.start_time * 1000) if t and t.start_time else None,
-                    'duration':      dur,
-                    'time_left':     t.get_time_left() if t else dur,
-                    'timer_running': True,
-                }, room=rid)
-                logger.debug("Timer für Raum %s nach %ds Grace-Period gestartet", rid, GRACE_PERIOD)
+                if t:
+                    socketio.emit('game_timer_update', {
+                        'start_time':    int(t.start_time * 1000),
+                        'duration':      dur,
+                        'time_left':     t.get_time_left(),
+                        'timer_running': True,
+                    }, room=rid)
+                logger.info("Timer Raum %s gestartet – %d/%d Spieler geladen",
+                            rid, len(r.players_arrived_for_round), len(expected))
 
-            spawn(_start_timer_delayed, room_id, duration)
+            spawn(_wait_for_players_and_start, room_id, duration, waiting_for)
         else:
             group_size    = room.settings.get('group_size', 4)
             non_leaders   = room.non_leader_pids()
