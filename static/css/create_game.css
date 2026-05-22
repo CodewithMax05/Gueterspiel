@@ -60,6 +60,47 @@
     font-size: 0.9em;
 }
 
+/* ── Echtzeit-Validierung ─────────────────────────────────────── */
+
+/* Roter Rand auf ungültigen Feldern */
+.form-group input.invalid,
+.form-group select.invalid {
+    border-color: #e53e3e !important;
+    box-shadow: 0 0 0 2px rgba(229, 62, 62, 0.18);
+    outline: none;
+}
+
+/* Fehlermeldung unter dem Feld */
+.field-error {
+    display: none;
+    color: #fc8181;
+    font-size: 0.82em;
+    margin-top: 4px;
+    line-height: 1.3;
+}
+.field-error.visible { display: block; }
+
+/* Name-Feld mit Zähler in einer Zeile */
+.input-with-counter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.input-with-counter input { flex: 1; }
+
+/* Zeichenzähler */
+.char-counter {
+    font-size: 0.8em;
+    color: #aaa;
+    white-space: nowrap;
+    min-width: 36px;
+    text-align: right;
+    transition: color 0.2s;
+}
+.char-counter.warn { color: #fc8181; font-weight: 600; }
+
+/* ── Ende Validierung ─────────────────────────────────────────── */
+
 .conditional-setting {
     display: none;
     animation: fadeIn 0.3s ease;

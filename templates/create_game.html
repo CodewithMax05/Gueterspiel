@@ -8,23 +8,26 @@
 <div class="container">
     <div class="form-container">
         <h1 style="text-align: center; margin-bottom: 30px;">🎮 Spiel erstellen</h1>
-        
+
         <form id="gameSettings">
-            <!-- Leader-Name Eingabe -->
+            <!-- Leader-Name -->
             <div class="settings-section">
                 <h3>👑 Spielleiter</h3>
-                
                 <div class="form-group">
                     <label>Name des Spielleiters</label>
-                    <input type="text" name="leader_name" value="Prof Maeß" required>
-                    <small>Dein Name als Spielleiter/Moderator</small>
+                    <div class="input-with-counter">
+                        <input type="text" name="leader_name" id="leaderName"
+                               value="Prof Maeß" maxlength="20" required autocomplete="off">
+                        <span class="char-counter" id="leaderNameCounter">8/20</span>
+                    </div>
+                    <span class="field-error" id="leaderName-error"></span>
+                    <small>Dein Name als Spielleiter/Moderator (max. 20 Zeichen)</small>
                 </div>
             </div>
-            
-            <!-- NEUE SECTIONS: Raumtyp und Chat -->
+
+            <!-- Raumtyp -->
             <div class="settings-section">
                 <h3>🔒 Raum-Einstellungen</h3>
-                
                 <div class="form-group">
                     <label>Raumtyp</label>
                     <select name="room_type" id="roomType" required>
@@ -34,20 +37,22 @@
                     <small>Öffentliche Räume erscheinen in der Raumliste. Private Räume sind nur mit Code beitretbar.</small>
                 </div>
             </div>
-            
+
             <!-- Grundeinstellungen -->
             <div class="settings-section">
                 <h3>💰 Grundeinstellungen</h3>
-                
                 <div class="form-row">
                     <div class="form-group">
                         <label>Startguthaben pro Spieler</label>
                         <div class="input-with-unit">
-                            <input type="number" name="initial_coins" min="1" step="any" value="10" required>
+                            <!-- type="text" + inputmode="decimal" → Komma UND Punkt werden akzeptiert -->
+                            <input type="text" inputmode="decimal" name="initial_coins" id="initialCoins"
+                                   value="10" required autocomplete="off">
                         </div>
-                        <small>Wie viele Coins erhält jeder Spieler zu Beginn? (Mindestens 1, Kommazahlen erlaubt)</small>
+                        <span class="field-error" id="initialCoins-error"></span>
+                        <small>Wie viele Coins erhält jeder Spieler? (1 – 10 000, max. 2 Nachkommastellen)</small>
                     </div>
-                    
+
                     <div class="form-group">
                         <label>Inkognito-Modus</label>
                         <select name="incognito_mode" required>
@@ -57,7 +62,7 @@
                         <small>Im Inkognito-Modus sehen Spieler nur ihre eigenen Namen und Beiträge, nicht die der anderen Spieler.</small>
                     </div>
                 </div>
-                
+
                 <div class="form-row">
                     <div class="form-group">
                         <label>Gruppengröße</label>
@@ -69,45 +74,47 @@
                         </select>
                         <small>Anzahl Spieler pro Gruppe</small>
                     </div>
-                    
+
                     <div class="form-group">
                         <label>Multiplikator</label>
                         <div class="input-with-unit">
-                            <input type="number" name="multiplier" min="0.1" step="0.1" value="2" required>
+                            <input type="text" inputmode="decimal" name="multiplier" id="multiplier"
+                                   value="2" required autocomplete="off">
                             <span class="unit-label">×</span>
                         </div>
-                        <small>Summe wird verdoppelt (× 2), verdreifacht (× 3), ... Muss größer als 0 sein.</small>
+                        <span class="field-error" id="multiplier-error"></span>
+                        <small>Summe wird verdoppelt (× 2), verdreifacht (× 3) … (0,1 – 100, max. 2 Nachkommastellen)</small>
                     </div>
                 </div>
             </div>
-            
+
             <!-- Rundeneinstellungen -->
             <div class="settings-section">
                 <h3>⏱️ Rundeneinstellungen</h3>
-                
                 <div class="form-group">
                     <label>Rundendauer</label>
                     <div class="input-with-unit">
-                        <input type="number" name="round_duration" min="1" value="60" required>
+                        <input type="number" name="round_duration" id="roundDuration"
+                               min="5" max="3600" step="1" value="60" required>
                         <span class="unit-label">Sekunden</span>
                     </div>
-                    <small>Zeit pro Runde. Bei Ablauf wird automatisch 0 Coins eingezahlt.</small>
+                    <span class="field-error" id="roundDuration-error"></span>
+                    <small>Zeit pro Runde (5 – 3 600 s). Bei Ablauf wird automatisch 0 Coins eingezahlt.</small>
                 </div>
-                
+
                 <div class="form-group">
                     <label>Gruppenaufteilung</label>
                     <select name="fixed_groups" required>
-                        <option value="true" selected>Feste Gruppen (bleiben das ganze Spiel gleich)</option>
-                        <option value="false">Zufällige Gruppen (jede Runde neu)</option>
+                        <option value="true" selected>Feste Gruppen</option>
+                        <option value="false">Zufällige Gruppen</option>
                     </select>
-                    <small>Sollen Spieler in den gleichen Gruppen bleiben?</small>
+                    <small>Sollen Spieler in den gleichen Gruppen bleiben oder jede Runde neu eingeteilt werden?</small>
                 </div>
             </div>
-            
+
             <!-- Spielende -->
             <div class="settings-section">
                 <h3>🏁 Spielende</h3>
-                
                 <div class="form-group">
                     <label>Modus für Spielende</label>
                     <select name="end_mode" id="endMode" required>
@@ -116,53 +123,61 @@
                     </select>
                     <small>Wann soll das Spiel enden?</small>
                 </div>
-                
+
                 <!-- Feste Rundenzahl -->
                 <div class="form-group conditional-setting" id="fixedRoundsSetting">
                     <label>Anzahl der Runden</label>
                     <div class="input-with-unit">
-                        <input type="number" name="max_rounds" min="1" max="20" value="5" required>
+                        <input type="number" name="max_rounds" id="maxRounds"
+                               min="1" max="50" step="1" value="5" required>
                         <span class="unit-label">Runden</span>
                     </div>
-                    <small>Das Spiel endet nach dieser Rundenzahl (max. 20 Runden)</small>
+                    <span class="field-error" id="maxRounds-error"></span>
+                    <small>Das Spiel endet nach dieser Rundenzahl (1 – 50 Runden)</small>
                 </div>
-                
+
                 <!-- Feste Wahrscheinlichkeit -->
                 <div class="conditional-setting" id="probabilitySetting">
                     <div class="form-group">
                         <label>Wahrscheinlichkeit für weitere Runde</label>
                         <div class="input-with-unit">
-                            <input type="number" name="continue_probability" min="0" max="1" step="0.05" value="0.5" required>
-                            <span class="unit-label">(0 = 0%, 1 = 100%)</span>
+                            <input type="text" inputmode="decimal" name="continue_probability" id="continueProbability"
+                                   value="0.5" required autocomplete="off">
+                            <span class="unit-label">(0 = 0 %, 1 = 100 %)</span>
                         </div>
-                        <small>Nach jeder Runde wird gewürfelt, ob es weitergeht</small>
+                        <span class="field-error" id="continueProbability-error"></span>
+                        <small>Nach jeder Runde wird gewürfelt, ob es weitergeht (0 – 1, max. 2 Nachkommastellen)</small>
                     </div>
-                    
+
                     <div class="form-row">
                         <div class="form-group">
                             <label>Mindestanzahl Runden</label>
                             <div class="input-with-unit">
-                                <input type="number" name="min_rounds" min="1" max="20" value="1" required>
+                                <input type="number" name="min_rounds" id="minRounds"
+                                       min="1" max="50" step="1" value="1" required>
                                 <span class="unit-label">Runden</span>
                             </div>
-                            <small>Garantierte Mindestrunden (max. 20)</small>
+                            <span class="field-error" id="minRounds-error"></span>
+                            <small>Garantierte Mindestrunden (1 – 50)</small>
                         </div>
-                        
+
                         <div class="form-group">
                             <label>Maximalanzahl Runden</label>
                             <div class="input-with-unit">
-                                <input type="number" name="max_rounds_probability" min="1" max="20" value="10" required>
+                                <input type="number" name="max_rounds_probability" id="maxRoundsProbability"
+                                       min="1" max="50" step="1" value="10" required>
                                 <span class="unit-label">Runden</span>
                             </div>
-                            <small>Spätestes Ende nach dieser Runde (max. 20)</small>
+                            <span class="field-error" id="maxRoundsProbability-error"></span>
+                            <small>Spätestes Ende nach dieser Runde (1 – 50)</small>
                         </div>
                     </div>
                 </div>
             </div>
-            
-            <!-- Buttons nebeneinander -->
+
+            <!-- Buttons -->
             <div class="button-row">
-                <button type="button" class="btn btn-create" onclick="createGame()">
+                <button type="button" class="btn btn-create" id="createBtn" onclick="createGame()">
                     Spiel erstellen
                 </button>
                 <a href="{{ url_for('index') }}" class="btn btn-secondary">Zurück</a>
@@ -174,150 +189,393 @@
 
 {% block scripts %}
 <script>
-    // Bedingte Einstellungen anzeigen/ausblenden
-    document.addEventListener('DOMContentLoaded', function() {
-        const endModeSelect = document.getElementById('endMode');
-        const fixedRounds = document.getElementById('fixedRoundsSetting');
-        const probability = document.getElementById('probabilitySetting');
-        
-        function updateConditionalSettings() {
-            // Alle ausblenden
-            [fixedRounds, probability].forEach(el => {
-                if (el) el.style.display = 'none';
-            });
-            
-            // Ausgewählte anzeigen
-            switch(endModeSelect.value) {
-                case 'fixed_rounds':
-                    if (fixedRounds) fixedRounds.style.display = 'block';
-                    break;
-                case 'probability':
-                    if (probability) probability.style.display = 'block';
-                    break;
-            }
+    // ----------------------------------------------------------------
+    // Hilfsfunktionen
+    // ----------------------------------------------------------------
+
+    /**
+     * Setzt oder löscht die Fehlermeldung + roten Rand für ein Feld.
+     * Leerer message-String → Fehler wird entfernt.
+     */
+    function setFieldError(inputId, message) {
+        const input = document.getElementById(inputId);
+        const errEl = document.getElementById(inputId + '-error');
+        if (!input) return;
+        if (message) {
+            input.classList.add('invalid');
+            if (errEl) { errEl.textContent = message; errEl.classList.add('visible'); }
+        } else {
+            input.classList.remove('invalid');
+            if (errEl) { errEl.textContent = ''; errEl.classList.remove('visible'); }
         }
-        
-        endModeSelect.addEventListener('change', updateConditionalSettings);
-        updateConditionalSettings(); // Initial aufrufen
-    });
-    
-    function parseNumber(input) {
-        if (typeof input !== 'string') {
-            input = String(input);
-        }
-        
-        // Ersetze Komma durch Punkt für korrekte Float-Parsing
-        const normalized = input.replace(',', '.');
-        
-        // Versuche die Zahl zu parsen
-        const parsed = parseFloat(normalized);
-        
-        // Prüfe ob das Ergebnis eine gültige Zahl ist
-        if (isNaN(parsed)) {
-            return null;
-        }
-        
-        // Auf 2 Nachkommastellen runden
-        return Math.round(parsed * 100) / 100;
     }
-    
+
+    /**
+     * Normalisiert Komma → Punkt, parst als Float und rundet auf max. 2 Stellen.
+     * Gibt null zurück wenn kein gültiger Wert.
+     */
+    function parseDecimal(raw) {
+        const normalized = String(raw).trim().replace(',', '.');
+        const val = parseFloat(normalized);
+        if (isNaN(val)) return null;
+        return Math.round(val * 100) / 100;
+    }
+
+    /**
+     * Sanitiert ein Dezimalfeld (type="text"):
+     * – Nur Ziffern, ein Punkt oder ein Komma erlaubt
+     * – Maximal ein Trennzeichen (erstes gewinnt, weitere werden entfernt)
+     * – Maximal 2 Nachkommastellen (überzählige Ziffern werden entfernt)
+     * Cursor-Position bleibt korrekt.
+     */
+    function sanitizeDecimalField(input) {
+        const cursorPos = input.selectionStart;
+        const raw = input.value;
+        let cleaned = '';
+        let sepFound = false;
+        let afterSep = 0;
+        let removedBeforeCursor = 0;
+
+        for (let i = 0; i < raw.length; i++) {
+            const ch = raw[i];
+            if (ch >= '0' && ch <= '9') {
+                if (sepFound) {
+                    if (afterSep < 2) { cleaned += ch; afterSep++; }
+                    else { if (i < cursorPos) removedBeforeCursor++; }
+                } else {
+                    cleaned += ch;
+                }
+            } else if ((ch === '.' || ch === ',') && !sepFound) {
+                sepFound = true;
+                cleaned += ch;
+            } else {
+                // Ungültiges Zeichen oder zweiter Separator → entfernen
+                if (i < cursorPos) removedBeforeCursor++;
+            }
+        }
+
+        if (raw !== cleaned) {
+            input.value = cleaned;
+            const newPos = Math.max(0, cursorPos - removedBeforeCursor);
+            input.setSelectionRange(newPos, newPos);
+        }
+    }
+
+    /**
+     * Sanitiert ein Ganzzahl-Feld (type="number"):
+     * Verhindert Punkt, Komma und andere Nicht-Ziffern per keydown.
+     * Wird einmalig beim Setup aufgerufen (nicht bei jedem Input).
+     */
+    function bindIntegerFieldFilter(input) {
+        // keydown: verhindert Tippen von . , e E + -
+        input.addEventListener('keydown', function (e) {
+            if (['.', ',', 'e', 'E', '+', '-'].includes(e.key)) {
+                e.preventDefault();
+            }
+        });
+        // input: bei Paste o.ä. trotzdem bereinigen
+        input.addEventListener('input', function () {
+            const raw = this.value;
+            const cleaned = raw.replace(/[^0-9]/g, '');
+            if (raw !== cleaned) this.value = cleaned;
+        });
+    }
+
+    // ----------------------------------------------------------------
+    // Einzelfeld-Validierungen
+    // Rückgabe: true = gültig, false = ungültig
+    // fixOnBlur = true → ungültiger Wert wird auf nächstliegenden Rand gesetzt
+    //                     + Fehlermeldung wird danach gecleart
+    // ----------------------------------------------------------------
+
+    function validateLeaderName(fixOnBlur = false) {
+        const input   = document.getElementById('leaderName');
+        const counter = document.getElementById('leaderNameCounter');
+        if (fixOnBlur && input.value.trim() === '') {
+            input.value = 'Prof Maeß';
+            if (counter) { counter.textContent = '9/20'; counter.classList.remove('warn'); }
+            setFieldError('leaderName', '');
+            return true;
+        }
+        const len = input.value.length;
+        if (counter) {
+            counter.textContent = `${len}/20`;
+            counter.classList.toggle('warn', len >= 18);
+        }
+        if (len === 0) { setFieldError('leaderName', 'Bitte einen Namen eingeben.'); return false; }
+        // maxlength="20" verhindert längere Eingaben – zur Sicherheit:
+        if (len > 20)  { setFieldError('leaderName', 'Maximal 20 Zeichen erlaubt.'); return false; }
+        setFieldError('leaderName', '');
+        return true;
+    }
+
+    function validateInitialCoins(fixOnBlur = false) {
+        const input = document.getElementById('initialCoins');
+        if (fixOnBlur && input.value.trim() === '') { input.value = 10; setFieldError('initialCoins', ''); return true; }
+        let val = parseDecimal(input.value);
+        if (val === null) {
+            setFieldError('initialCoins', 'Bitte eine gültige Zahl eingeben (Punkt oder Komma).');
+            return false;
+        }
+        if (val < 1) {
+            if (fixOnBlur) { input.value = 1; setFieldError('initialCoins', ''); return true; }
+            setFieldError('initialCoins', 'Mindestens 1 Coin.'); return false;
+        }
+        if (val > 10000) {
+            if (fixOnBlur) { input.value = 10000; setFieldError('initialCoins', ''); return true; }
+            setFieldError('initialCoins', 'Maximal 10 000 Coins.'); return false;
+        }
+        if (fixOnBlur) { input.value = val; } // Komma normalisieren + runden
+        setFieldError('initialCoins', '');
+        return true;
+    }
+
+    function validateMultiplier(fixOnBlur = false) {
+        const input = document.getElementById('multiplier');
+        if (fixOnBlur && input.value.trim() === '') { input.value = 2; setFieldError('multiplier', ''); return true; }
+        let val = parseDecimal(input.value);
+        if (val === null) {
+            setFieldError('multiplier', 'Bitte eine gültige Zahl eingeben (Punkt oder Komma).');
+            return false;
+        }
+        if (val < 0.1) {
+            if (fixOnBlur) { input.value = 0.1; setFieldError('multiplier', ''); return true; }
+            setFieldError('multiplier', 'Mindestens 0,1.'); return false;
+        }
+        if (val > 100) {
+            if (fixOnBlur) { input.value = 100; setFieldError('multiplier', ''); return true; }
+            setFieldError('multiplier', 'Maximal 100.'); return false;
+        }
+        if (fixOnBlur) { input.value = val; } // normalisieren
+        setFieldError('multiplier', '');
+        return true;
+    }
+
+    function validateRoundDuration(fixOnBlur = false) {
+        const input = document.getElementById('roundDuration');
+        if (fixOnBlur && input.value.trim() === '') { input.value = 60; setFieldError('roundDuration', ''); return true; }
+        const val   = parseInt(input.value, 10);
+        if (isNaN(val) || !Number.isInteger(parseFloat(input.value))) {
+            setFieldError('roundDuration', 'Muss eine ganze Zahl sein.'); return false;
+        }
+        if (val < 5) {
+            if (fixOnBlur) { input.value = 5; setFieldError('roundDuration', ''); return true; }
+            setFieldError('roundDuration', 'Mindestens 5 Sekunden.'); return false;
+        }
+        if (val > 3600) {
+            if (fixOnBlur) { input.value = 3600; setFieldError('roundDuration', ''); return true; }
+            setFieldError('roundDuration', 'Maximal 3 600 Sekunden.'); return false;
+        }
+        setFieldError('roundDuration', '');
+        return true;
+    }
+
+    function validateMaxRounds(fixOnBlur = false) {
+        const input = document.getElementById('maxRounds');
+        if (fixOnBlur && input.value.trim() === '') { input.value = 5; setFieldError('maxRounds', ''); return true; }
+        const val   = parseInt(input.value, 10);
+        if (isNaN(val)) { setFieldError('maxRounds', 'Muss eine ganze Zahl sein.'); return false; }
+        if (val < 1) {
+            if (fixOnBlur) { input.value = 1;  setFieldError('maxRounds', ''); return true; }
+            setFieldError('maxRounds', 'Mindestens 1 Runde.'); return false;
+        }
+        if (val > 50) {
+            if (fixOnBlur) { input.value = 50; setFieldError('maxRounds', ''); return true; }
+            setFieldError('maxRounds', 'Maximal 50 Runden.'); return false;
+        }
+        setFieldError('maxRounds', '');
+        return true;
+    }
+
+    function validateContinueProbability(fixOnBlur = false) {
+        const input = document.getElementById('continueProbability');
+        if (fixOnBlur && input.value.trim() === '') { input.value = 0.5; setFieldError('continueProbability', ''); return true; }
+        let val = parseDecimal(input.value);
+        if (val === null) {
+            setFieldError('continueProbability', 'Bitte eine gültige Zahl eingeben (Punkt oder Komma).');
+            return false;
+        }
+        if (val < 0) {
+            if (fixOnBlur) { input.value = 0; setFieldError('continueProbability', ''); return true; }
+            setFieldError('continueProbability', 'Mindestens 0.'); return false;
+        }
+        if (val > 1) {
+            if (fixOnBlur) { input.value = 1; setFieldError('continueProbability', ''); return true; }
+            setFieldError('continueProbability', 'Maximal 1.'); return false;
+        }
+        if (fixOnBlur) { input.value = val; } // normalisieren
+        setFieldError('continueProbability', '');
+        return true;
+    }
+
+    // ----------------------------------------------------------------
+    // Min/Max-Runden: Live-Feedback + Blur-Autocorrect
+    // ----------------------------------------------------------------
+
+    /** Live: Nur Fehlermeldungen anzeigen, nichts verändern. */
+    function validateMinMaxRoundsLive() {
+        const minVal = parseInt(document.getElementById('minRounds').value, 10);
+        const maxVal = parseInt(document.getElementById('maxRoundsProbability').value, 10);
+
+        let minMsg = '', maxMsg = '';
+
+        if (!isNaN(minVal)) {
+            if      (minVal < 1)                          minMsg = 'Mindestens 1 Runde.';
+            else if (minVal > 50)                         minMsg = 'Maximal 50 Runden.';
+            else if (!isNaN(maxVal) && minVal > maxVal)   minMsg = 'Muss ≤ Maximalrunden sein.';
+        }
+        if (!isNaN(maxVal)) {
+            if      (maxVal < 1)                          maxMsg = 'Mindestens 1 Runde.';
+            else if (maxVal > 50)                         maxMsg = 'Maximal 50 Runden.';
+            else if (!isNaN(minVal) && maxVal < minVal)   maxMsg = 'Muss ≥ Mindestrunden sein.';
+        }
+
+        setFieldError('minRounds', minMsg);
+        setFieldError('maxRoundsProbability', maxMsg);
+        return !minMsg && !maxMsg;
+    }
+
+    /**
+     * Blur auf Mindest-Feld:
+     * Klemmt auf [1, 50]. Überschreitet Min das Max → Min wird auf Max gesetzt.
+     */
+    function fixMinRoundsOnBlur() {
+        const minInput = document.getElementById('minRounds');
+        const maxInput = document.getElementById('maxRoundsProbability');
+        let minVal = parseInt(minInput.value, 10);
+        const maxVal = parseInt(maxInput.value, 10);
+
+        if (isNaN(minVal) || minVal < 1) minVal = 1;
+        if (minVal > 50) minVal = 50;
+        if (!isNaN(maxVal) && minVal > maxVal) minVal = maxVal; // überschreitet Max → auf Max klemmen
+
+        minInput.value = minVal;
+        setFieldError('minRounds', '');
+        // Maxfeld auch neu prüfen, da Änderung evtl. Fehler dort behebt
+        setFieldError('maxRoundsProbability', '');
+    }
+
+    /**
+     * Blur auf Maximum-Feld:
+     * Klemmt auf [1, 50]. Liegt Max unter Min → Max wird auf Min gesetzt.
+     */
+    function fixMaxRoundsProbabilityOnBlur() {
+        const minInput = document.getElementById('minRounds');
+        const maxInput = document.getElementById('maxRoundsProbability');
+        const minVal   = parseInt(minInput.value, 10);
+        let maxVal     = parseInt(maxInput.value, 10);
+
+        if (isNaN(maxVal) || maxVal < 1) maxVal = 1;
+        if (maxVal > 50) maxVal = 50;
+        if (!isNaN(minVal) && maxVal < minVal) maxVal = minVal; // liegt unter Min → auf Min heben
+
+        maxInput.value = maxVal;
+        setFieldError('maxRoundsProbability', '');
+        setFieldError('minRounds', '');
+    }
+
+    // ----------------------------------------------------------------
+    // Event-Listener
+    // ----------------------------------------------------------------
+    document.addEventListener('DOMContentLoaded', function () {
+
+        // Bedingte Ansicht
+        const endModeSelect = document.getElementById('endMode');
+        const fixedRounds   = document.getElementById('fixedRoundsSetting');
+        const probability   = document.getElementById('probabilitySetting');
+
+        function updateConditionalSettings() {
+            [fixedRounds, probability].forEach(el => { if (el) el.style.display = 'none'; });
+            if (endModeSelect.value === 'fixed_rounds' && fixedRounds) fixedRounds.style.display = 'block';
+            if (endModeSelect.value === 'probability'  && probability) probability.style.display  = 'block';
+        }
+        endModeSelect.addEventListener('change', updateConditionalSettings);
+        updateConditionalSettings();
+
+        // Zeichenzähler initialisieren
+        const leaderInput = document.getElementById('leaderName');
+        const counter     = document.getElementById('leaderNameCounter');
+        if (leaderInput && counter) {
+            const updateCounter = () => {
+                counter.textContent = `${leaderInput.value.length}/20`;
+                counter.classList.toggle('warn', leaderInput.value.length >= 18);
+            };
+            updateCounter();
+            leaderInput.addEventListener('input', updateCounter);
+        }
+
+        // Live + Blur-Handler verknüpfen
+        const bind = (id, liveFn, blurFn) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('input', liveFn);
+            el.addEventListener('blur',  blurFn);
+        };
+
+        // Dezimal-Textfelder: nur Ziffern + max. 1 Trennzeichen + max. 2 Nachkommastellen
+        ['initialCoins', 'multiplier', 'continueProbability'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('input', function () {
+                sanitizeDecimalField(this);
+            }, true); // capture: true → läuft VOR dem normalen input-Listener
+        });
+
+        // Ganzzahl-Felder: Punkt, Komma und andere Nicht-Ziffern blockieren
+        ['roundDuration', 'maxRounds', 'minRounds', 'maxRoundsProbability'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) bindIntegerFieldFilter(el);
+        });
+
+        bind('leaderName',           () => validateLeaderName(),           () => validateLeaderName(true));
+        bind('initialCoins',         () => validateInitialCoins(),         () => validateInitialCoins(true));
+        bind('multiplier',           () => validateMultiplier(),           () => validateMultiplier(true));
+        bind('roundDuration',        () => validateRoundDuration(),        () => validateRoundDuration(true));
+        bind('maxRounds',            () => validateMaxRounds(),            () => validateMaxRounds(true));
+        bind('continueProbability',  () => validateContinueProbability(),  () => validateContinueProbability(true));
+
+        // Min/Max: live = nur Meldung, blur = autocorrect
+        const minEl = document.getElementById('minRounds');
+        const maxEl = document.getElementById('maxRoundsProbability');
+        if (minEl) {
+            minEl.addEventListener('input', validateMinMaxRoundsLive);
+            minEl.addEventListener('blur',  fixMinRoundsOnBlur);
+        }
+        if (maxEl) {
+            maxEl.addEventListener('input', validateMinMaxRoundsLive);
+            maxEl.addEventListener('blur',  fixMaxRoundsProbabilityOnBlur);
+        }
+    });
+
+    // ----------------------------------------------------------------
+    // Formular abschicken
+    // ----------------------------------------------------------------
     function createGame() {
-        const form = document.getElementById('gameSettings');
-        const formData = new FormData(form);
-        
-        // Validiere Leader-Name
-        const leaderName = formData.get('leader_name').trim();
-        if (!leaderName) {
-            showNotification('Bitte gib einen Namen für den Spielleiter ein', 'error');
-            return;
-        }
-        
-        if (leaderName.length > 20) {
-            showNotification('Der Spielleiter-Name darf maximal 20 Zeichen lang sein', 'error');
-            return;
-        }
-        
-        // Validiere andere Eingaben (bestehende Logik)
-        const initialCoinsStr = formData.get('initial_coins');
-        const multiplierStr = formData.get('multiplier');
-        const endMode = formData.get('end_mode');
-        const roundDuration = parseFloat(formData.get('round_duration'));
-        
-        // Parse Startguthaben und Multiplikator
-        const initialCoins = parseNumber(initialCoinsStr);
-        const multiplier = parseNumber(multiplierStr);
-        
-        // Validierung für Startguthaben
-        if (initialCoins === null) {
-            showNotification('Startguthaben muss eine gültige Zahl sein (z.B. 10, 10.5, 7.25)', 'error');
-            return;
-        }
-        
-        if (initialCoins < 1) {
-            showNotification('Startguthaben muss mindestens 1 Coin betragen', 'error');
-            return;
-        }
-        
-        // Validierung für Multiplikator
-        if (multiplier === null) {
-            showNotification('Multiplikator muss eine gültige Zahl sein (z.B. 0.5, 2, 3.5)', 'error');
-            return;
-        }
-        
-        if (multiplier <= 0) {
-            showNotification('Multiplikator muss größer als 0 sein', 'error');
-            return;
-        }
-        
-        // Rundendauer Validierung
-        if (isNaN(roundDuration) || roundDuration <= 0) {
-            showNotification('Rundendauer muss größer als 0 sein', 'error');
-            return;
-        }
-        
-        if (!Number.isInteger(roundDuration)) {
-            showNotification('Rundendauer muss eine ganze Zahl sein', 'error');
-            return;
-        }
-        
-        // Validierung für feste Rundenzahl
+        const endMode = document.getElementById('endMode').value;
+
+        const nameOk  = validateLeaderName(true);
+        const coinsOk = validateInitialCoins(true);
+        const multOk  = validateMultiplier(true);
+        const durOk   = validateRoundDuration(true);
+
+        let modeOk = true;
         if (endMode === 'fixed_rounds') {
-            const maxRounds = parseInt(formData.get('max_rounds'));
-            
-            if (maxRounds < 1 || maxRounds > 20) {
-                showNotification('Rundenanzahl muss zwischen 1 und 20 liegen', 'error');
-                return;
-            }
+            modeOk = validateMaxRounds(true);
+        } else if (endMode === 'probability') {
+            const probOk = validateContinueProbability(true);
+            fixMinRoundsOnBlur();
+            fixMaxRoundsProbabilityOnBlur();
+            const mmOk = validateMinMaxRoundsLive();
+            modeOk = probOk && mmOk;
         }
-        
-        // Validierung für Wahrscheinlichkeitsmodus
-        if (endMode === 'probability') {
-            const minRounds = parseInt(formData.get('min_rounds'));
-            const maxRounds = parseInt(formData.get('max_rounds_probability'));
-            const probability = parseFloat(formData.get('continue_probability'));
-            
-            if (minRounds < 1 || minRounds > 20) {
-                showNotification('Mindestrunden müssen zwischen 1 und 20 liegen', 'error');
-                return;
-            }
-            
-            if (maxRounds < 1 || maxRounds > 20) {
-                showNotification('Maximalrunden müssen zwischen 1 und 20 liegen', 'error');
-                return;
-            }
-            
-            if (minRounds > maxRounds) {
-                showNotification('Mindestrunden dürfen nicht größer als Maximalrunden sein', 'error');
-                return;
-            }
-            
-            if (probability < 0 || probability > 1) {
-                showNotification('Wahrscheinlichkeit muss zwischen 0 und 1 liegen', 'error');
-                return;
-            }
+
+        if (!nameOk || !coinsOk || !multOk || !durOk || !modeOk) {
+            const firstInvalid = document.querySelector('.invalid');
+            if (firstInvalid) firstInvalid.focus();
+            showNotification('Bitte korrigiere die markierten Felder.', 'error', 5000);
+            return;
         }
-        
-        // Formular abschicken
+
+        const form = document.getElementById('gameSettings');
         form.method = 'POST';
         form.action = "{{ url_for('create_game') }}";
         form.submit();

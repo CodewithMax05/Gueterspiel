@@ -789,12 +789,12 @@ def create_game():
         
         # Modus-spezifische Einstellungen (bestehend)
         if end_mode == 'fixed_rounds':
-            settings['max_rounds'] = min(int(request.form.get('max_rounds', 5)), 20)
+            settings['max_rounds'] = max(1, min(int(request.form.get('max_rounds', 5)), 50))
         elif end_mode == 'probability':
-            settings['min_rounds'] = min(int(request.form.get('min_rounds', 1)), 20)
-            settings['max_rounds_probability'] = min(int(request.form.get('max_rounds_probability', 10)), 20)
+            settings['min_rounds'] = max(1, min(int(request.form.get('min_rounds', 1)), 50))
+            settings['max_rounds_probability'] = max(1, min(int(request.form.get('max_rounds_probability', 10)), 50))
             settings['continue_probability'] = float(request.form.get('continue_probability', 0.5))
-            
+
             if settings['min_rounds'] > settings['max_rounds_probability']:
                 settings['min_rounds'] = settings['max_rounds_probability']
         
