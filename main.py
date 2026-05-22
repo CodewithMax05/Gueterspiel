@@ -1778,21 +1778,41 @@ def handle_start_game():
             room.status = "playing"
             room.current_round = 1
             room.create_groups()
-
             duration = room.settings.get('round_duration', 60)
-            get_or_create_game_timer(room_id, duration)
-            simulate_test_players(room_id)
-            logger.info("Spiel gestartet – Raum %s, Runde %d, Timer %ds, Spieler: %d",
-                        room_id, room.current_round, duration, len(room.non_leader_pids()))
-            
+
             # Setze alle Spieler auf nicht bereit für nächste Runde
             for pid in room.players:
                 players[pid].ready = False
-            
+
+            logger.info("Spiel gestartet – Raum %s, Runde %d, Timer %ds, Spieler: %d",
+                        room_id, room.current_round, duration, len(room.non_leader_pids()))
+
+            # game_started zuerst – Clients beginnen sofort mit dem Seitenaufruf
             emit('game_started', {
                 'room_id': room_id,
                 'current_round': room.current_round
             }, room=room_id)
+
+            # Timer erst nach Grace-Period starten, damit alle Clients die
+            # neue Seite geladen haben, bevor der Countdown beginnt.
+            GRACE_PERIOD = 1  # Sekunden – bei Bedarf anpassen
+
+            def _start_timer_delayed(rid, dur):
+                sleep(GRACE_PERIOD)
+                if rid not in rooms or rooms[rid].status != 'playing':
+                    return
+                get_or_create_game_timer(rid, dur)
+                simulate_test_players(rid)
+                t = game_timers.get(rid)
+                socketio.emit('game_timer_update', {
+                    'start_time':    int(t.start_time * 1000) if t and t.start_time else None,
+                    'duration':      dur,
+                    'time_left':     t.get_time_left() if t else dur,
+                    'timer_running': True,
+                }, room=rid)
+                logger.debug("Timer für Raum %s nach %ds Grace-Period gestartet", rid, GRACE_PERIOD)
+
+            spawn(_start_timer_delayed, room_id, duration)
         else:
             group_size    = room.settings.get('group_size', 4)
             non_leaders   = room.non_leader_pids()
