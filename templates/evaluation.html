@@ -98,7 +98,8 @@
 
     <!-- Gruppenvergleich & Detailtabellen -->
     <div class="detailed-stats">
-        <!-- Vergleichstabelle mit Rang -->
+        {% if fixed_groups %}
+        <!-- ── Feste Gruppen: klassischer Gruppenvergleich ── -->
         <div class="comparison-table">
             <h2>Gruppenvergleich</h2>
             <div class="table-container">
@@ -125,7 +126,7 @@
                             onclick="toggleGroupDetails(parseInt(this.dataset.group))">
                             <td><strong>{{ loop.index }}</strong></td>
                             <td>
-                                    <span class="toggle-icon" id="eval-icon-{{ group_data.group.group_number }}">▶</span>
+                                <span class="toggle-icon" id="eval-icon-{{ group_data.group.group_number }}">▶</span>
                                 <strong> Gruppe {{ group_data.group.group_number }}</strong>
                                 {% if player.id in group_data.group.player_ids %}
                                     <span class="you-indicator">(Deine Gruppe)</span>
@@ -154,6 +155,19 @@
                 </table>
             </div>
         </div>
+
+        {% else %}
+        <!-- ── Zufällige Gruppen: Rundenübersicht ── -->
+        <div class="comparison-table">
+            <h2>Rundenübersicht</h2>
+            <p class="history-hint" style="margin-bottom:14px;">
+                Zufällige Gruppen – jede Runde zeigt die konkrete Gruppenzusammensetzung dieser Runde.
+            </p>
+            <div id="roundOverviewContainer">
+                <p style="text-align:center; color:#aaa; padding:20px;">Lade Rundenübersicht…</p>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Aktionsbuttons -->
@@ -164,7 +178,7 @@
             <i class="fas fa-arrow-left" style="margin-right: 8px;"></i>Zurück
         </a>
         <a href="{{ url_for('history_export', room_id=room.id) }}" class="btn btn-large btn-secondary" target="_blank">
-            <i class="fas fa-download" style="margin-right: 8px;"></i>Daten exportieren
+            Daten exportieren
         </a>
         {% else %}
         <a href="{{ url_for('index') }}" class="btn btn-large btn-secondary">Zur Startseite</a>
@@ -177,6 +191,11 @@
         {% endif %}
         {% else %}
         <button class="btn btn-large btn-secondary" onclick="leaveAndGoHome()">Zur Startseite</button>
+        {% if not history_mode %}
+        <a href="{{ url_for('evaluation_export', room_id=room.id) }}" class="btn btn-large btn-secondary" target="_blank">
+            Daten exportieren
+        </a>
+        {% endif %}
         {% endif %}
     </div>
 </div>
@@ -185,6 +204,7 @@
 <div id="evaluation-data"
      data-initial-coins="{{ initial_coins }}"
      data-is-leader="{{ 'true' if is_leader else 'false' }}"
+     data-fixed-groups="{{ 'true' if fixed_groups else 'false' }}"
      data-balances="{{ player.game_history.balances | tojson | safe }}"
      data-contributions="{{ player.game_history.contributions | tojson | safe }}"
      data-rounds="{{ room.current_round }}"
@@ -197,25 +217,41 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const evaluationData = document.getElementById('evaluation-data');
-        const isLeader = evaluationData.dataset.isLeader === 'true';
-        const balances = JSON.parse(evaluationData.dataset.balances || '[]');
+        const isLeader   = evaluationData.dataset.isLeader   === 'true';
+        const fixedGroups = evaluationData.dataset.fixedGroups === 'true';
+        const balances      = JSON.parse(evaluationData.dataset.balances      || '[]');
         const contributions = JSON.parse(evaluationData.dataset.contributions || '[]');
-        const rounds = parseInt(evaluationData.dataset.rounds) || 1;
-        
-        // Rendere Charts nur für Spieler, nicht für Leader
+
+        // Charts nur für Spieler
         if (!isLeader) {
             renderContributionChart(contributions);
             renderBalanceChart(balances);
         }
-        
-        // Podium-Chart
         renderPodiumChart();
-
-        // Animierte Zahlen für Statistiken
         animateStatistics();
-
-        // Kooperations-Balken initialisieren
         initCooperationBars();
+
+        // Gruppen-Details laden (API-Aufruf)
+        const evalApiUrl = {{ 'true' if history_mode else 'false' }}
+            ? `/api/history/{{ room.id }}/evaluation_details`
+            : `/api/room/{{ room.id }}/evaluation_details`;
+
+        fetch(evalApiUrl)
+            .then(r => r.json())
+            .then(response => {
+                if (fixedGroups) {
+                    // Feste Gruppen: Daten für aufklappbare Detailzeilen bereitstellen
+                    evalData = response.data || response; // Rückwärtskompatibilität
+                } else {
+                    // Zufällige Gruppen: Rundenübersicht rendern
+                    renderRoundOverview(response.data || []);
+                }
+            })
+            .catch(err => {
+                console.error('Fehler beim Laden der Auswertungsdetails:', err);
+                const cont = document.getElementById('roundOverviewContainer');
+                if (cont) cont.innerHTML = '<p style="text-align:center;color:#aaa;padding:20px;">Fehler beim Laden.</p>';
+            });
     });
     
     // Gemeinsame Chart.js Optionen für dunkles Theme
@@ -445,39 +481,29 @@
         });
     }
     
+    // ── Feste Gruppen: Detailzeilen aufklappen ─────────────────────────
     const openEvalGroups = new Set();
-    let evalData = null;
-
-    // Daten einmalig laden
-    const evalApiUrl = {{ 'true' if history_mode else 'false' }}
-        ? `/api/history/{{ room.id }}/evaluation_details`
-        : `/api/room/{{ room.id }}/evaluation_details`;
-    fetch(evalApiUrl)
-        .then(r => r.json())
-        .then(data => {
-            evalData = data;
-        })
-        .catch(err => console.error('Fehler:', err));
+    let evalData = null;  // wird nach API-Call befüllt (nur fixed_groups=true)
 
     function toggleGroupDetails(groupNumber) {
         const detailRow = document.getElementById(`eval-details-${groupNumber}`);
-        const icon = document.getElementById(`eval-icon-${groupNumber}`);
+        const icon      = document.getElementById(`eval-icon-${groupNumber}`);
+        if (!detailRow) return;
 
         if (openEvalGroups.has(groupNumber)) {
             openEvalGroups.delete(groupNumber);
             detailRow.classList.add('hidden');
-            icon.textContent = '▶';
+            if (icon) icon.textContent = '▶';
         } else {
             openEvalGroups.add(groupNumber);
             detailRow.classList.remove('hidden');
-            icon.textContent = '▼';
+            if (icon) icon.textContent = '▼';
             renderGroupDetails(groupNumber);
         }
     }
 
     function renderGroupDetails(groupNumber) {
         if (!evalData) return;
-
         const group = evalData.find(g => g.group_number === groupNumber);
         if (!group) return;
 
@@ -485,51 +511,156 @@
         if (!container) return;
 
         const totalRounds = group.members[0]?.contributions.length || 0;
-
-        // Rundenspalten für Tabellenkopf
         let roundHeaders = '';
-        for (let r = 1; r <= totalRounds; r++) {
-            roundHeaders += `<th>Runde ${r}</th>`;
-        }
+        for (let r = 1; r <= totalRounds; r++) roundHeaders += `<th>Runde ${r}</th>`;
 
-        // Spielerzeilen
-        let rows = group.members.map(m => {
+        const rows = group.members.map(m => {
             const profitClass = m.total_profit > 0 ? 'profit-positive'
-                : m.total_profit < 0 ? 'profit-negative'
-                : 'profit-neutral';
-            const profitSign = m.total_profit > 0 ? '+' : '';
-
-            let roundCells = m.contributions.map(c => {
-                const cls = c > 0 ? 'cooperated' : 'defected';
+                              : m.total_profit < 0 ? 'profit-negative' : 'profit-neutral';
+            const sign = m.total_profit > 0 ? '+' : '';
+            const cells = m.contributions.map(c => {
+                const cls   = c > 0 ? 'cooperated' : 'defected';
                 const label = c > 0 ? `+${c.toFixed(2)}` : `${c.toFixed(2)}`;
                 return `<td><span class="round-pill ${cls}">${label}</span></td>`;
             }).join('');
-
-            return `
-                <tr>
-                    <td><strong>${escHtml(m.name)}</strong></td>
-                    <td>${m.final_balance.toFixed(2)} 🪙</td>
-                    <td class="${profitClass}">${profitSign}${m.total_profit.toFixed(2)}</td>
-                    <td>${m.coop_rate}%</td>
-                    ${roundCells}
-                </tr>
-            `;
+            return `<tr>
+                <td><strong>${escHtml(m.name)}</strong></td>
+                <td>${m.final_balance.toFixed(2)} 🪙</td>
+                <td class="${profitClass}">${sign}${m.total_profit.toFixed(2)}</td>
+                <td>${m.coop_rate}%</td>
+                ${cells}
+            </tr>`;
         }).join('');
 
         container.innerHTML = `
             <table class="player-detail-table">
-                <thead>
-                    <tr>
-                        <th>Spieler</th>
-                        <th>Endguthaben</th>
-                        <th>Gewinn/Verlust</th>
-                        <th>Koopquote</th>
-                        ${roundHeaders}
-                    </tr>
-                </thead>
+                <thead><tr>
+                    <th>Spieler</th><th>Endguthaben</th>
+                    <th>Gewinn/Verlust</th><th>Koopquote</th>
+                    ${roundHeaders}
+                </tr></thead>
                 <tbody>${rows}</tbody>
-            </table>
-        `;
+            </table>`;
+    }
+
+    // ── Zufällige Gruppen: Rundenübersicht (2-Ebenen-Struktur) ─────────
+    //   Ebene 1: Runden-Header  → aufklappen zeigt Gruppen
+    //   Ebene 2: Gruppen-Header → aufklappen zeigt Spieler-Detailtabelle
+
+    function coopColor(rate) {
+        if (rate >= 75) return '#28a745';
+        if (rate >= 50) return '#ffc107';
+        if (rate  > 0)  return '#fd7e14';
+        return '#dc3545';
+    }
+
+    function renderRoundOverview(summary) {
+        const container = document.getElementById('roundOverviewContainer');
+        if (!container) return;
+        if (!summary || summary.length === 0) {
+            container.innerHTML = '<p style="text-align:center;color:#aaa;padding:20px;">Keine Daten verfügbar.</p>';
+            return;
+        }
+
+        let html = '';
+        summary.forEach(roundData => {
+            const rKey = `round-${roundData.round}`;
+            const avgCoop = roundData.avg_cooperation ?? 0;
+
+            // ── Ebene 1: Runden-Header (immer sichtbar, initial kollabiert) ──
+            html += `
+            <div class="round-overview-section">
+                <div class="round-overview-header" onclick="toggleRound(${roundData.round})" id="rh-${rKey}">
+                    <span class="toggle-icon" id="ri-${rKey}">▶</span>
+                    <strong>Runde ${roundData.round}</strong>
+                    <span class="round-header-meta">
+                        ${roundData.group_count} Gruppen
+                    </span>
+                    <span class="round-header-coop" style="color:${coopColor(avgCoop)};">
+                        Ø ${avgCoop}% Koopquote
+                    </span>
+                </div>
+
+                <div class="round-detail hidden" id="rd-${rKey}">
+                    <div class="round-groups-grid">`;
+
+            // ── Ebene 2: Gruppen-Karten ──
+            roundData.groups.forEach(group => {
+                const gKey        = `${roundData.round}-${group.group_number}`;
+                const memberNames = group.members.map(m => escHtml(m.name)).join(', ');
+                const gc          = coopColor(group.cooperation_rate);
+
+                // Spieler-Detailtabelle
+                const memberRows = group.members.map(m => {
+                    const cCls    = m.cooperated ? 'cooperated' : 'defected';
+                    const cLabel  = m.cooperated ? `+${m.contribution.toFixed(2)}` : `${m.contribution.toFixed(2)}`;
+                    const pSign   = m.profit_this_round > 0 ? '+' : '';
+                    const pClass  = m.profit_this_round > 0 ? 'profit-positive'
+                                  : m.profit_this_round < 0 ? 'profit-negative' : 'profit-neutral';
+                    return `<tr>
+                        <td><strong>${escHtml(m.name)}</strong></td>
+                        <td><span class="round-pill ${cCls}">${cLabel}</span></td>
+                        <td>${m.balance_after.toFixed(2)} 🪙</td>
+                        <td class="${pClass}">${pSign}${m.profit_this_round.toFixed(2)}</td>
+                        <td style="color:${coopColor(m.overall_coop_rate)}">${m.overall_coop_rate}%</td>
+                    </tr>`;
+                }).join('');
+
+                html += `
+                    <div class="round-group-card">
+                        <div class="round-group-header" onclick="toggleRoundGroup('${gKey}')">
+                            <span class="toggle-icon" id="rgi-${gKey}">▶</span>
+                            <strong>Gruppe ${group.group_number}</strong>
+                            <span class="round-group-members">${memberNames}</span>
+                            <span class="round-group-stats">
+                                <span>∑ ${group.total_contribution.toFixed(2)} Coins</span>
+                                <span style="color:${gc}; font-weight:600;">${group.cooperation_rate}% Koop</span>
+                            </span>
+                        </div>
+                        <div class="round-group-detail hidden" id="rgd-${gKey}">
+                            <div class="player-details-container">
+                                <table class="player-detail-table">
+                                    <thead><tr>
+                                        <th>Spieler</th>
+                                        <th>Einzahlung</th>
+                                        <th>Guthaben</th>
+                                        <th>Runden-Gewinn</th>
+                                        <th>Ges. Koopquote</th>
+                                    </tr></thead>
+                                    <tbody>${memberRows}</tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+
+            html += `    </div>
+                </div>
+            </div>`;
+        });
+
+        container.innerHTML = html;
+    }
+
+    /** Runden-Header: auf/zuklappen (Ebene 1) */
+    function toggleRound(roundNum) {
+        const key    = `round-${roundNum}`;
+        const detail = document.getElementById(`rd-${key}`);
+        const icon   = document.getElementById(`ri-${key}`);
+        if (!detail) return;
+        const opening = detail.classList.contains('hidden');
+        detail.classList.toggle('hidden', !opening);
+        if (icon) icon.textContent = opening ? '▼' : '▶';
+    }
+
+    /** Gruppen-Karte: auf/zuklappen (Ebene 2) */
+    function toggleRoundGroup(key) {
+        const detail = document.getElementById(`rgd-${key}`);
+        const icon   = document.getElementById(`rgi-${key}`);
+        if (!detail) return;
+        const opening = detail.classList.contains('hidden');
+        detail.classList.toggle('hidden', !opening);
+        if (icon) icon.textContent = opening ? '▼' : '▶';
     }
 
     {% if not history_mode %}

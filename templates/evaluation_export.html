@@ -17,6 +17,64 @@
             padding: 30px 20px 60px;
         }
 
+        /* ── Persönliches Ergebnis ── */
+        .summary-section {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255,255,255,0.1);
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .summary-section h2 { color: #667eea; margin-bottom: 20px; font-size: 1.4em; padding-bottom: 8px; border-bottom: 1px solid rgba(102,126,234,0.3); }
+        .personal-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 28px;
+        }
+        .stat-card {
+            display: flex;
+            align-items: center;
+            background: rgba(255,255,255,0.08);
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+        .stat-icon { font-size: 2em; margin-right: 15px; }
+        .stat-value { font-size: 1.8em; font-weight: bold; margin-bottom: 4px; }
+        .stat-value.positive { color: #28a745; }
+        .stat-value.negative { color: #dc3545; }
+        .stat-label { color: #aaa; font-size: 0.9em; }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 20px;
+        }
+        .stat-chart {
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            padding: 18px;
+        }
+        .stat-chart h3 { color: #667eea; margin-bottom: 14px; font-size: 1em; }
+        .chart-container { position: relative; height: 200px; }
+
+        @media (max-width: 768px) {
+            .summary-section { padding: 18px 14px; }
+            .personal-stats  { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .stat-card       { padding: 14px 12px; }
+            .stat-icon       { font-size: 1.5em; margin-right: 10px; }
+            .stat-value      { font-size: 1.4em; }
+            .stats-grid      { grid-template-columns: 1fr; }
+            .chart-container { height: 180px; }
+        }
+        @media (max-width: 480px) {
+            .personal-stats { grid-template-columns: 1fr; }
+            .stat-value     { font-size: 1.2em; }
+        }
+
         /* ── Seitentitel ── */
         .evaluation-title {
             text-align: center;
@@ -326,6 +384,98 @@
             .podium-chart-wrapper { height: 240px; }
         }
 
+        /* ── Rundenübersicht (Zufällige Gruppen) – identisch zu evaluation.css ── */
+        .hidden { display: none; }
+
+        .round-overview-section {
+            margin-bottom: 10px;
+            border: 1px solid rgba(255,255,255,0.09);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .round-overview-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: rgba(102,126,234,0.08);
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s;
+            flex-wrap: wrap;
+        }
+        .round-overview-header:hover { background: rgba(102,126,234,0.15); }
+        .round-overview-header strong { font-size: 1.05em; color: #e0e0e0; min-width: 64px; }
+        .round-header-meta  { color: #aaa; font-size: 0.88em; }
+        .round-header-coop  { font-size: 0.88em; font-weight: 600; margin-left: auto; }
+        .round-detail {
+            padding: 10px 12px 12px;
+            background: rgba(0,0,0,0.12);
+        }
+        .round-groups-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+        .round-group-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.09);
+            border-radius: 9px;
+            overflow: hidden;
+            transition: border-color 0.15s;
+        }
+        .round-group-card:hover { border-color: rgba(102,126,234,0.35); }
+        .round-group-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 13px;
+            cursor: pointer;
+            user-select: none;
+            flex-wrap: wrap;
+        }
+        .round-group-header strong { min-width: 68px; color: #e0e0e0; font-size: 0.95em; }
+        .round-group-members {
+            flex: 1;
+            color: #aaa;
+            font-size: 0.85em;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .round-group-stats {
+            display: flex;
+            gap: 16px;
+            font-size: 0.85em;
+            color: #ccc;
+            flex-shrink: 0;
+        }
+        .round-group-detail {
+            border-top: 1px solid rgba(255,255,255,0.06);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .round-group-detail .player-details-container {
+            padding: 0;
+            overflow-x: auto;
+        }
+        .round-group-detail .player-detail-table {
+            min-width: 420px;
+            width: 100%;
+        }
+
+        @media (max-width: 768px) {
+            .round-overview-header { padding: 10px 12px; gap: 8px; }
+            .round-header-coop     { margin-left: 0; width: 100%; }
+            .round-group-stats     { gap: 10px; font-size: 0.82em; }
+        }
+        @media (max-width: 480px) {
+            .round-group-members  { display: none; }
+            .round-group-stats    { font-size: 0.78em; gap: 8px; }
+            .round-overview-header strong { font-size: 0.98em; }
+        }
+
     </style>
 </head>
 <body>
@@ -339,6 +489,48 @@
     <span>Gruppengröße: <strong>{{ room.settings.group_size }}</strong></span>
     {% if now %}<span>Exportiert am: <strong>{{ now }}</strong></span>{% endif %}
 </p>
+
+<!-- Persönliches Ergebnis (nur für Spieler, nicht für Leader) -->
+{% if player_export %}
+<div class="summary-section">
+    <h2>Dein persönliches Ergebnis – {{ player_export.name }}</h2>
+    <div class="personal-stats">
+        <div class="stat-card">
+            <div class="stat-icon">💰</div>
+            <div class="stat-info">
+                <div class="stat-value">{{ "%.2f"|format(player_export.final_balance) }}</div>
+                <div class="stat-label">Endguthaben (Coins)</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">📈</div>
+            <div class="stat-info">
+                <div class="stat-value {% if player_export.profit > 0 %}positive{% elif player_export.profit < 0 %}negative{% endif %}">
+                    {{ "%+.2f"|format(player_export.profit) }}
+                </div>
+                <div class="stat-label">Gewinn / Verlust</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">🎯</div>
+            <div class="stat-info">
+                <div class="stat-value">{{ "%.2f"|format(player_export.total_contribution) }}</div>
+                <div class="stat-label">Coins eingezahlt</div>
+            </div>
+        </div>
+    </div>
+    <div class="stats-grid">
+        <div class="stat-chart">
+            <h3>Einzahlungsverlauf</h3>
+            <div class="chart-container"><canvas id="contributionChart"></canvas></div>
+        </div>
+        <div class="stat-chart">
+            <h3>Guthabenverlauf</h3>
+            <div class="chart-container"><canvas id="balanceChart"></canvas></div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- Top-3-Podium -->
 {% if top_players %}
@@ -384,7 +576,8 @@
 </div>
 {% endif %}
 
-<!-- Gruppenvergleich mit Accordion -->
+{% if fixed_groups %}
+<!-- Gruppenvergleich mit Accordion (Feste Gruppen) -->
 <div class="section-box">
     <h2>Gruppenvergleich</h2>
     <div class="table-container">
@@ -470,10 +663,158 @@
         </table>
     </div>
 </div>
+{% else %}
+<!-- Rundenübersicht (Zufällige Gruppen) -->
+<div class="section-box">
+    <h2>Rundenübersicht</h2>
+    <p style="color:#aaa; font-size:0.9em; margin-bottom:16px;">Zufällige Gruppen – jede Runde zeigt die konkrete Gruppenzusammensetzung dieser Runde.</p>
+    {% for round_entry in round_by_round_summary %}
+    {%- set avgCoop = round_entry.avg_cooperation | float -%}
+    {%- set avgCoopColor = '#28a745' if avgCoop >= 75 else ('#ffc107' if avgCoop >= 50 else ('#fd7e14' if avgCoop > 0 else '#dc3545')) -%}
+    <div class="round-overview-section">
+        <div class="round-overview-header" onclick="toggleRound({{ round_entry.round }})" id="rh-round-{{ round_entry.round }}">
+            <span class="toggle-icon" id="ri-round-{{ round_entry.round }}">▶</span>
+            <strong>Runde {{ round_entry.round }}</strong>
+            <span class="round-header-meta">{{ round_entry.group_count }} Gruppen</span>
+            <span class="round-header-coop" style="color:{{ avgCoopColor }};">
+                Ø {{ "%.1f"|format(avgCoop) }}% Koopquote
+            </span>
+        </div>
+        <div class="round-detail hidden" id="rd-round-{{ round_entry.round }}">
+            <div class="round-groups-grid">
+                {% for group in round_entry.groups %}
+                {%- set gKey = round_entry.round ~ '-' ~ group.group_number -%}
+                {%- set gc = group.cooperation_rate | float -%}
+                {%- set gcColor = '#28a745' if gc >= 75 else ('#ffc107' if gc >= 50 else ('#fd7e14' if gc > 0 else '#dc3545')) -%}
+                {%- set memberNames = group.members | map(attribute='name') | join(', ') -%}
+                <div class="round-group-card">
+                    <div class="round-group-header" onclick="toggleRoundGroup('{{ gKey }}')">
+                        <span class="toggle-icon" id="rgi-{{ gKey }}">▶</span>
+                        <strong>Gruppe {{ group.group_number }}</strong>
+                        <span class="round-group-members">{{ memberNames }}</span>
+                        <span class="round-group-stats">
+                            <span>∑ {{ "%.2f"|format(group.total_contribution) }} Coins</span>
+                            <span style="color:{{ gcColor }}; font-weight:600;">{{ "%.1f"|format(gc) }}% Koop</span>
+                        </span>
+                    </div>
+                    <div class="round-group-detail hidden" id="rgd-{{ gKey }}">
+                        <div class="player-details-container">
+                            <table class="player-detail-table">
+                                <thead>
+                                    <tr>
+                                        <th>Spieler</th>
+                                        <th>Einzahlung</th>
+                                        <th>Guthaben</th>
+                                        <th>Runden-Gewinn</th>
+                                        <th>Ges. Koopquote</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for m in group.members %}
+                                    {%- set oc = m.overall_coop_rate | float -%}
+                                    {%- set ocColor = '#28a745' if oc >= 75 else ('#ffc107' if oc >= 50 else ('#fd7e14' if oc > 0 else '#dc3545')) -%}
+                                    <tr>
+                                        <td><strong>{{ m.name }}</strong></td>
+                                        <td>
+                                            <span class="round-pill {% if m.cooperated %}cooperated{% else %}defected{% endif %}">
+                                                {{ "%+.2f"|format(m.contribution) if m.cooperated else "%.2f"|format(m.contribution) }}
+                                            </span>
+                                        </td>
+                                        <td>{{ "%.2f"|format(m.balance_after) }} 🪙</td>
+                                        <td class="{% if m.profit_this_round > 0 %}profit-positive{% elif m.profit_this_round < 0 %}profit-negative{% endif %}">
+                                            {{ "%+.2f"|format(m.profit_this_round) }}
+                                        </td>
+                                        <td style="color:{{ ocColor }};">{{ m.overall_coop_rate }}%</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
 
 <script type="application/json" id="top-players-data">{{ top_players | tojson }}</script>
+{% if player_export %}
+<script type="application/json" id="player-contributions">{{ player_export.contributions | tojson }}</script>
+<script type="application/json" id="player-balances">{{ player_export.balances | tojson }}</script>
+{% endif %}
 
 <script>
+    /* ── Persönliche Charts (nur Spieler) ── */
+    (function () {
+        var contEl = document.getElementById('player-contributions');
+        var balEl  = document.getElementById('player-balances');
+        if (!contEl || !balEl || typeof Chart === 'undefined') return;
+
+        var contributions = JSON.parse(contEl.textContent);
+        var balances      = JSON.parse(balEl.textContent);
+        var initial       = balances[0];
+
+        var darkTooltip = {
+            backgroundColor: 'rgba(20,20,40,0.9)',
+            titleColor: '#ccc', bodyColor: '#fff',
+            borderColor: 'rgba(255,255,255,0.15)', borderWidth: 1, padding: 10,
+            callbacks: { label: function(ctx) { return ctx.parsed.y.toFixed(2) + ' Coins'; } }
+        };
+        var axisStyle = {
+            x: { ticks: { color: '#aaa', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.07)' } },
+            y: { ticks: { color: '#aaa', font: { size: 11 }, callback: function(v) { return v.toFixed(2); } }, grid: { color: 'rgba(255,255,255,0.07)' } }
+        };
+
+        // Einzahlungsverlauf
+        var cc = document.getElementById('contributionChart');
+        if (cc) {
+            new Chart(cc, {
+                type: 'bar',
+                data: {
+                    labels: contributions.map(function(_, i) { return 'Runde ' + (i + 1); }),
+                    datasets: [{
+                        label: 'Einzahlung',
+                        data: contributions,
+                        backgroundColor: contributions.map(function(c) { return c > 0 ? 'rgba(102,126,234,0.75)' : 'rgba(220,53,69,0.55)'; }),
+                        borderColor:     contributions.map(function(c) { return c > 0 ? '#667eea' : '#dc3545'; }),
+                        borderWidth: 2, borderRadius: 6
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, animation: { duration: 0 },
+                    plugins: { legend: { display: false }, tooltip: darkTooltip },
+                    scales: { x: axisStyle.x, y: { ...axisStyle.y, beginAtZero: true } } }
+            });
+        }
+
+        // Guthabenverlauf
+        var bc = document.getElementById('balanceChart');
+        if (bc) {
+            new Chart(bc, {
+                type: 'line',
+                data: {
+                    labels: balances.map(function(_, i) { return i === 0 ? 'Start' : 'Nach R' + i; }),
+                    datasets: [{
+                        label: 'Guthaben',
+                        data: balances,
+                        borderColor: '#28a745',
+                        backgroundColor: 'rgba(40,167,69,0.12)',
+                        tension: 0.35, fill: true,
+                        pointRadius: 5, pointHoverRadius: 8,
+                        pointBackgroundColor: balances.map(function(b) { return b >= initial ? '#28a745' : '#dc3545'; }),
+                        pointBorderColor: '#fff', pointBorderWidth: 2
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, animation: { duration: 0 },
+                    plugins: { legend: { display: false }, tooltip: darkTooltip },
+                    scales: axisStyle }
+            });
+        }
+    })();
+
+    /* ── Feste Gruppen: Accordion ── */
     const openGroups = new Set();
 
     function toggleGroup(groupNumber) {
@@ -490,6 +831,26 @@
             detailRow.classList.remove('hidden');
             icon.textContent = '▼';
         }
+    }
+
+    /* ── Zufällige Gruppen: Rundenübersicht Accordion ── */
+    function toggleRound(roundNum) {
+        var key    = 'round-' + roundNum;
+        var detail = document.getElementById('rd-' + key);
+        var icon   = document.getElementById('ri-' + key);
+        if (!detail) return;
+        var opening = detail.classList.contains('hidden');
+        detail.classList.toggle('hidden', !opening);
+        if (icon) icon.textContent = opening ? '▼' : '▶';
+    }
+
+    function toggleRoundGroup(key) {
+        var detail = document.getElementById('rgd-' + key);
+        var icon   = document.getElementById('rgi-' + key);
+        if (!detail) return;
+        var opening = detail.classList.contains('hidden');
+        detail.classList.toggle('hidden', !opening);
+        if (icon) icon.textContent = opening ? '▼' : '▶';
     }
 
     // Kooperations-Balken-Breiten aus data-width setzen

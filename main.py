@@ -112,6 +112,7 @@ class GameRoom:
         self.status = "waiting"  # waiting | ready | playing | round_results | finished
         self.current_round = 0
         self.groups = []
+        self.round_groups = {}        # round_num → Gruppen-Snapshot dieser Runde
         self.group_cooperation = {}
         self.round_start_time = None
         self.submitted_players = set()
@@ -162,7 +163,8 @@ class GameRoom:
         )
 
     def create_groups(self):
-        """Teilt alle Nicht-Leader-Spieler zufällig in Gruppen ein."""
+        """Teilt alle Nicht-Leader-Spieler zufällig in Gruppen ein und speichert
+        einen unveränderlichen Snapshot in round_groups[current_round]."""
         group_size = self.settings.get('group_size', 4)
         player_list = self.non_leader_pids()
         random.shuffle(player_list)
@@ -175,6 +177,90 @@ class GameRoom:
                 'members': [players[pid].name for pid in group],
                 'player_ids': group
             })
+
+        # Snapshot der Gruppen-Zusammensetzung für diese Runde festhalten
+        self.round_groups[self.current_round] = [
+            {
+                'group_number': g['group_number'],
+                'members':      list(g['members']),
+                'player_ids':   list(g['player_ids']),
+            }
+            for g in self.groups
+        ]
+
+    def get_round_by_round_summary(self, players_dict):
+        """Gibt für jede Runde die genaue Gruppenaufteilung zurück.
+        Nur sinnvoll wenn fixed_groups=False.
+        Nutzt round_groups-Snapshots, damit die Auswertung korrekt ist –
+        nicht die finale Gruppenaufteilung.
+
+        Pro Spieler werden zurückgegeben:
+          contribution       – Einzahlung in dieser Runde
+          balance_after      – Guthaben nach dieser Runde
+          profit_this_round  – Gewinn/Verlust in dieser Runde
+          overall_coop_rate  – Gesamte Koopquote über alle Runden
+          cooperated         – True wenn Einzahlung > 0
+        """
+        initial_coins = self.settings.get('initial_coins', 0)
+        summary = []
+        for round_num in sorted(self.round_groups.keys()):
+            round_groups    = self.round_groups[round_num]
+            coop_data       = self.group_cooperation.get(round_num, {})
+            round_entry     = {'round': round_num, 'groups': []}
+            all_coop_rates  = []
+
+            for group in round_groups:
+                members            = []
+                total_contribution = 0
+
+                for pid in group['player_ids']:
+                    p = players_dict.get(pid)
+                    if not p:
+                        continue
+                    contributions = p.game_history.get('contributions', [])
+                    balances      = p.game_history.get('balances', [])
+
+                    # balances[0]          = Startguthaben (vor Runde 1)
+                    # balances[round_num]  = Guthaben NACH Runde round_num
+                    # contributions[round_num - 1] = Einzahlung IN Runde round_num
+                    contrib        = contributions[round_num - 1] if (round_num - 1) < len(contributions) else 0
+                    balance_after  = balances[round_num]          if round_num       < len(balances)      else 0
+                    balance_before = balances[round_num - 1]      if (round_num - 1) < len(balances)      else initial_coins
+                    profit_this_round = round(balance_after - balance_before, 2)
+
+                    # Gesamte Koopquote über alle gespielten Runden
+                    overall_coop = round(
+                        (sum(1 for c in contributions if c > 0) / len(contributions)) * 100, 1
+                    ) if contributions else 0
+
+                    total_contribution += contrib
+                    members.append({
+                        'name':              p.name,
+                        'contribution':      round(contrib, 2),
+                        'balance_after':     round(balance_after, 2),
+                        'profit_this_round': profit_this_round,
+                        'overall_coop_rate': overall_coop,
+                        'cooperated':        contrib > 0,
+                    })
+
+                coop_rate = round(coop_data.get(group['group_number'], 0), 1)
+                all_coop_rates.append(coop_rate)
+
+                round_entry['groups'].append({
+                    'group_number':       group['group_number'],
+                    'members':            members,
+                    'total_contribution': round(total_contribution, 2),
+                    'cooperation_rate':   coop_rate,
+                })
+
+            # Runden-Zusammenfassung (für den kollabieren Header)
+            round_entry['group_count']     = len(round_groups)
+            round_entry['avg_cooperation'] = round(
+                sum(all_coop_rates) / len(all_coop_rates), 1
+            ) if all_coop_rates else 0
+
+            summary.append(round_entry)
+        return summary
 
     def get_player_group(self, player_id):
         for group in self.groups:
@@ -647,9 +733,18 @@ def save_to_history(room_id):
                 },
             }
 
+    fixed_groups = room.settings.get('fixed_groups', True)
+
     # Auswertungsdaten vorberechnen
-    group_comparison  = room.get_group_comparison_data(players, initial_coins)
-    top_players_data  = get_top_players(room, players, initial_coins)
+    # Bei zufälligen Gruppen ist group_comparison wenig aussagekräftig –
+    # wir liefern eine leere Liste; die Auswertungsseite zeigt dann die
+    # Rundenübersicht stattdessen.
+    group_comparison = room.get_group_comparison_data(players, initial_coins) if fixed_groups else []
+    top_players_data = get_top_players(room, players, initial_coins)
+
+    # Rundenübersicht (nur bei zufälligen Gruppen – wird vorab berechnet,
+    # da players-Dict nach dem Cleanup nicht mehr verfügbar ist)
+    round_by_round_summary = room.get_round_by_round_summary(players) if not fixed_groups else []
 
     # Detaildaten für /api/history/<id>/evaluation_details
     groups_details = []
@@ -684,19 +779,21 @@ def save_to_history(room_id):
     )
 
     game_history_store[room_id] = {
-        'room_id':           room_id,
-        'completed_at':      time.time(),
-        'leader_id':         room.leader_id,
-        'leader_name':       room.leader_name,
-        'settings':          dict(room.settings),
-        'current_round':     room.current_round,
-        'groups':            [dict(g) for g in room.groups],
-        'group_cooperation': {k: dict(v) for k, v in room.group_cooperation.items()},
-        'players_snapshot':  players_snapshot,
-        'group_comparison':  group_comparison,
-        'top_players':       top_players_data,
-        'groups_details':    groups_details,
-        'total_players':     real_player_count,
+        'room_id':                room_id,
+        'completed_at':           time.time(),
+        'leader_id':              room.leader_id,
+        'leader_name':            room.leader_name,
+        'settings':               dict(room.settings),
+        'current_round':          room.current_round,
+        'groups':                 [dict(g) for g in room.groups],
+        'group_cooperation':      {k: dict(v) for k, v in room.group_cooperation.items()},
+        'players_snapshot':       players_snapshot,
+        'group_comparison':       group_comparison,
+        'top_players':            top_players_data,
+        'groups_details':         groups_details,
+        'round_by_round_summary': round_by_round_summary,
+        'fixed_groups':           fixed_groups,
+        'total_players':          real_player_count,
     }
 
     logger.info("Raum %s in History gespeichert (%d Runden, %d Spieler)",
@@ -1074,6 +1171,7 @@ def history_view(room_id):
                            initial_coins=entry['settings']['initial_coins'],
                            group_comparison=entry['group_comparison'],
                            top_players=entry['top_players'],
+                           fixed_groups=entry.get('fixed_groups', True),
                            is_leader=True,
                            history_mode=True)
 
@@ -1085,13 +1183,17 @@ def history_export(room_id):
     if not entry:
         return redirect(url_for('history_list'))
 
+    fixed_groups_hist = entry.get('fixed_groups', True)
     html = render_template('evaluation_export.html',
                            room=HistoryRoomProxy(entry),
-                           group_comparison=entry['group_comparison'],
-                           groups_details=entry['groups_details'],
+                           group_comparison=entry.get('group_comparison', []),
+                           groups_details=entry.get('groups_details', []),
                            top_players=entry['top_players'],
                            initial_coins=entry['settings']['initial_coins'],
                            num_rounds=entry['current_round'],
+                           fixed_groups=fixed_groups_hist,
+                           round_by_round_summary=entry.get('round_by_round_summary', []),
+                           player_export=None,
                            now=datetime.now().strftime('%d.%m.%Y %H:%M Uhr'))
 
     response = make_response(html)
@@ -1122,6 +1224,7 @@ def evaluation(room_id):
                          initial_coins=initial_coins,
                          group_comparison=group_comparison,
                          top_players=top_players,
+                         fixed_groups=room.settings.get('fixed_groups', True),
                          is_leader=player.id == room.leader_id,
                          history_mode=False)
 
@@ -1135,9 +1238,27 @@ def evaluation_export(room_id):
         return redirect(url_for('join_game'))
 
     initial_coins = room.settings['initial_coins']
-    group_comparison = room.get_group_comparison_data(players, initial_coins)
+    fixed_groups  = room.settings.get('fixed_groups', True)
+    is_leader     = player.id == room.leader_id
 
-    # Gruppendetails für alle Gruppen berechnen
+    group_comparison       = room.get_group_comparison_data(players, initial_coins) if fixed_groups else []
+    round_by_round_summary = [] if fixed_groups else room.get_round_by_round_summary(players)
+
+    # Persönliche Spielerdaten (nur für Nicht-Leader)
+    player_export = None
+    if not is_leader:
+        contributions = player.game_history.get('contributions', [])
+        balances      = player.game_history.get('balances', [])
+        player_export = {
+            'name':               player.name,
+            'final_balance':      round(player.coins, 2),
+            'profit':             round(player.coins - initial_coins, 2),
+            'total_contribution': round(sum(contributions), 2),
+            'contributions':      [round(c, 2) for c in contributions],
+            'balances':           [round(b, 2) for b in balances],
+        }
+
+    # Gruppendetails für alle Gruppen berechnen (nur bei fixen Gruppen)
     groups_details = []
     for group in room.groups:
         members_data = []
@@ -1170,6 +1291,9 @@ def evaluation_export(room_id):
                            top_players=top_players,
                            initial_coins=initial_coins,
                            num_rounds=room.current_round,
+                           fixed_groups=fixed_groups,
+                           round_by_round_summary=round_by_round_summary,
+                           player_export=player_export,
                            now=datetime.now().strftime('%d.%m.%Y %H:%M Uhr'))
 
     response = make_response(html)
@@ -1452,7 +1576,9 @@ def api_history_evaluation_details(room_id):
     entry = game_history_store.get(room_id)
     if not entry:
         return jsonify({'error': 'Nicht gefunden'}), 404
-    return jsonify(entry['groups_details'])
+    if entry.get('fixed_groups', True):
+        return jsonify({'mode': 'fixed',  'data': entry['groups_details']})
+    return jsonify({'mode': 'random', 'data': entry['round_by_round_summary']})
 
 
 @app.route('/api/room/<room_id>/evaluation_details')
@@ -1461,39 +1587,37 @@ def api_evaluation_details(room_id):
         return jsonify({'error': 'Raum nicht gefunden'}), 404
 
     room = rooms[room_id]
-    groups_data = []
     initial_coins = room.settings['initial_coins']
+    fixed_groups  = room.settings.get('fixed_groups', True)
 
+    # Zufällige Gruppen → Rundenübersicht zurückgeben
+    if not fixed_groups:
+        return jsonify({'mode': 'random', 'data': room.get_round_by_round_summary(players)})
+
+    # Feste Gruppen → bisheriges Format
+    groups_data = []
     for group in room.groups:
         members_data = []
-
         for pid in group['player_ids']:
             if pid not in players:
                 continue
             player = players[pid]
-
             contributions = player.game_history['contributions']
-            balances = player.game_history['balances']
-
+            balances      = player.game_history['balances']
             coop_rate = round(
                 (sum(1 for c in contributions if c > 0) / len(contributions)) * 100, 1
             ) if contributions else 0
-
             members_data.append({
-                'name': player.name,
+                'name':          player.name,
                 'final_balance': round(player.coins, 2),
-                'total_profit': round(player.coins - initial_coins, 2),
-                'coop_rate': coop_rate,
+                'total_profit':  round(player.coins - initial_coins, 2),
+                'coop_rate':     coop_rate,
                 'contributions': [round(c, 2) for c in contributions],
-                'balances': [round(b, 2) for b in balances]
+                'balances':      [round(b, 2) for b in balances],
             })
+        groups_data.append({'group_number': group['group_number'], 'members': members_data})
 
-        groups_data.append({
-            'group_number': group['group_number'],
-            'members': members_data
-        })
-
-    return jsonify(groups_data)
+    return jsonify({'mode': 'fixed', 'data': groups_data})
 
 
 # WebSocket Events
