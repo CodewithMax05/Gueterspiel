@@ -4,6 +4,15 @@
     gap: 20px;
 }
 
+.list-heading {
+    font-size: 1rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.55);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: -8px;
+}
+
 .direct-join {
     padding: 24px;
     background: rgba(255, 255, 255, 0.1);
@@ -47,67 +56,98 @@
 }
 
 .room-list {
-    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: calc(100vh - 340px);
+    min-height: 260px;
+    overflow-y: auto;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    padding: 14px;
+    /* Scrollbar-Styling */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(102, 126, 234, 0.4) transparent;
+}
+
+.room-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.room-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.room-list::-webkit-scrollbar-thumb {
+    background: rgba(102, 126, 234, 0.4);
+    border-radius: 3px;
+}
+
+.room-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(102, 126, 234, 0.7);
 }
 
 .room-item {
-    padding: 20px;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    margin: 16px 0;
-    border-radius: 12px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    margin: 0;
+    border-radius: 10px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    transition: all 0.3s ease;
+    gap: 12px;
+    transition: background 0.2s ease;
 }
 
 .room-item:hover {
-    background: rgba(255, 255, 255, 0.15);
-    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.12);
 }
 
 .room-info {
     flex-grow: 1;
+    min-width: 0;
 }
 
 .room-info strong {
-    font-size: 1.2rem;
+    font-size: 1rem;
     color: white;
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 3px;
 }
 
 .room-meta-primary {
-    margin: 8px 0 4px 0;
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 0.95rem;
+    margin: 0 0 2px 0;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.85rem;
     font-weight: 500;
 }
 
 .room-meta-secondary {
-    margin: 4px 0;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.9rem;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.8rem;
 }
 
 .join-btn {
-    padding: 12px 24px;
+    padding: 8px 18px;
     background: linear-gradient(45deg, #28a745, #20c997);
     color: white;
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 0.9rem;
     font-weight: 600;
-    transition: all 0.3s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
     text-align: center;
 }
 
 .join-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
 }
 
 /* Modal Styles */
@@ -217,6 +257,10 @@
 
 /* Responsive Design */
 @media (max-width: 768px) {
+    .room-list {
+        height: calc(100vh - 380px);
+    }
+
     .room-item {
         flex-direction: column;
         gap: 12px;

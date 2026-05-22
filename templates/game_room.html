@@ -422,16 +422,16 @@
         // Nur Leader (und nicht der aktuelle Spieler selbst) sehen den Lösch-Button
         if (isLeaderRoom && !isCurrentPlayer) {
             actionsHtml = `
-                <button class="delete-player-btn" onclick="removePlayer('${playerData.id}', '${playerData.name}')" 
+                <button class="delete-player-btn" onclick="removePlayer('${playerData.id}', '${escHtml(playerData.name)}')"
                         title="Spieler entfernen">
                     <i class="fas fa-trash-alt"></i>
                 </button>
             `;
         }
-        
+
         playerElement.innerHTML = `
             <div>
-                <span class="player-name">${playerName}</span>
+                <span class="player-name">${escHtml(playerName)}</span>
                 <span class="coins-display">(${playerData.coins} Coins)</span>
             </div>
             <div class="player-actions">

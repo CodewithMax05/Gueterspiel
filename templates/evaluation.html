@@ -159,13 +159,22 @@
     <!-- Aktionsbuttons -->
     <div class="action-buttons">
         {% if is_leader %}
+        {% if history_mode %}
+        <a href="{{ url_for('history_list') }}" class="btn btn-large btn-secondary">
+            <i class="fas fa-arrow-left" style="margin-right: 8px;"></i>Zurück
+        </a>
+        <a href="{{ url_for('history_export', room_id=room.id) }}" class="btn btn-large btn-secondary" target="_blank">
+            <i class="fas fa-download" style="margin-right: 8px;"></i>Daten exportieren
+        </a>
+        {% else %}
         <a href="{{ url_for('index') }}" class="btn btn-large btn-secondary">Zur Startseite</a>
         <a href="{{ url_for('evaluation_export', room_id=room.id) }}" class="btn btn-large btn-secondary" target="_blank">
             Daten exportieren
         </a>
         <button class="btn btn-large" id="returnToLobbyBtn" onclick="returnToLobby()">
-            <i class="fas fa-redo"></i> Erneut spielen
+            <i class="fas fa-redo" style="margin-right: 8px;"></i>Erneut spielen
         </button>
+        {% endif %}
         {% else %}
         <button class="btn btn-large btn-secondary" onclick="leaveAndGoHome()">Zur Startseite</button>
         {% endif %}
@@ -440,7 +449,10 @@
     let evalData = null;
 
     // Daten einmalig laden
-    fetch(`/api/room/{{ room.id }}/evaluation_details`)
+    const evalApiUrl = {{ 'true' if history_mode else 'false' }}
+        ? `/api/history/{{ room.id }}/evaluation_details`
+        : `/api/room/{{ room.id }}/evaluation_details`;
+    fetch(evalApiUrl)
         .then(r => r.json())
         .then(data => {
             evalData = data;
@@ -495,7 +507,7 @@
 
             return `
                 <tr>
-                    <td><strong>${m.name}</strong></td>
+                    <td><strong>${escHtml(m.name)}</strong></td>
                     <td>${m.final_balance.toFixed(2)} 🪙</td>
                     <td class="${profitClass}">${profitSign}${m.total_profit.toFixed(2)}</td>
                     <td>${m.coop_rate}%</td>
@@ -520,6 +532,7 @@
         `;
     }
 
+    {% if not history_mode %}
     function leaveAndGoHome() {
         localStorage.removeItem('gueterspiel_session');
         socket.emit('leave_room');
@@ -541,5 +554,6 @@
     socket.on('return_to_lobby', function(data) {
         window.location.href = '/game_room/' + data.room_id;
     });
+    {% endif %}
 </script>
 {% endblock %}

@@ -441,3 +441,26 @@ input::placeholder {
         font-size: 0.8em;
     }
 }
+
+/* ================================================================
+   Infinite Scroll (shared – join_game, history, ...)
+   ================================================================ */
+
+.scroll-sentinel {
+    height: 1px;
+}
+
+.loading-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 20px;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 0.9em;
+}
+
+.loading-indicator i {
+    font-size: 1.1em;
+    color: #667eea;
+}

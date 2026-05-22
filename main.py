@@ -127,6 +127,7 @@ class GameRoom:
         self.chat_enabled = settings.get('chat_enabled', True)
         self.round_end_time = None
         self.players_in_results = set()
+        self.created_at = time.time()   # für 7-Tage-Cleanup aktiver Räume
 
     # ------------------------------------------------------------------
     # Spieler-Hilfsmethoden
@@ -442,6 +443,38 @@ class GameTimer:
 game_timers = {}
 game_timer_lock = Lock()
 
+# ---------------------------------------------------------------------------
+# History Store  (abgeschlossene Räume, TTL 7 Tage)
+# ---------------------------------------------------------------------------
+game_history_store = {}   # room_id → Snapshot-Dict
+
+# ---------------------------------------------------------------------------
+# History-Proxy-Klassen
+# ---------------------------------------------------------------------------
+
+class HistoryRoomProxy:
+    """Minimaler Proxy, der die für evaluation.html nötigen Room-Felder bereitstellt."""
+    def __init__(self, entry):
+        self.id             = entry['room_id']
+        self.settings       = entry['settings']
+        self.current_round  = entry['current_round']
+        self.groups         = entry['groups']
+        self.leader_name    = entry['leader_name']
+        self.incognito_mode = entry['settings'].get('incognito_mode', False)
+
+
+class HistoryPlayerProxy:
+    """Minimaler Proxy, der die für evaluation.html nötigen Player-Felder bereitstellt."""
+    def __init__(self, pid, data):
+        self.id           = pid
+        self.name         = data.get('name', 'Unbekannt')
+        self.coins        = data.get('coins', 0.0)
+        self.is_leader    = data.get('is_leader', False)
+        self.game_history = data.get('game_history', {'balances': [], 'contributions': []})
+
+
+# ---------------------------------------------------------------------------
+
 def close_room(room_id, message, reason=None):
     """Schließt einen Raum vollständig: benachrichtigt alle Spieler, stoppt den
     Timer, bricht laufende Gnadenfrist-Greenlets ab und räumt alle Daten auf."""
@@ -587,6 +620,86 @@ def get_or_create_game_timer(room_id, duration=60):
         timer.start()
         logger.info("Neuer Game-Timer für Raum %s gestartet (Dauer: %ss)", room_id, duration)
         return timer
+
+def save_to_history(room_id):
+    """Speichert einen abgeschlossenen Raum als unveränderlichen Snapshot in game_history_store."""
+    room = rooms.get(room_id)
+    if not room:
+        return
+
+    initial_coins = room.settings['initial_coins']
+
+    # Spielerdaten snapshot (vor jeglicher Modifikation der Player-Objekte)
+    players_snapshot = {}
+    for pid in list(room.players) + [room.leader_id]:
+        p = players.get(pid)
+        if p:
+            players_snapshot[pid] = {
+                'name':       p.name,
+                'coins':      p.coins,
+                'is_leader':  p.is_leader,
+                'is_test':    getattr(p, 'is_test', False),
+                'game_history': {
+                    'balances':      list(p.game_history.get('balances', [])),
+                    'contributions': list(p.game_history.get('contributions', [])),
+                },
+            }
+
+    # Auswertungsdaten vorberechnen
+    group_comparison  = room.get_group_comparison_data(players, initial_coins)
+    top_players_data  = get_top_players(room, players, initial_coins)
+
+    # Detaildaten für /api/history/<id>/evaluation_details
+    groups_details = []
+    for group in room.groups:
+        members_data = []
+        for pid in group['player_ids']:
+            p = players.get(pid)
+            if not p:
+                continue
+            contributions = p.game_history.get('contributions', [])
+            balances      = p.game_history.get('balances', [])
+            coop_rate = round(
+                (sum(1 for c in contributions if c > 0) / len(contributions)) * 100, 1
+            ) if contributions else 0
+            members_data.append({
+                'name':          p.name,
+                'final_balance': round(p.coins, 2),
+                'total_profit':  round(p.coins - initial_coins, 2),
+                'coop_rate':     coop_rate,
+                'contributions': [round(c, 2) for c in contributions],
+                'balances':      [round(b, 2) for b in balances],
+            })
+        groups_details.append({
+            'group_number': group['group_number'],
+            'members':      members_data,
+        })
+
+    # Nur echte (nicht-Test-)Spieler zählen
+    real_player_count = sum(
+        1 for pid in room.players
+        if players.get(pid) and not players[pid].is_leader and not getattr(players[pid], 'is_test', False)
+    )
+
+    game_history_store[room_id] = {
+        'room_id':           room_id,
+        'completed_at':      time.time(),
+        'leader_id':         room.leader_id,
+        'leader_name':       room.leader_name,
+        'settings':          dict(room.settings),
+        'current_round':     room.current_round,
+        'groups':            [dict(g) for g in room.groups],
+        'group_cooperation': {k: dict(v) for k, v in room.group_cooperation.items()},
+        'players_snapshot':  players_snapshot,
+        'group_comparison':  group_comparison,
+        'top_players':       top_players_data,
+        'groups_details':    groups_details,
+        'total_players':     real_player_count,
+    }
+
+    logger.info("Raum %s in History gespeichert (%d Runden, %d Spieler)",
+                room_id, room.current_round, real_player_count)
+
 
 # Hilfsfunktion zum Überprüfen der Raum-Zugriffsberechtigung
 # Gibt immer (room, player) zurück. room ist None wenn der Raum nicht existiert,
@@ -793,6 +906,17 @@ def game_room(room_id):
 
     is_leader = player.id == room.leader_id
 
+    # Session an den aktuellen Raum angleichen – wichtig wenn der Spieler nach
+    # "Erneut spielen" in einen neuen Raum weitergeleitet wurde. base.html liest
+    # currentRoomId aus session.get("room_id"); stimmt sie nicht, sendet der
+    # Client join_game_room an den falschen SocketIO-Raum und Bereit-Events
+    # kommen nie an.
+    if session.get('room_id') != room_id or session.get('player_id') != player.id:
+        session['room_id']   = room_id
+        session['player_id'] = player.id
+        session['is_leader'] = is_leader
+        session.modified     = True
+
     # Während laufendem Spiel: Spieler zur richtigen Seite weiterleiten
     if not is_leader and room.status == 'playing':
         return redirect(url_for('game', room_id=room_id))
@@ -926,6 +1050,55 @@ def get_top_players(room, players_dict, initial_coins, n=3):
     return result[:n]
 
 
+@app.route('/history')
+def history_list():
+    """History-Seite: listet alle abgeschlossenen Spielsessions auf."""
+    return render_template('history.html')
+
+
+@app.route('/history/<room_id>')
+def history_view(room_id):
+    """Zeigt die Auswertung eines History-Eintrags im Read-Only-Modus."""
+    entry = game_history_store.get(room_id)
+    if not entry:
+        return redirect(url_for('history_list'))
+
+    leader_id   = entry['leader_id']
+    leader_data = entry['players_snapshot'].get(leader_id, {})
+
+    return render_template('evaluation.html',
+                           room=HistoryRoomProxy(entry),
+                           player=HistoryPlayerProxy(leader_id, leader_data),
+                           initial_coins=entry['settings']['initial_coins'],
+                           group_comparison=entry['group_comparison'],
+                           top_players=entry['top_players'],
+                           is_leader=True,
+                           history_mode=True)
+
+
+@app.route('/history/<room_id>/export')
+def history_export(room_id):
+    """Liefert die History-Auswertung als eigenständige HTML-Datei zum Download."""
+    entry = game_history_store.get(room_id)
+    if not entry:
+        return redirect(url_for('history_list'))
+
+    html = render_template('evaluation_export.html',
+                           room=HistoryRoomProxy(entry),
+                           group_comparison=entry['group_comparison'],
+                           groups_details=entry['groups_details'],
+                           top_players=entry['top_players'],
+                           initial_coins=entry['settings']['initial_coins'],
+                           num_rounds=entry['current_round'],
+                           now=datetime.now().strftime('%d.%m.%Y %H:%M Uhr'))
+
+    response = make_response(html)
+    response.headers['Content-Disposition'] = f'attachment; filename=Auswertung_Raum_{room_id}.html'
+    response.headers['Content-Type']         = 'text/html; charset=utf-8'
+    return response
+
+
+
 @app.route('/evaluation/<room_id>')
 def evaluation(room_id):
     room, player = check_room_access(room_id)
@@ -947,7 +1120,8 @@ def evaluation(room_id):
                          initial_coins=initial_coins,
                          group_comparison=group_comparison,
                          top_players=top_players,
-                         is_leader=player.id == room.leader_id)
+                         is_leader=player.id == room.leader_id,
+                         history_mode=False)
 
 @app.route('/evaluation/<room_id>/export')
 def evaluation_export(room_id):
@@ -1034,22 +1208,29 @@ def api_check_rejoin():
 
 @app.route('/api/rooms')
 def api_rooms():
+    page  = max(1, int(request.args.get('page',  1)))
+    limit = max(1, int(request.args.get('limit', 10)))
+
     available_rooms = []
     for room_id, room in rooms.items():
-        # Zeige ALLE Räume an, nicht nur öffentliche
         if room.status in ["waiting", "ready"]:
-            # Nur normale Spieler zählen (keine Leader)
             normal_players = [pid for pid in room.players if pid in players and not players[pid].is_leader]
-            
             available_rooms.append({
-                'id': room_id,
+                'id':           room_id,
                 'player_count': len(normal_players),
                 'current_round': room.current_round,
-                'settings': room.settings,
-                'status': room.status,
-                'room_type': room.room_type  # Füge Raumtyp hinzu für die Anzeige
+                'settings':     room.settings,
+                'status':       room.status,
+                'room_type':    room.room_type,
             })
-    return jsonify(available_rooms)
+
+    start      = (page - 1) * limit
+    page_items = available_rooms[start:start + limit]
+    return jsonify({
+        'items':    page_items,
+        'has_more': (start + limit) < len(available_rooms),
+        'total':    len(available_rooms),
+    })
 
 @app.route('/api/room/<room_id>/check_access')
 def api_room_check_access(room_id):
@@ -1232,6 +1413,46 @@ def api_room_can_continue(room_id):
         'max_rounds': room.settings.get('max_rounds', 5)
     })
 
+@app.route('/api/history')
+def api_history():
+    """Gibt eine nach Datum sortierte, paginierte Liste aller History-Einträge zurück."""
+    page  = max(1, int(request.args.get('page',  1)))
+    limit = max(1, int(request.args.get('limit', 10)))
+
+    all_entries = sorted(game_history_store.values(), key=lambda x: x['completed_at'], reverse=True)
+    start       = (page - 1) * limit
+    page_slice  = all_entries[start:start + limit]
+
+    items = []
+    for entry in page_slice:
+        items.append({
+            'room_id':       entry['room_id'],
+            'completed_at':  entry['completed_at'],
+            'leader_name':   entry['leader_name'],
+            'current_round': entry['current_round'],
+            'total_players': entry['total_players'],
+            'settings': {
+                'initial_coins': entry['settings']['initial_coins'],
+                'multiplier':    entry['settings']['multiplier'],
+                'group_size':    entry['settings']['group_size'],
+            },
+        })
+    return jsonify({
+        'items':    items,
+        'has_more': (start + limit) < len(all_entries),
+        'total':    len(all_entries),
+    })
+
+
+@app.route('/api/history/<room_id>/evaluation_details')
+def api_history_evaluation_details(room_id):
+    """Gibt Gruppen-Detaildaten für einen History-Eintrag zurück."""
+    entry = game_history_store.get(room_id)
+    if not entry:
+        return jsonify({'error': 'Nicht gefunden'}), 404
+    return jsonify(entry['groups_details'])
+
+
 @app.route('/api/room/<room_id>/evaluation_details')
 def api_evaluation_details(room_id):
     if room_id not in rooms:
@@ -1271,6 +1492,7 @@ def api_evaluation_details(room_id):
         })
 
     return jsonify(groups_data)
+
 
 # WebSocket Events
 @socketio.on('connect')
@@ -1766,32 +1988,67 @@ def delayed_leader_disconnect(player_id, room_id, delay_seconds=300):
     logger.info("Leader %s seit %ds offline – Raum %s wird geschlossen", player_id, delay_seconds, room_id)
     close_room(room_id, 'Der Spielleiter war zu lange offline. Der Raum wurde geschlossen.', reason='leader_timeout')
 
+def _cleanup_room(room_id, reason):
+    """Entfernt einen Raum und alle zugehörigen Spieler/Timers sauber aus dem Speicher."""
+    room = rooms.pop(room_id, None)
+    if not room:
+        return
+    all_pids = list(room.players) + ([room.leader_id] if room.leader_id not in room.players else [])
+    for pid in all_pids:
+        players.pop(pid, None)
+        player_sids.pop(pid, None)
+        with removal_lock:
+            greenlet = pending_removals.pop(pid, None)
+            if greenlet:
+                try:
+                    greenlet.kill()
+                except Exception:
+                    pass
+    timer = game_timers.pop(room_id, None)
+    if timer:
+        try:
+            timer.stop()
+        except Exception:
+            pass
+    logger.info("Raum %s aufgeräumt (%s)", room_id, reason)
+
+
 def cleanup_old_rooms():
-    """Hintergrund-Task: räumt beendete Räume nach 2 Stunden auf."""
+    """Hintergrund-Task: läuft täglich um Mitternacht.
+
+    - Beendete Live-Räume:  nach 2 Stunden aufgeräumt.
+    - Aktive Live-Räume:    nach 7 Tagen aufgeräumt (Zombie-Räume).
+    - History-Einträge:     nach 7 Tagen gelöscht.
+    """
+    SEVEN_DAYS = 7 * 24 * 3600
+
     while True:
-        sleep(600)  # Alle 10 Minuten prüfen
+        # Bis zur nächsten Mitternacht (00:00:00 Lokalzeit) schlafen
+        now_dt   = datetime.now()
+        midnight = (now_dt + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        sleep((midnight - now_dt).total_seconds())
+
         now = time.time()
-        to_delete = []
+        logger.info("Mitternachts-Cleanup gestartet")
 
         for room_id, room in list(rooms.items()):
-            if room.status == "finished" and room.round_end_time:
-                if (now - room.round_end_time) > 7200:  # 2 Stunden
-                    to_delete.append(room_id)
+            # Beendete Räume nach 2 Stunden entfernen
+            if room.status == "finished":
+                ref_time = room.round_end_time or getattr(room, 'created_at', now)
+                if (now - ref_time) > 7200:
+                    _cleanup_room(room_id, "finished > 2 h")
+                    continue
 
-        for room_id in to_delete:
-            room = rooms.pop(room_id, None)
-            if room:
-                for pid in list(room.players) + [room.leader_id]:
-                    players.pop(pid, None)
-                    player_sids.pop(pid, None)
-                    with removal_lock:
-                        greenlet = pending_removals.pop(pid, None)
-                        if greenlet:
-                            try:
-                                greenlet.kill()
-                            except Exception:
-                                pass
-                logger.info("Raum %s nach 2 h automatisch aufgeräumt", room_id)
+            # Aktive / wartende Räume nach 7 Tagen entfernen
+            created_at = getattr(room, 'created_at', None)
+            if created_at and (now - created_at) > SEVEN_DAYS:
+                _cleanup_room(room_id, "aktiv > 7 Tage")
+
+        # History-Einträge nach 7 Tagen aufräumen
+        for room_id, entry in list(game_history_store.items()):
+            if (now - entry['completed_at']) > SEVEN_DAYS:
+                game_history_store.pop(room_id, None)
+                logger.info("History-Eintrag %s nach 7 Tagen aufgeräumt", room_id)
 
 def finish_round(room_id):
     """Beendet die Runde sicher: fehlende Beiträge auf 0 setzen, finale Submit-Status senden,
@@ -1941,7 +2198,8 @@ def handle_next_round():
             logger.info("Nächste Runde gestartet – Raum %s, Runde %d", room_id, room.current_round)
 
         else:
-            # Spiel beenden
+            # Spiel beenden und in History sichern
+            save_to_history(room_id)
             room.status = "finished"
             logger.info("Spiel beendet – Raum %s nach %d Runde(n)", room_id, room.current_round)
             emit('game_finished', {
@@ -2024,14 +2282,19 @@ def handle_abort_game():
 
 @socketio.on('return_to_lobby')
 def handle_return_to_lobby():
-    """Leader setzt den Raum auf Lobby-Zustand zurück (nach Auswertung)."""
+    """Leader startet eine neue Session mit denselben Einstellungen.
+
+    Der abgeschlossene Raum wird in der History gesichert. Anschließend wird
+    ein neuer Raum erstellt, echte Spieler werden dorthin überführt und alle
+    Clients werden weitergeleitet.
+    """
     player_id = sid_to_player.get(request.sid) or session.get('player_id')
     if not player_id or player_id not in players:
         return
 
     player = players[player_id]
     if not player.is_leader:
-        emit('error', {'message': 'Nur der Spielleiter kann den Raum zurücksetzen.'})
+        emit('error', {'message': 'Nur der Spielleiter kann das Spiel neu starten.'})
         return
 
     room_id = player.room_id
@@ -2040,7 +2303,11 @@ def handle_return_to_lobby():
 
     room = rooms[room_id]
 
-    # Timer stoppen
+    # 1) Snapshot in History sichern (vor jeder Modifikation)
+    if room_id not in game_history_store:
+        save_to_history(room_id)
+
+    # 2) Laufenden Timer stoppen
     timer = game_timers.pop(room_id, None)
     if timer:
         try:
@@ -2048,38 +2315,58 @@ def handle_return_to_lobby():
         except Exception:
             pass
 
-    # Raum-Zustand zurücksetzen
-    room.status = 'waiting'
-    room.current_round = 0
-    room.groups = []
-    room.submitted_players = set()
-    room.players_in_results = set()
-    room.round_results = None
-    room.timer_running = False
-    room.timer_remaining = room.settings.get('round_duration', 60)
-    room.round_end_time = None
+    # 3) Neuen Raum mit denselben Einstellungen anlegen
+    new_room_id   = str(uuid.uuid4())[:8]
+    settings      = dict(room.settings)
+    initial_coins = settings['initial_coins']
 
-    # Alle Spieler zurücksetzen
-    initial_coins = room.settings['initial_coins']
+    new_room = GameRoom(new_room_id, player_id, settings)
+    new_room.leader_name = room.leader_name
+    rooms[new_room_id] = new_room
+
+    # 4) Leader in neuen Raum verschieben
+    player.room_id    = new_room_id
+    session['room_id'] = new_room_id
+
+    # 5) Echte (nicht-Test-)Spieler übernehmen und zurücksetzen
     for pid in list(room.players):
         p = players.get(pid)
-        if p and not p.is_leader:
-            p.ready = True if p.is_test else False
-            p.coins = initial_coins
-            p.current_contribution = 0
-            p.game_history = {
-                'balances': [initial_coins],
-                'contributions': []
-            }
+        if not p or p.is_test or p.is_leader:
+            continue
+        p.room_id              = new_room_id
+        p.ready                = False
+        p.coins                = initial_coins
+        p.current_contribution = 0
+        p.game_history         = {'balances': [initial_coins], 'contributions': []}
+        new_room.add_player(pid)
 
-    # Raumliste aktualisieren (wieder joinbar)
-    socketio.emit('room_list_updated', {
-        'action': 'reset',
-        'room_id': room_id
-    })
+    # 6) Test-Spieler des alten Raums löschen; frische für den neuen Raum erstellen
+    for pid in list(room.players):
+        p = players.get(pid)
+        if p and p.is_test:
+            players.pop(pid, None)
+            player_sids.pop(pid, None)
 
-    # Alle Clients in den Gameroom schicken
-    socketio.emit('return_to_lobby', {'room_id': room_id}, room=room_id)
+    test_names = [f"Test-Spieler {i}" for i in range(1, 40)]
+    for name in test_names:
+        test_id = str(uuid.uuid4())
+        test_player = Player(test_id, name, is_test=True)
+        test_player.room_id = new_room_id
+        test_player.coins   = initial_coins
+        test_player.game_history['balances'].append(initial_coins)
+        test_player.ready   = True
+        players[test_id]    = test_player
+        new_room.add_player(test_id)
+
+    # 7) Alten Raum entfernen
+    rooms.pop(room_id, None)
+    socketio.emit('room_list_updated', {'action': 'deleted',  'room_id': room_id})
+    socketio.emit('room_list_updated', {'action': 'created', 'room_id': new_room_id})
+
+    # 8) Alle Clients in den neuen Raum weiterleiten
+    socketio.emit('return_to_lobby', {'room_id': new_room_id}, room=room_id)
+
+    logger.info("Neues Spiel erstellt – alter Raum %s → neuer Raum %s", room_id, new_room_id)
 
 
 @socketio.on('remove_player')
