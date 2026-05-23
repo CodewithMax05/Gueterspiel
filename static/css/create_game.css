@@ -1,4 +1,15 @@
 /* static/css/create_game.css */
+
+/* ── Vollbild-Layout ── */
+html, body { height: 100%; }
+main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
 .form-container {
     max-width: 800px;
     margin: 0 auto;

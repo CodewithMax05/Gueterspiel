@@ -14,10 +14,15 @@
     </div>
     
     <div class="direct-join">
-        <h3>Direkt beitreten:</h3>
+        <div class="direct-join-header">
+            <h3>Direkt beitreten:</h3>
+            <!-- Nur auf kleinen Bildschirmen sichtbar -->
+            <button class="join-icon-btn" onclick="joinByCode()">Beitreten</button>
+        </div>
         <div class="join-form">
             <input type="text" id="roomCode" placeholder="Raum-Code eingeben">
-            <button class="btn btn-success" onclick="joinByCode()">Beitreten</button>
+            <!-- Nur auf großen Bildschirmen sichtbar -->
+            <button class="btn btn-success join-text-btn" onclick="joinByCode()">Beitreten</button>
         </div>
     </div>
 
@@ -163,16 +168,16 @@
         const el = document.createElement('div');
         el.className = 'room-item';
         el.innerHTML = `
-            <div class="room-info">
-                <strong>Raum ${room.id}</strong>
+            <strong class="room-name">Raum ${room.id}</strong>
+            <div class="room-meta-row">
                 <p class="room-meta-primary">
-                    ${room.player_count} Spieler | ${statusText} | ${roomTypeBadge}
+                    ${room.player_count} Spieler | ${statusText}<span class="room-type-badge"> | ${roomTypeBadge}</span>
                 </p>
-                <p class="room-meta-secondary">
-                    Gruppengröße: ${room.settings.group_size} | Multiplikator: ${room.settings.multiplier}×
-                </p>
+                <button class="join-btn" onclick="openNameModal('${room.id}', '${room.room_type}', '')">Beitreten</button>
             </div>
-            <button class="join-btn" onclick="openNameModal('${room.id}', '${room.room_type}', '')">Beitreten</button>
+            <p class="room-meta-secondary">
+                Gruppengröße: ${room.settings.group_size} | Multiplikator: ${room.settings.multiplier}×
+            </p>
         `;
         return el;
     }

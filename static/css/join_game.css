@@ -1,31 +1,75 @@
+/* ── Vollbild-Layout ── */
+html, body { height: 100%; }
+main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
 .container {
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    overflow-y: auto;
+    padding: 14px 20px 8px;
+    gap: 12px;
+    max-width: none;
+    width: 100%;
+    margin: 0;
+    box-sizing: border-box;
 }
 
 .list-heading {
-    font-size: 1rem;
+    font-size: 0.9rem;
     font-weight: 600;
     color: rgba(255, 255, 255, 0.55);
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    margin-bottom: -8px;
+    flex-shrink: 0;
 }
 
 .direct-join {
-    padding: 24px;
+    padding: 14px 18px;
     background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.2);
-    margin-bottom: 20px;
+    flex-shrink: 0;
+}
+
+.direct-join-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
 }
 
 .direct-join h3 {
-    margin-bottom: 16px;
     color: white;
-    font-size: 1.2rem;
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+/* Button neben Titel: nur auf kleinen Bildschirmen – identisch zu join-btn */
+.join-icon-btn {
+    display: none;
+    height: 37px;
+    padding: 0 18px;
+    background: linear-gradient(45deg, #28a745, #20c997);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+/* Text-Button: nur auf großen Bildschirmen */
+.join-text-btn {
+    display: inline-flex;
+    white-space: nowrap;
 }
 
 .join-form {
@@ -58,9 +102,9 @@
 .room-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    height: calc(100vh - 340px);
-    min-height: 260px;
+    gap: 8px;
+    flex: 1;
+    min-height: 180px;
     overflow-y: auto;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -68,7 +112,7 @@
     padding: 14px;
     /* Scrollbar-Styling */
     scrollbar-width: thin;
-    scrollbar-color: rgba(102, 126, 234, 0.4) transparent;
+    scrollbar-color: #667eea rgba(255, 255, 255, 0.05);
 }
 
 .room-list::-webkit-scrollbar {
@@ -76,16 +120,17 @@
 }
 
 .room-list::-webkit-scrollbar-track {
-    background: transparent;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
 }
 
 .room-list::-webkit-scrollbar-thumb {
-    background: rgba(102, 126, 234, 0.4);
-    border-radius: 3px;
+    background: linear-gradient(180deg, #667eea, #764ba2);
+    border-radius: 10px;
 }
 
 .room-list::-webkit-scrollbar-thumb:hover {
-    background: rgba(102, 126, 234, 0.7);
+    background: linear-gradient(180deg, #764ba2, #667eea);
 }
 
 .room-item {
@@ -95,9 +140,8 @@
     margin: 0;
     border-radius: 10px;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
+    flex-direction: column;
+    gap: 4px;
     transition: background 0.2s ease;
 }
 
@@ -105,23 +149,30 @@
     background: rgba(255, 255, 255, 0.12);
 }
 
-.room-info {
-    flex-grow: 1;
-    min-width: 0;
-}
-
-.room-info strong {
+.room-name {
     font-size: 1rem;
     color: white;
-    display: block;
-    margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.room-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
 }
 
 .room-meta-primary {
-    margin: 0 0 2px 0;
+    margin: 0;
     color: rgba(255, 255, 255, 0.8);
     font-size: 0.85rem;
     font-weight: 500;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .room-meta-secondary {
@@ -131,7 +182,8 @@
 }
 
 .join-btn {
-    padding: 8px 18px;
+    height: 37px;
+    padding: 0 18px;
     background: linear-gradient(45deg, #28a745, #20c997);
     color: white;
     border: none;
@@ -143,6 +195,8 @@
     flex-shrink: 0;
     transition: all 0.2s ease;
     text-align: center;
+    display: inline-flex;
+    align-items: center;
 }
 
 .join-btn:hover {
@@ -257,28 +311,8 @@
 
 /* Responsive Design */
 @media (max-width: 768px) {
-    .room-list {
-        height: calc(100vh - 380px);
-    }
-
-    .room-item {
-        flex-direction: column;
-        gap: 12px;
-        text-align: center;
-        padding: 14px;
-    }
-
-    .room-info strong {
-        font-size: 1.1rem;
-    }
-
     .join-form {
         flex-direction: column;
-    }
-
-    .join-btn {
-        width: 100%;
-        min-height: 44px;
     }
 
     .modal-content {
@@ -323,4 +357,27 @@
     .modal-footer {
         padding: 12px 16px 16px;
     }
+}
+
+/* ── Große Bildschirme: 80% Breite zentriert ── */
+@media (min-width: 1024px) {
+    .container {
+        width: 80%;
+        margin: 0 auto;
+    }
+}
+
+/* ── Kleine Bildschirme: Button neben Titel, weniger Infos ── */
+@media (max-width: 768px) {
+    .join-icon-btn              { display: inline-flex; align-items: center; justify-content: center; }
+    .join-text-btn              { display: none; }
+    .join-form input            { padding: 8px 12px; font-size: 0.9rem; }
+    .join-form                  { margin-top: 6px; gap: 8px; }
+    .direct-join h3             { font-size: 1rem; }
+    .btn-back                   { display: inline-flex !important; align-items: center !important; height: 30px !important; padding: 0 10px !important; line-height: 1 !important; font-size: 0.82em !important; gap: 4px; }
+}
+
+@media (max-width: 640px) {
+    .room-meta-secondary  { display: none; }  /* Gruppengröße / Multiplikator */
+    .room-type-badge      { display: none; }  /* Öffentlich / Privat */
 }

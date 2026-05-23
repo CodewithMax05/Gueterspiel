@@ -1,13 +1,18 @@
 /* static/css/index.css */
+body { overflow-y: auto; }
+
+/* main als Flex-Container damit .container flex: 1 nutzen kann */
+main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
 .container {
+    flex: 1;                    /* füllt main komplett aus */
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    min-height: calc(100vh - 140px);
-    padding: 20px;
+    padding: 16px 20px;
     width: 100%;
-    gap: 20px;
+    gap: 16px;
 }
 
 /* ── Rejoin-Banner ── */
@@ -77,7 +82,7 @@
     background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
     border-radius: 16px;
-    padding: 30px;
+    padding: 22px 30px;
     max-width: 650px;
     width: 90%;
     border: 1px solid rgba(255, 255, 255, 0.2);
@@ -87,7 +92,7 @@
 
 .welcome-section h1 {
     font-size: 1.8em;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
 }
 
 .welcome-text {
@@ -98,8 +103,8 @@
 
 .game-explanation {
     text-align: center;
-    margin: 20px 0;
-    padding: 15px;
+    margin: 14px 0;
+    padding: 12px 15px;
     background: rgba(0, 0, 0, 0.2);
     border-radius: 10px;
     border-left: 4px solid #667eea;
@@ -116,7 +121,7 @@
 }
 
 .btn-container {
-    margin: 25px 0 5px 0;
+    margin: 16px 0 4px 0;
 }
 
 .btn-large {
@@ -131,7 +136,6 @@
 @media (max-width: 768px) {
     .container {
         padding: 15px;
-        min-height: calc(100vh - 120px);
     }
 
     .hero-box {
@@ -193,8 +197,6 @@
 
 @media (max-height: 700px) {
     .container {
-        min-height: calc(100vh - 120px);
-    }
 
     .hero-box {
         padding: 18px;

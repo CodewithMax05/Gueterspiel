@@ -827,6 +827,106 @@ def check_room_access(room_id):
 
     return room, player
 
+# ---------------------------------------------------------------------------
+# Seed-Route (nur Development)
+# ---------------------------------------------------------------------------
+@app.route('/seed')
+def seed_data():
+    import random, string
+
+    if is_production:
+        return 'Seed nur in Development verfügbar', 403
+
+    random.seed(42)
+    names = ['Anna', 'Ben', 'Cara', 'David', 'Eva', 'Felix', 'Greta', 'Hans',
+             'Ida', 'Jan', 'Kira', 'Leo', 'Mia', 'Noah', 'Olivia', 'Paul',
+             'Quinn', 'Rosa', 'Sam', 'Tina', 'Uwe', 'Vera', 'Willi', 'Xena']
+
+    # ── 15 aktive Räume ──────────────────────────────────────────────────────
+    for i in range(15):
+        room_id = f'SEED{i+1:02d}'
+        if room_id in rooms:
+            continue
+        settings = {
+            'initial_coins':      random.choice([5, 10, 20]),
+            'multiplier':         random.choice([1.5, 2.0, 2.5, 3.0]),
+            'group_size':         random.choice([2, 3, 4]),
+            'round_duration':     random.choice([30, 60, 90]),
+            'fixed_groups':       random.choice([True, False]),
+            'max_rounds':         random.randint(3, 10),
+            'room_type':          random.choice(['public', 'public', 'public', 'private']),
+        }
+        room = GameRoom(room_id, f'leader_{i}', settings)
+        room.leader_name = random.choice(names)
+        room.status = random.choice(['waiting', 'waiting', 'ready', 'playing'])
+        n_players = random.randint(1, 8)
+        for j in range(n_players):
+            fake_pid = f'p_{room_id}_{j}'
+            room.players.append(fake_pid)
+        rooms[room_id] = room
+
+    # ── 15 History-Einträge ──────────────────────────────────────────────────
+    medals = ['🥇', '🥈', '🥉']
+    for i in range(15):
+        hid = f'HIST{i+1:02d}'
+        if hid in game_history_store:
+            continue
+        n_rounds  = random.randint(3, 8)
+        n_players = random.randint(4, 12)
+        init      = random.choice([5, 10, 20])
+        mult      = random.choice([1.5, 2.0, 2.5])
+        g_size    = random.choice([2, 3, 4])
+
+        player_names = random.sample(names, min(n_players, len(names)))
+
+        # Einfache Top-3
+        top_players = []
+        for rank, pname in enumerate(player_names[:3]):
+            profit = round(random.uniform(-init, init * n_rounds * 0.5), 2)
+            profit_history = [0] + [round(random.uniform(-2, 5), 2) for _ in range(n_rounds)]
+            # kumulieren
+            cum = 0
+            profit_history_cum = [0]
+            for v in profit_history[1:]:
+                cum += v
+                profit_history_cum.append(round(cum, 2))
+            top_players.append({
+                'rank':           rank + 1,
+                'name':           pname,
+                'medal':          medals[rank],
+                'profit':         profit,
+                'coop_rate':      round(random.uniform(20, 100), 1),
+                'group_number':   rank + 1,
+                'profit_history': profit_history_cum,
+            })
+
+        game_history_store[hid] = {
+            'room_id':                hid,
+            'completed_at':           time.time() - random.randint(0, 6 * 86400),
+            'leader_id':              f'leader_h_{i}',
+            'leader_name':            random.choice(names),
+            'settings': {
+                'initial_coins': init,
+                'multiplier':    mult,
+                'group_size':    g_size,
+                'round_duration': 60,
+                'fixed_groups':   True,
+            },
+            'current_round':          n_rounds,
+            'groups':                 [],
+            'group_cooperation':      {},
+            'players_snapshot':       [],
+            'group_comparison':       [],
+            'top_players':            top_players,
+            'groups_details':         [],
+            'round_by_round_summary': [],
+            'fixed_groups':           True,
+            'total_players':          n_players,
+        }
+
+    return f'Seed OK: {len(rooms)} Räume, {len(game_history_store)} History-Einträge'
+
+
 # Routen
 @app.route('/')
 def index():
@@ -914,7 +1014,7 @@ def create_game():
         session['room_id'] = room_id
         session['is_leader'] = True
         
-        test_names = [f"Test-Spieler {i}" for i in range(1, 39)]
+        test_names = [f"Test-Spieler {i}" for i in range(1, 40)]
         for name in test_names:
             test_id = str(uuid.uuid4())
             test_player = Player(test_id, name, is_test=True)
