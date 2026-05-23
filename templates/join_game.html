@@ -254,7 +254,7 @@
             player_name: playerName,
             access_code: accessCode,
         });
-        closeNameModal();
+        // Modal bleibt offen bis der Server Erfolg oder Fehler zurückmeldet
     }
 
     function joinByCode() {
@@ -279,11 +279,8 @@
     // WebSocket
     // ----------------------------------------------------------------
     socket.on('room_joined', function(data) {
+        closeNameModal();
         window.location.href = `/game_room/${data.room_id}?player_id=${data.player_id}`;
-    });
-
-    socket.on('error', function(data) {
-        showNotification(data.message, 'error');
     });
 
     // Raum neu erstellt oder gelöscht → komplette Liste neu laden

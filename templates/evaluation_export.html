@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Spielauswertung – Raum {{ room.id }}</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
@@ -24,7 +24,11 @@
             color: white;
             min-height: 100vh;
             line-height: 1.6;
-            padding: 30px 20px 60px;
+            /* Safe Area: Notch oben, Home-Indicator unten, Seiten im Landscape */
+            padding: calc(30px + env(safe-area-inset-top))
+                     max(20px, env(safe-area-inset-right))
+                     calc(60px + env(safe-area-inset-bottom))
+                     max(20px, env(safe-area-inset-left));
         }
 
         /* ── 80%-Breite auf großen Bildschirmen ── */

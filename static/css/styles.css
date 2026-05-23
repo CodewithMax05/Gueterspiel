@@ -56,6 +56,8 @@ header {
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     padding: 1rem 0;
+    /* Safe Area: Notch / Dynamic Island oben */
+    padding-top: calc(1rem + env(safe-area-inset-top));
     position: relative;
     box-shadow: 0 4px 24px rgba(102, 126, 234, 0.08);
 }
@@ -85,7 +87,9 @@ header::after {
     align-items: center;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 20px;
+    /* Safe Area: Seiten-Einbuchtungen (z.B. iPhone Landscape) */
+    padding: 0 max(20px, env(safe-area-inset-right));
+    padding-left: max(20px, env(safe-area-inset-left));
 }
 
 .logo {
@@ -186,6 +190,11 @@ header::after {
 footer {
     text-align: center;
     padding: 1rem 2rem;
+    /* Safe Area: Home-Indicator / Gestenleiste unten */
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    /* Safe Area: Seiten-Einbuchtungen (Landscape) */
+    padding-left: max(2rem, env(safe-area-inset-left));
+    padding-right: max(2rem, env(safe-area-inset-right));
     margin-top: auto;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(0, 0, 0, 0.3);
@@ -291,8 +300,9 @@ input::placeholder {
 /* Flash Messages */
 .flash-messages {
     position: fixed;
-    top: 80px;
-    right: 20px;
+    /* Safe Area: Header-Höhe + Notch-Offset */
+    top: calc(80px + env(safe-area-inset-top));
+    right: max(20px, env(safe-area-inset-right));
     z-index: 1000;
 }
 
