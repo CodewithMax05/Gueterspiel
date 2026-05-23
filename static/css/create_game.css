@@ -10,6 +10,13 @@ main {
     overflow-y: auto;
 }
 
+/* Mobile: natürliches Dokument-Scrollen statt innerer Scroll-Box (iOS-URL-Leiste
+   blendet flüssig aus → kein "1s warten" am Ende, Footer immer erreichbar). */
+@media (max-width: 768px) {
+    html, body { height: auto; }
+    main { overflow: visible; min-height: 0; }
+}
+
 .form-container {
     max-width: 800px;
     margin: 0 auto;

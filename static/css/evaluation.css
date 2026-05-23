@@ -2,6 +2,13 @@
 html, body { height: 100%; }
 main { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
 
+/* Mobile: natürliches Dokument-Scrollen statt innerer Scroll-Box (iOS-URL-Leiste
+   blendet flüssig aus → kein "1s warten" am Ende, Footer immer erreichbar). */
+@media (max-width: 768px) {
+    html, body { height: auto; }
+    main { overflow: visible; min-height: 0; }
+}
+
 .evaluation-container {
     max-width: none;
     width: 100%;

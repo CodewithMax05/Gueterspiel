@@ -158,6 +158,13 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 }
 
 @media (max-width: 768px) {
+    /* Mobile: Dokument scrollt natürlich; die History-Liste behält ihren gedeckelten
+       Innen-Scroll (max-height) – so bleibt der Infinite-Scroll (IntersectionObserver)
+       intakt und der Footer ist per Dokument-Scroll erreichbar. */
+    html, body { height: auto; }
+    .container { overflow: visible; min-height: 0; }
+    .history-list { flex: none; max-height: 65vh; }
+
     .history-item {
         padding: 10px 14px;
         gap: 10px;

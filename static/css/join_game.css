@@ -311,6 +311,13 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 /* Responsive Design */
 @media (max-width: 768px) {
+    /* Mobile: Dokument scrollt natürlich; die Raumliste behält ihren gedeckelten
+       Innen-Scroll (max-height) – so bleibt der Infinite-Scroll-Listener intakt
+       und der Footer ist per Dokument-Scroll erreichbar. */
+    html, body { height: auto; }
+    .container { overflow: visible; min-height: 0; }
+    .room-list { flex: none; max-height: 65vh; }
+
     .join-form {
         flex-direction: column;
     }
