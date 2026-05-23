@@ -124,6 +124,7 @@ class GameRoom:
         self.timer_running = False
         self.incognito_mode = settings.get('incognito_mode', False)
         self.room_type = settings.get('room_type', 'public')
+        self.created_at = time.time()
         self.access_code = settings.get('access_code')
         self.chat_enabled = settings.get('chat_enabled', True)
         self.round_end_time = None
@@ -290,6 +291,12 @@ class GameRoom:
                 'ready_count': sum(1 for pid in non_leaders if players[pid].ready),
                 'total_players': len(non_leaders)
             }, room=self.id)
+            # Globaler Broadcast damit join_game-Seite Spielerzahl/Status live aktualisiert
+            socketio.emit('room_updated', {
+                'room_id': self.id,
+                'status': self.status,
+                'player_count': len(non_leaders)
+            })
         except Exception as e:
             logger.error("Fehler beim Senden des Status-Updates: %s", e)
     
@@ -858,7 +865,7 @@ def seed_data():
         }
         room = GameRoom(room_id, f'leader_{i}', settings)
         room.leader_name = random.choice(names)
-        room.status = random.choice(['waiting', 'waiting', 'ready', 'playing'])
+        room.status = random.choice(['waiting', 'waiting', 'ready'])
         n_players = random.randint(1, 8)
         for j in range(n_players):
             fake_pid = f'p_{room_id}_{j}'
@@ -1448,7 +1455,11 @@ def api_rooms():
                 'settings':     room.settings,
                 'status':       room.status,
                 'room_type':    room.room_type,
+                'created_at':   getattr(room, 'created_at', 0),
             })
+
+    # Neueste Räume zuerst
+    available_rooms.sort(key=lambda r: r['created_at'], reverse=True)
 
     start      = (page - 1) * limit
     page_items = available_rooms[start:start + limit]

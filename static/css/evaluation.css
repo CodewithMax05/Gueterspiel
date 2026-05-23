@@ -1,7 +1,19 @@
+/* ── Vollbild-Layout ── */
+html, body { height: 100%; }
+main { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
+
 .evaluation-container {
-    max-width: 1200px;
-    margin: 0 auto;
+    max-width: none;
+    width: 100%;
     padding: 20px;
+    box-sizing: border-box;
+}
+
+@media (min-width: 1024px) {
+    .evaluation-container {
+        width: 80%;
+        margin: 0 auto;
+    }
 }
 
 .evaluation-title {
@@ -565,16 +577,18 @@ th {
     background: linear-gradient(90deg, #764ba2, #667eea);
 }
 
-/* ── Gruppenvergleich: horizontales Scrollen unter 920px ── */
-@media (max-width: 920px) {
-    /* Fixe Spaltenbreiten aufheben → Tabelle scrollt horizontal */
+/* ── Gruppenvergleich: auto-Layout unter 1024px (= unter dem 80%-Container-Breakpoint) ──
+   Grund: Bei fixed-Layout füllt die Detail-td die volle Containerbreite →
+   der innere Inhalt passt rein und die Scrollbar verschwindet.
+   Mit auto-Layout bleibt die Tabelle kompakt (content-sized), die Detail-td
+   ist schmaler → innere Player-Tabellen scrollen korrekt. */
+@media (max-width: 1023px) {
     .table-container > table {
         table-layout: auto;
-        min-width: 640px;   /* Mindestbreite damit Spalten lesbar bleiben */
+        min-width: 640px;
         width: auto;
     }
 
-    /* Spaltenbreiten-Overrides entfernen */
     .table-container > table th:nth-child(1),
     .table-container > table th:nth-child(2),
     .table-container > table th:nth-child(3),
@@ -584,7 +598,6 @@ th {
         width: auto;
     }
 
-    /* Padding in Zellen etwas kleiner */
     .table-container > table th,
     .table-container > table td {
         padding: 10px 12px;
@@ -610,8 +623,8 @@ th {
     }
 
     .evaluation-title {
-        font-size: 1.9em;
-        margin-bottom: 18px;
+        font-size: 1.5em;
+        margin-bottom: 14px;
     }
 
     /* Sections */
@@ -660,25 +673,51 @@ th {
 
     /* Gruppen-Ranking: bleibt horizontal, kompakter */
     .group-rank-item {
-        padding: 14px 16px;
-        gap: 10px;
+        padding: 12px 14px;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .rank-position {
+        font-size: 1.2em;
+        min-width: 30px;
+        margin-right: 10px;
     }
 
     .group-stats {
-        gap: 10px;
+        gap: 6px;
+        margin-left: 10px;
     }
 
     .group-stat {
         min-width: auto;
+        font-size: 0.88em;
+    }
+
+    .member-tag {
+        font-size: 0.8em;
+        padding: 3px 6px;
     }
 
     /* Podium: bleibt horizontal auf Tablet */
     .podium-section {
-        padding: 20px 14px;
+        padding: 16px 12px;
     }
 
+    .podium-card {
+        padding: 14px 10px 12px;
+    }
+
+    .podium-medal  { font-size: 1.8em; }
+    .podium-name   { font-size: 0.95em; }
+    .podium-profit { font-size: 1.2em; }
+
+    .podium-base.gold   { height: 60px; }
+    .podium-base.silver { height: 44px; }
+    .podium-base.bronze { height: 32px; }
+
     .podium-chart-wrapper {
-        height: 210px;
+        height: 200px;
     }
 
     /* Aktions-Buttons: auf Tablet 2 nebeneinander, letzter zentriert */
@@ -717,8 +756,8 @@ th {
     }
 
     .evaluation-title {
-        font-size: 1.4em;
-        margin-bottom: 14px;
+        font-size: 1.2em;
+        margin-bottom: 10px;
     }
 
     /* Sections */

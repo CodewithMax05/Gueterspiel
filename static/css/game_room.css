@@ -1,4 +1,27 @@
 /* static/css/game_room.css */
+
+/* ── Vollbild-Layout ── */
+html, body { height: 100%; }
+main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* ── Breite: 80% auf großen Bildschirmen, 100% sonst ── */
+.container {
+    max-width: none;
+    width: 100%;
+}
+
+@media (min-width: 1024px) {
+    .container {
+        width: 80%;
+        margin: 0 auto;
+    }
+}
 .player-list { 
     margin: 20px 0; 
 }
@@ -360,6 +383,9 @@
 
 /* --- Tablet (max 768px) --- */
 @media (max-width: 768px) {
+    /* Überschrift */
+    h1 { font-size: 1.4em; }
+
     /* Spieler-Items: kompakter */
     .player-item {
         padding: 12px;
@@ -377,6 +403,12 @@
         width: 100%;
         box-sizing: border-box;
     }
+
+    .leader-name { font-size: 1rem; }
+    .leader-stats { font-size: 0.82rem; }
+
+    /* Room-Info: etwas kompakter */
+    .room-info p { font-size: 0.92em; }
 
     /* Aktions-Buttons: untereinander */
     .action-buttons .player-actions {
@@ -398,6 +430,11 @@
     /* Requirements-Box */
     .requirements {
         max-width: 100%;
+        font-size: 0.88em;
+    }
+
+    .requirements h4 {
+        font-size: 0.95em;
     }
 
     /* Room-Info */
@@ -413,6 +450,8 @@
 
 /* --- Mobile (max 480px) --- */
 @media (max-width: 480px) {
+    h1 { font-size: 1.15em; }
+
     .player-item {
         flex-wrap: wrap;
         padding: 10px;
@@ -429,12 +468,18 @@
     }
 
     .leader-avatar {
-        font-size: 1.6rem;
+        font-size: 1.4rem;
     }
 
     .leader-name {
-        font-size: 1em;
+        font-size: 0.95em;
     }
+
+    .room-info { padding: 10px; }
+    .room-info p { font-size: 0.88em; }
+
+    .requirements { font-size: 0.82em; }
+    .requirements h4 { font-size: 0.9em; }
 
     .leave-modal {
         padding: 24px 18px 20px;

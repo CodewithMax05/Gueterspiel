@@ -348,10 +348,11 @@
             console.log('DEBUG: Zeit abgelaufen (client side), reiche 0 Coins ein');
             selectedContribution = 0;
         }
-        submitContribution();
+        // Kein Overlay beim automatischen Timer-Submit – nur still senden
+        submitContribution(false);
     }
 
-    function submitContribution() {
+    function submitContribution(showOverlay = true) {
         if (hasSubmitted) {
             console.log('DEBUG: bereits eingereicht, Ignoriere weiteren Submit');
             return;
@@ -361,11 +362,21 @@
             return;
         }
 
-        // UI: disable interaktion
-        disableInteractionAfterSubmit();
-
         // Markiere als abgegeben (verhindert doppelte submits)
         hasSubmitted = true;
+
+        if (showOverlay) {
+            // Manueller Submit: Overlay anzeigen
+            disableInteractionAfterSubmit();
+        } else {
+            // Automatischer Timer-Submit: nur Eingaben sperren, kein Overlay
+            const submitBtn = document.getElementById('submitBtn');
+            const slider    = document.getElementById('contributionSlider');
+            const input     = document.getElementById('contributionInput');
+            if (submitBtn) submitBtn.disabled = true;
+            if (slider)    slider.disabled    = true;
+            if (input)     input.disabled     = true;
+        }
 
         // Beitrag an Server senden
         socket.emit('submit_contribution', {

@@ -8,6 +8,16 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
+        /* ── Globale Scrollbar ── */
+        html {
+            scrollbar-width: thin;
+            scrollbar-color: #667eea rgba(255, 255, 255, 0.05);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #667eea, #764ba2); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #764ba2, #667eea); }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
@@ -15,6 +25,21 @@
             min-height: 100vh;
             line-height: 1.6;
             padding: 30px 20px 60px;
+        }
+
+        /* ── 80%-Breite auf großen Bildschirmen ── */
+        @media (min-width: 1024px) {
+            .section-box,
+            .summary-section {
+                width: 80%;
+                max-width: 1200px;
+            }
+            .evaluation-title,
+            .meta {
+                width: 80%;
+                margin-left: auto;
+                margin-right: auto;
+            }
         }
 
         /* ── Persönliches Ergebnis ── */
@@ -327,8 +352,8 @@
 
         /* ── Responsive ── */
 
-        /* Gruppen-Tabelle: horizontal scrollen unter 920px */
-        @media (max-width: 920px) {
+        /* Gruppen-Tabelle: horizontal scrollen unter 1024px */
+        @media (max-width: 1023px) {
             table {
                 table-layout: auto;
                 min-width: 640px;

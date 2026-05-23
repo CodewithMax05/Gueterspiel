@@ -29,10 +29,6 @@
     <h3 class="list-heading">Verfügbare Räume</h3>
     <div class="room-list" id="roomList">
         <p class="loading-text">Lade verfügbare Räume…</p>
-        <div id="roomLoadingIndicator" class="loading-indicator" style="display:none;">
-            <i class="fas fa-spinner fa-spin"></i> Lade weitere Räume…
-        </div>
-        <div id="roomSentinel" class="scroll-sentinel"></div>
     </div>
 </div>
 
@@ -95,15 +91,17 @@
         document.getElementById('modalAccessCode')
             ?.addEventListener('keypress', e => { if (e.key === 'Enter') submitPlayerName(); });
 
-        // Observer mit dem Container als Root – scrollt nur innerhalb der Box
+        // Scroll-Event auf dem Container – lädt weitere Räume wenn 90% gescrollt
         const roomList = document.getElementById('roomList');
-        const sentinel = document.getElementById('roomSentinel');
-        const roomObserver = new IntersectionObserver(entries => {
-            if (entries[0].isIntersecting && !roomsLoading && roomsHasMore) {
-                loadMoreRooms();
-            }
-        }, { root: roomList, rootMargin: '120px' });
-        if (sentinel) roomObserver.observe(sentinel);
+        if (roomList) {
+            roomList.addEventListener('scroll', function() {
+                if (roomsLoading || !roomsHasMore) return;
+                const { scrollTop, scrollHeight, clientHeight } = roomList;
+                if (scrollTop + clientHeight >= scrollHeight * 0.9) {
+                    loadMoreRooms();
+                }
+            });
+        }
 
         resetAndReloadRooms();
     });
@@ -136,16 +134,13 @@
                 if (roomPage === 1) list.innerHTML = '';
 
                 if (data.items.length === 0 && roomPage === 1) {
-                    // Placeholder vor Sentinel/Indikator einfügen
                     const p = document.createElement('p');
                     p.className = 'empty-text';
                     p.textContent = 'Keine aktiven Räume verfügbar';
-                    list.insertBefore(p, document.getElementById('roomLoadingIndicator'));
+                    list.appendChild(p);
                 } else {
-                    const indicator = document.getElementById('roomLoadingIndicator');
                     data.items.forEach(room => {
-                        const el = buildRoomElement(room);
-                        list.insertBefore(el, indicator);
+                        list.appendChild(buildRoomElement(room));
                     });
                 }
 
@@ -153,6 +148,12 @@
                 roomPage++;
                 roomsLoading = false;
                 if (indicator) indicator.style.display = 'none';
+
+                // Falls die Liste nicht voll genug ist um zu scrollen,
+                // direkt weiterladen bis sie überläuft oder alles geladen ist
+                if (roomsHasMore && list.scrollHeight <= list.clientHeight) {
+                    loadMoreRooms();
+                }
             })
             .catch(() => {
                 roomsLoading = false;
@@ -167,11 +168,12 @@
         const roomTypeBadge = room.room_type === 'private' ? '🔒 Privat' : '🌐 Öffentlich';
         const el = document.createElement('div');
         el.className = 'room-item';
+        el.dataset.roomId = room.id;
         el.innerHTML = `
             <strong class="room-name">Raum ${room.id}</strong>
             <div class="room-meta-row">
                 <p class="room-meta-primary">
-                    ${room.player_count} Spieler | ${statusText}<span class="room-type-badge"> | ${roomTypeBadge}</span>
+                    <span class="room-player-count">${room.player_count}</span> Spieler | <span class="room-status-text">${statusText}</span><span class="room-type-badge"> | ${roomTypeBadge}</span>
                 </p>
                 <button class="join-btn" onclick="openNameModal('${room.id}', '${room.room_type}', '')">Beitreten</button>
             </div>
@@ -180,6 +182,15 @@
             </p>
         `;
         return el;
+    }
+
+    function updateRoomCard(roomId, status, playerCount) {
+        const card = document.querySelector(`.room-item[data-room-id="${roomId}"]`);
+        if (!card) return;
+        const countEl  = card.querySelector('.room-player-count');
+        const statusEl = card.querySelector('.room-status-text');
+        if (countEl)  countEl.textContent  = playerCount;
+        if (statusEl) statusEl.textContent = status === 'ready' ? '🟢 Startbereit' : '🔴 Wartet auf Spieler';
     }
 
     // ----------------------------------------------------------------
@@ -275,12 +286,14 @@
         showNotification(data.message, 'error');
     });
 
+    // Raum neu erstellt oder gelöscht → komplette Liste neu laden
     socket.on('room_list_updated', function() {
         resetAndReloadRooms();
     });
 
-    socket.on('room_status_updated', function() {
-        resetAndReloadRooms();
+    // Spieler beigetreten oder ready-Status geändert → Karte in-place aktualisieren
+    socket.on('room_updated', function(data) {
+        updateRoomCard(data.room_id, data.status, data.player_count);
     });
 </script>
 {% endblock %}
