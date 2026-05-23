@@ -386,23 +386,28 @@ class GameRoom:
             cooperative_players = 0
 
             for player_id in group['player_ids']:
+                if player_id not in players:
+                    continue
                 total_contribution += players[player_id].current_contribution
                 if players[player_id].current_contribution > 0:
                     cooperative_players += 1
 
             # Berechne Kooperationsquote für diese Gruppe
-            cooperation_rate = (cooperative_players / len(group['player_ids'])) * 100 if len(group['player_ids']) > 0 else 0
+            active_ids = [pid for pid in group['player_ids'] if pid in players]
+            cooperation_rate = (cooperative_players / len(active_ids)) * 100 if active_ids else 0
 
             if self.current_round not in self.group_cooperation:
                 self.group_cooperation[self.current_round] = {}
             self.group_cooperation[self.current_round][group['group_number']] = cooperation_rate
 
             # Payout pro Spieler (basierend auf vollständiger Gruppensumme)
-            payout_per_player = (total_contribution * multiplier) / len(group['player_ids']) if len(group['player_ids']) > 0 else 0
+            payout_per_player = (total_contribution * multiplier) / len(active_ids) if active_ids else 0
 
             group_players = []
             # 2) Jetzt für jeden Spieler Auszahlung berechnen und Guthaben aktualisieren
             for player_id in group['player_ids']:
+                if player_id not in players:
+                    continue
                 player = players[player_id]
                 contribution = player.current_contribution
 
@@ -899,7 +904,7 @@ def create_game():
         elif end_mode == 'probability':
             settings['min_rounds'] = max(1, min(int(request.form.get('min_rounds', 1)), 50))
             settings['max_rounds_probability'] = max(1, min(int(request.form.get('max_rounds_probability', 10)), 50))
-            settings['continue_probability'] = float(request.form.get('continue_probability', 0.5))
+            settings['continue_probability'] = max(0.0, min(1.0, float(request.form.get('continue_probability', 0.5))))
 
             if settings['min_rounds'] > settings['max_rounds_probability']:
                 settings['min_rounds'] = settings['max_rounds_probability']
@@ -1443,10 +1448,10 @@ def api_room_dashboard_status(room_id):
     # Wenn die Runde bereits in 'round_results' ist, benutze den gespeicherten finalen Zähler.
     if room.status == 'round_results':
         submitted = getattr(room, 'submitted_count', len(room.submitted_players))
-        total = getattr(room, 'total_players', len([pid for pid in room.players if not players[pid].is_leader]))
+        total = getattr(room, 'total_players', len([pid for pid in room.players if pid in players and not players[pid].is_leader]))
     else:
         submitted = len(room.submitted_players)
-        total = len([pid for pid in room.players if not players[pid].is_leader])
+        total = len([pid for pid in room.players if pid in players and not players[pid].is_leader])
 
     return jsonify({
         'success': True,
@@ -2003,7 +2008,14 @@ def handle_submit_contribution(data):
     if not player_id or player_id not in players:
         return
 
-    contribution = round(float(data.get('contribution', 0)), 2)
+    try:
+        contribution = round(float(data.get('contribution', 0)), 2)
+    except (TypeError, ValueError):
+        return
+    if contribution < 0:
+        emit('error', {'message': 'Ungültiger Beitrag'}, room=request.sid)
+        return
+
     player = players[player_id]
     room_id = player.room_id
 
@@ -2078,15 +2090,16 @@ def handle_retract_contribution():
 
     room = rooms[room_id]
 
-    if room.status != 'playing':
-        return
+    with finish_round_lock:
+        if room.status != 'playing':
+            return
 
-    # Beitrag zurückziehen
-    player.current_contribution = 0
-    room.submitted_players.discard(player_id)
+        # Beitrag zurückziehen
+        player.current_contribution = 0
+        room.submitted_players.discard(player_id)
 
-    submitted_count = len(room.submitted_players)
-    total_players   = len(room.non_leader_pids())
+        submitted_count = len(room.submitted_players)
+        total_players   = len(room.non_leader_pids())
 
     socketio.emit('contribution_submitted', {
         'submitted_count': submitted_count,
