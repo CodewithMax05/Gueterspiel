@@ -383,6 +383,12 @@ main {
 
 /* --- Tablet (max 768px) --- */
 @media (max-width: 768px) {
+    /* Natürliches Dokument-Scrollen statt innerer Scroll-Box.
+       So blendet iOS die URL-Leiste flüssig beim Scrollen aus → kein "1s warten"
+       am Seitenende, und der Footer ist immer erreichbar. Desktop bleibt unberührt. */
+    html, body { height: auto; }
+    main { overflow: visible; min-height: 0; }
+
     /* Überschrift */
     h1 { font-size: 1.4em; }
 
