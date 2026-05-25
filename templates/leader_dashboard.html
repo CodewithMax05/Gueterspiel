@@ -17,21 +17,25 @@
     </div>
     {% endif %}
     
-    <!-- Timer -->
-    <div class="timer-display">
-        <div class="timer-label">⏱️ Verbleibende Zeit</div>
-        <div class="timer-time" id="timer">--</div>
-        <div class="timer-unit">Sekunden</div>
-    </div>
-    
-    <!-- Status-Übersicht -->
+    <!-- Status-Übersicht (inkl. Timer) -->
     <div class="status-overview">
         <div class="status-item">
-            <div class="status-label">Aktive Gruppen</div>
+            <div class="timer-circle">
+                <svg class="progress-ring" viewBox="0 0 100 100">
+                    <circle class="progress-ring-background" cx="50" cy="50" r="45" stroke-width="10"></circle>
+                    <circle class="progress-ring-circle" cx="50" cy="50" r="45" stroke-width="10"></circle>
+                </svg>
+                <div class="timer-content">
+                    <div class="timer-time" id="timer">--</div>
+                </div>
+            </div>
+        </div>
+        <div class="status-item">
+            <div class="status-label">Gruppen</div>
             <div class="status-value" id="totalGroups">{{ room.groups|length if room.groups else 0 }}</div>
         </div>
         <div class="status-item">
-            <div class="status-label">Aktive Spieler</div>
+            <div class="status-label">Spieler</div>
             <div class="status-value" id="totalPlayers">{{ room.players|length }}</div>
         </div>
         <div class="status-item">
@@ -130,11 +134,12 @@
 </div>
 
 <!-- Data attributes für JavaScript -->
-<div id="dashboard-data" 
+<div id="dashboard-data"
      data-room-id="{{ room.id }}"
      data-total-players="{{ room.players|length }}"
      data-group-size="{{ room.settings.group_size }}"
      data-current-round="{{ room.current_round }}"
+     data-round-duration="{{ room.settings.round_duration }}"
      class="hidden">
 </div>
 {% endblock %}
@@ -150,12 +155,23 @@
     let initialStatusLoaded = false;
     let playersInResults = 0;
     let allPlayersInResults = false;
+    let roundDuration = 0;
+    let progressRing = null;
 
     document.addEventListener('DOMContentLoaded', function() {
         // Daten aus HTML data attributes lesen
         const dashboardData = document.getElementById('dashboard-data');
         roomId = dashboardData.dataset.roomId;
         totalPlayers = parseInt(dashboardData.dataset.totalPlayers) || 0;
+        roundDuration = parseInt(dashboardData.dataset.roundDuration) || 0;
+
+        // Fortschrittsring initialisieren (wie auf der Spieler-Seite)
+        progressRing = document.querySelector('.progress-ring-circle');
+        if (progressRing) {
+            const circumference = 45 * 2 * Math.PI; // r=45 aus dem SVG
+            progressRing.style.strokeDasharray = `${circumference} ${circumference}`;
+            progressRing.style.strokeDashoffset = circumference;
+        }
 
         // Sofort sichere UI-Defaults setzen (vermeidet Flash)
         const progressFill = document.getElementById('progressFill');
@@ -189,11 +205,24 @@
         });
     });
 
+    function setProgress(percent) {
+        if (!progressRing) return;
+        const radius = progressRing.r.baseVal.value;
+        const circumference = radius * 2 * Math.PI;
+        const clamped = Math.min(100, Math.max(0, percent));
+        progressRing.style.strokeDashoffset = circumference - (clamped / 100) * circumference;
+    }
+
     function updateTimerDisplay() {
         const timerElement = document.getElementById('timer');
         if (!timerElement) return;
 
         timerElement.textContent = (typeof serverTimeLeft === 'number') ? serverTimeLeft : '--';
+
+        // Fortschrittsring aktualisieren
+        if (roundDuration && typeof serverTimeLeft === 'number') {
+            setProgress((serverTimeLeft / roundDuration) * 100);
+        }
 
         // Farb- und Warnzustände aktualisieren
         updateTimerWarnings();
@@ -203,13 +232,18 @@
         const timerElement = document.getElementById('timer');
         if (!timerElement) return;
 
-        timerElement.classList.remove('warning', 'danger');
+        timerElement.classList.remove('warning', 'danger', 'critical');
+        if (progressRing) progressRing.classList.remove('warning', 'danger', 'critical');
 
         if (typeof serverTimeLeft === 'number') {
-            if (serverTimeLeft <= 10) {
-                timerElement.classList.add('danger');
-            } else if (serverTimeLeft <= 30) {
-                timerElement.classList.add('warning');
+            let cls = null;
+            if (serverTimeLeft <= 5)       cls = 'critical';
+            else if (serverTimeLeft <= 15) cls = 'danger';
+            else if (serverTimeLeft <= 30) cls = 'warning';
+
+            if (cls) {
+                timerElement.classList.add(cls);
+                if (progressRing) progressRing.classList.add(cls);
             }
         }
     }

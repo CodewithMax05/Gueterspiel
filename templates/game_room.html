@@ -40,16 +40,15 @@
         <p><strong>Spieler:</strong> <span id="totalPlayers">{{ players|length }}</span></p>
         <p><strong>Bereit:</strong> <span id="readyCount">{{ ready_count }}</span></p>
         <p><strong>Gruppengröße:</strong> <span id="groupSize">{{ room.settings.get('group_size', 4) }}</span> Spieler</p>
+        {% if is_leader %}
+        <p class="req-status" id="reqStatus">Prüfe Voraussetzungen…</p>
+        {% endif %}
     </div>
 
     <!-- Buttons über den Spielern -->
     <div class="action-buttons">
         {% if is_leader %}
         <div class="leader-actions">
-            <div class="requirements">
-                <h4>Voraussetzungen für Spielstart:</h4>
-                <div id="reqMinPlayers">Prüfe...</div>
-            </div>
             <div class="action-buttons-row">
                 <button class="btn btn-disabled" id="startBtn" disabled>
                     <i class="fas fa-play"></i> Spiel starten
@@ -292,18 +291,26 @@
         fetch(`/api/room/${id}/requirements`)
             .then(r => r.json())
             .then(data => {
-                const reqEl   = document.getElementById('reqMinPlayers');
+                const reqEl    = document.getElementById('reqStatus');
                 const startBtn = document.getElementById('startBtn');
-                if (!reqEl || !startBtn) return;
 
-                if (data.can_start) {
-                    reqEl.innerHTML = '✅ Alle Voraussetzungen erfüllt!';
-                    startBtn.disabled = false;
-                    startBtn.classList.replace('btn-disabled', 'btn-success');
-                } else {
-                    reqEl.innerHTML = `❌ ${data.message}`;
-                    startBtn.disabled = true;
-                    startBtn.classList.replace('btn-success', 'btn-disabled');
+                if (startBtn) {
+                    startBtn.disabled = !data.can_start;
+                    if (data.can_start) {
+                        startBtn.classList.replace('btn-disabled', 'btn-success');
+                    } else {
+                        startBtn.classList.replace('btn-success', 'btn-disabled');
+                    }
+                }
+
+                if (reqEl) {
+                    if (data.can_start) {
+                        reqEl.textContent = '✅ Alle Voraussetzungen erfüllt';
+                        reqEl.className = 'req-status ok';
+                    } else {
+                        reqEl.textContent = '⚠️ ' + data.message;
+                        reqEl.className = 'req-status missing';
+                    }
                 }
             })
             .catch(err => console.error('Fehler beim Prüfen der Startvoraussetzungen:', err));

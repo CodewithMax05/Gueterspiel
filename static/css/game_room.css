@@ -112,24 +112,20 @@ main {
     margin: 20px 0;
 }
 
-.requirements {
-    background: rgba(255, 193, 7, 0.2);
-    padding: 15px;
-    border-radius: 8px;
-    margin: 0;
-    border-left: 4px solid #ffc107;
-    width: 100%;
-    max-width: 500px;
+/* Startvoraussetzungen-Status innerhalb der Info-Box (nur Leader) */
+.req-status {
+    margin: 14px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    font-weight: 600;
 }
 
-.requirements ul {
-    list-style: none;
-    padding-left: 0;
-    margin: 0;
+.req-status.ok {
+    color: #28a745;
 }
 
-.requirements li {
-    margin: 0;
+.req-status.missing {
+    color: #ffc107;
 }
 
 .connection-status {
@@ -433,16 +429,6 @@ main {
         width: 100%;
     }
 
-    /* Requirements-Box */
-    .requirements {
-        max-width: 100%;
-        font-size: 0.88em;
-    }
-
-    .requirements h4 {
-        font-size: 0.95em;
-    }
-
     /* Room-Info */
     .room-info {
         padding: 14px;
@@ -483,9 +469,6 @@ main {
 
     .room-info { padding: 10px; }
     .room-info p { font-size: 0.88em; }
-
-    .requirements { font-size: 0.82em; }
-    .requirements h4 { font-size: 0.9em; }
 
     .leave-modal {
         padding: 24px 18px 20px;
