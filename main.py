@@ -898,9 +898,9 @@ def create_game():
         # Basis-Einstellungen
         settings = {
             'initial_coins': initial_coins,
-            'group_size': int(request.form.get('group_size', 4)),
+            'group_size': max(2, int(request.form.get('group_size', 4))),
             'multiplier': multiplier,
-            'round_duration': int(request.form.get('round_duration', 60)),
+            'round_duration': max(5, int(request.form.get('round_duration', 60))),
             'fixed_groups': request.form.get('fixed_groups') == 'true',
             'end_mode': end_mode,
             'incognito_mode': request.form.get('incognito_mode') == 'true',
@@ -1045,10 +1045,14 @@ def game_room(room_id):
         session['is_leader'] = is_leader
         session.modified     = True
 
-    # Während laufendem Spiel: Spieler zur richtigen Seite weiterleiten
-    if not is_leader and room.status == 'playing':
+    # Während laufendem Spiel: zur richtigen Seite weiterleiten
+    if room.status == 'playing':
+        if is_leader:
+            return redirect(url_for('leader_dashboard', room_id=room_id))
         return redirect(url_for('game', room_id=room_id))
-    if not is_leader and room.status == 'round_results':
+    if room.status == 'round_results':
+        if is_leader:
+            return redirect(url_for('leader_dashboard', room_id=room_id))
         return redirect(url_for('round_results', room_id=room_id))
     if room.status == 'finished':
         return redirect(url_for('evaluation', room_id=room_id))
@@ -1363,8 +1367,11 @@ def api_check_rejoin():
 
 @app.route('/api/rooms')
 def api_rooms():
-    page  = max(1, int(request.args.get('page',  1)))
-    limit = max(1, int(request.args.get('limit', 10)))
+    try:
+        page  = max(1, int(request.args.get('page',  1)))
+        limit = max(1, int(request.args.get('limit', 10)))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Ungültige Parameter'}), 400
 
     available_rooms = []
     for room_id, room in rooms.items():
@@ -1575,8 +1582,11 @@ def api_room_can_continue(room_id):
 @app.route('/api/history')
 def api_history():
     """Gibt eine nach Datum sortierte, paginierte Liste aller History-Einträge zurück."""
-    page  = max(1, int(request.args.get('page',  1)))
-    limit = max(1, int(request.args.get('limit', 10)))
+    try:
+        page  = max(1, int(request.args.get('page',  1)))
+        limit = max(1, int(request.args.get('limit', 10)))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Ungültige Parameter'}), 400
     sort  = request.args.get('sort', 'newest')
     query = (request.args.get('q', '') or '').strip().lower()
 

@@ -158,6 +158,29 @@
     let roundDuration = 0;
     let progressRing = null;
 
+    // Verhindere Browser-Zurück-Navigation während des laufenden Spiels.
+    // replaceState markiert den aktuellen Eintrag ohne einen neuen anzulegen,
+    // sodass der erste Zurück-Klick sofort popstate auslöst (kein stiller
+    // Fake-Eintrag der den ersten Klick verschluckt).
+    // popstate legt dann einen neuen Eintrag an, damit weitere Klicks abgefangen werden.
+    window.isManuallyAborting = false;
+    history.replaceState(null, '', window.location.href);
+    window.addEventListener('popstate', function() {
+        history.pushState(null, '', window.location.href);
+    });
+    // Back-Forward-Cache (bfcache): nach Wiederherstellung aus dem Cache
+    // Socket-Status zurücksetzen und join_game_room erneut senden,
+    // damit sid_to_player korrekt befüllt wird bevor der Leader abbricht.
+    window.addEventListener('pageshow', function(e) {
+        if (e.persisted) {
+            history.pushState(null, '', window.location.href);
+            initialStatusLoaded = false;
+            if (socket.connected && currentRoomId) {
+                socket.emit('join_game_room', { room_id: currentRoomId });
+            }
+        }
+    });
+
     document.addEventListener('DOMContentLoaded', function() {
         // Daten aus HTML data attributes lesen
         const dashboardData = document.getElementById('dashboard-data');
@@ -459,6 +482,17 @@
     }
 
     function executeAbortGame() {
+        // Abort verweigern wenn Socket noch nicht vollständig verbunden ist.
+        // Nach manuellem Rejoin ist initialStatusLoaded erst nach dem ersten
+        // room_state_update true → sicher dass sid_to_player befüllt ist.
+        if (!socket.connected || !initialStatusLoaded) {
+            showNotification('Verbindung wird aufgebaut – bitte kurz warten und erneut versuchen.', 'warning', 3000);
+            return;
+        }
+        // Flag setzen BEVOR abort_game gesendet wird – verhindert dass
+        // room_closed in base.html einen konkurrierenden Redirect auslöst.
+        window.isManuallyAborting = true;
+        localStorage.removeItem('gueterspiel_session');
         const confirmBtn = document.getElementById('abortConfirmBtn');
         const abortBtn   = document.getElementById('abortGameBtn');
         confirmBtn.disabled = true;
