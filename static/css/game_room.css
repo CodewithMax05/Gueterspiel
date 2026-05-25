@@ -433,11 +433,6 @@ main {
     .room-info {
         padding: 14px;
     }
-
-    /* Timer-Anzeige (Leader) */
-    .timer-display {
-        padding: 14px;
-    }
 }
 
 /* --- Mobile (max 480px) --- */

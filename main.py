@@ -132,6 +132,11 @@ class GameRoom:
         self.created_at = time.time()           # für 7-Tage-Cleanup aktiver Räume
         self.players_arrived_for_round = set()  # Spieler, die die Spielseite geladen haben
         self.players_waiting_for_round = set()  # Spieler, auf die der Timer wartet
+        # Wahrscheinlichkeits-Modus: Entscheidung "weiterspielen?" wird pro Runde
+        # genau EINMAL gewürfelt und gecacht (verhindert, dass Button-Label und
+        # tatsächliche Entscheidung auseinanderlaufen oder ein Reload neu würfelt).
+        self._continue_decision = None
+        self._continue_decision_round = -1
 
     # ------------------------------------------------------------------
     # Spieler-Hilfsmethoden
@@ -341,7 +346,13 @@ class GameRoom:
         return sorted(groups_data, key=lambda x: x['total_wealth'], reverse=True)
     
     def should_continue_game(self):
-        """True wenn das Spiel laut Einstellungen eine weitere Runde spielen soll."""
+        """True wenn das Spiel laut Einstellungen eine weitere Runde spielen soll.
+
+        Im Wahrscheinlichkeits-Modus wird der Zufallswurf pro Runde nur EINMAL
+        ausgeführt und gecacht. Dadurch liefern Button-Label (can_continue-API)
+        und die tatsächliche Entscheidung (next_round) identische Ergebnisse,
+        und ein Seiten-Reload verändert das Resultat nicht.
+        """
         if self.current_round == 0:
             return True
 
@@ -354,7 +365,11 @@ class GameRoom:
                 return True
             if self.current_round >= self.settings.get('max_rounds_probability', 10):
                 return False
-            return random.random() <= self.settings.get('continue_probability', 0.5)
+            # Entscheidung für die aktuelle Runde nur einmal würfeln und cachen.
+            if self._continue_decision_round != self.current_round:
+                self._continue_decision = random.random() <= self.settings.get('continue_probability', 0.5)
+                self._continue_decision_round = self.current_round
+            return self._continue_decision
         return False
 
     def reset_for_next_round(self):
@@ -1562,8 +1577,23 @@ def api_history():
     """Gibt eine nach Datum sortierte, paginierte Liste aller History-Einträge zurück."""
     page  = max(1, int(request.args.get('page',  1)))
     limit = max(1, int(request.args.get('limit', 10)))
+    sort  = request.args.get('sort', 'newest')
+    query = (request.args.get('q', '') or '').strip().lower()
 
-    all_entries = sorted(game_history_store.values(), key=lambda x: x['completed_at'], reverse=True)
+    entries = list(game_history_store.values())
+
+    # Optionale Suche nach Raum-ID oder Leader-Name
+    if query:
+        entries = [
+            e for e in entries
+            if query in str(e.get('room_id', '')).lower()
+            or query in str(e.get('leader_name', '')).lower()
+        ]
+
+    # Sortierung: 'oldest' = aufsteigend, sonst (Standard) neueste zuerst
+    reverse_order = (sort != 'oldest')
+    all_entries   = sorted(entries, key=lambda x: x['completed_at'], reverse=reverse_order)
+
     start       = (page - 1) * limit
     page_slice  = all_entries[start:start + limit]
 

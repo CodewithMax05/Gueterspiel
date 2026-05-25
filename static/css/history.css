@@ -31,6 +31,86 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
     flex-shrink: 0;
 }
 
+/* ── Filter-/Sortier-Leiste ── */
+.history-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+}
+
+.history-search {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+}
+
+.history-search i {
+    position: absolute;
+    left: 14px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.9em;
+    pointer-events: none;
+}
+
+.history-search input {
+    width: 100%;
+    padding: 10px 14px 10px 38px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    color: #fff;
+    font-size: 0.95em;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.history-search input:focus {
+    outline: none;
+    border-color: #667eea;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.history-search input::placeholder {
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.history-sort {
+    flex-shrink: 0;
+    width: auto;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    color: #fff;
+    font-size: 0.95em;
+    cursor: pointer;
+}
+
+.history-sort:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.history-sort option {
+    background: #1a1a2e;
+    color: #fff;
+}
+
+@media (max-width: 480px) {
+    .history-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .history-sort {
+        width: 100%;
+    }
+}
+
 .history-list {
     display: flex;
     flex-direction: column;

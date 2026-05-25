@@ -122,9 +122,6 @@
         if (roomsLoading || !roomsHasMore) return;
         roomsLoading = true;
 
-        const indicator = document.getElementById('roomLoadingIndicator');
-        if (indicator) indicator.style.display = 'flex';
-
         fetch(`/api/rooms?page=${roomPage}&limit=${ROOM_LIMIT}`)
             .then(r => r.json())
             .then(data => {
@@ -147,7 +144,6 @@
                 roomsHasMore = data.has_more;
                 roomPage++;
                 roomsLoading = false;
-                if (indicator) indicator.style.display = 'none';
 
                 // Falls die Liste nicht voll genug ist um zu scrollen,
                 // direkt weiterladen bis sie überläuft oder alles geladen ist
@@ -157,8 +153,6 @@
             })
             .catch(() => {
                 roomsLoading = false;
-                const indicator = document.getElementById('roomLoadingIndicator');
-                if (indicator) indicator.style.display = 'none';
                 showNotification('Fehler beim Laden der Räume', 'error');
             });
     }

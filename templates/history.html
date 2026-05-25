@@ -15,6 +15,17 @@
 
     <p class="history-hint">Abgeschlossene Spiele werden 7 Tage lang gespeichert.</p>
 
+    <div class="history-controls">
+        <div class="history-search">
+            <i class="fas fa-search"></i>
+            <input type="text" id="historySearch" placeholder="Raum-ID oder Spielleiter suchen…" autocomplete="off">
+        </div>
+        <select id="historySort" class="history-sort" aria-label="Sortierung">
+            <option value="newest">Neueste zuerst</option>
+            <option value="oldest">Älteste zuerst</option>
+        </select>
+    </div>
+
     <div class="history-list" id="historyList">
         <p class="loading-text">Lade History…</p>
         <div id="historyLoadingIndicator" class="loading-indicator" style="display:none;">
@@ -28,28 +39,70 @@
 {% block scripts %}
 <script>
     // ----------------------------------------------------------------
-    // Infinite-Scroll-Zustand
+    // Zustand: Infinite-Scroll + Filter
     // ----------------------------------------------------------------
     let historyPage     = 1;
     let historyLoading  = false;
     let historyHasMore  = true;
+    let currentSort     = 'newest';
+    let currentQuery    = '';
+    let searchDebounce  = null;
     const HISTORY_LIMIT = 10;
 
     document.addEventListener('DOMContentLoaded', function() {
         const historyList = document.getElementById('historyList');
         const sentinel    = document.getElementById('historySentinel');
+
+        // Sentinel bleibt dauerhaft im DOM (wird beim Reset NICHT entfernt),
+        // damit der Observer zuverlässig weiter feuert.
         const historyObserver = new IntersectionObserver(entries => {
             if (entries[0].isIntersecting && !historyLoading && historyHasMore) {
                 loadMoreHistory();
             }
-        }, { root: historyList, rootMargin: '120px' });
+        }, { root: historyList, rootMargin: '150px' });
         if (sentinel) historyObserver.observe(sentinel);
+
+        // Sortierung
+        const sortSelect = document.getElementById('historySort');
+        if (sortSelect) {
+            sortSelect.addEventListener('change', function() {
+                currentSort = this.value;
+                resetAndReloadHistory();
+            });
+        }
+
+        // Suche (entprellt, damit nicht bei jedem Tastendruck gefetcht wird)
+        const searchInput = document.getElementById('historySearch');
+        if (searchInput) {
+            searchInput.addEventListener('input', function() {
+                const val = this.value.trim();
+                clearTimeout(searchDebounce);
+                searchDebounce = setTimeout(() => {
+                    currentQuery = val;
+                    resetAndReloadHistory();
+                }, 300);
+            });
+        }
+
         loadMoreHistory();
     });
 
     // ----------------------------------------------------------------
     // Lade-Logik
     // ----------------------------------------------------------------
+    function clearHistoryItems() {
+        document.querySelectorAll('#historyList .history-item, #historyList .empty-text, #historyList .loading-text')
+            .forEach(el => el.remove());
+    }
+
+    function resetAndReloadHistory() {
+        historyPage    = 1;
+        historyHasMore = true;
+        historyLoading = false;
+        clearHistoryItems();
+        loadMoreHistory();
+    }
+
     function loadMoreHistory() {
         if (historyLoading || !historyHasMore) return;
         historyLoading = true;
@@ -57,23 +110,33 @@
         const indicator = document.getElementById('historyLoadingIndicator');
         if (indicator) indicator.style.display = 'flex';
 
-        fetch(`/api/history?page=${historyPage}&limit=${HISTORY_LIMIT}`)
+        const params = new URLSearchParams({
+            page:  historyPage,
+            limit: HISTORY_LIMIT,
+            sort:  currentSort,
+            q:     currentQuery,
+        });
+
+        fetch(`/api/history?${params.toString()}`)
             .then(r => r.json())
             .then(data => {
-                const list = document.getElementById('historyList');
+                const list      = document.getElementById('historyList');
+                const indicator = document.getElementById('historyLoadingIndicator');
 
-                if (historyPage === 1) list.innerHTML = '';
+                // Beim ersten Batch (Erst-Load oder Reset) alte Inhalte entfernen
+                // – Sentinel + Indikator bleiben erhalten.
+                if (historyPage === 1) clearHistoryItems();
 
                 if (data.items.length === 0 && historyPage === 1) {
                     const p = document.createElement('p');
                     p.className = 'empty-text';
-                    p.textContent = 'Noch keine abgeschlossenen Spiele vorhanden.';
-                    list.insertBefore(p, document.getElementById('historyLoadingIndicator'));
+                    p.textContent = currentQuery
+                        ? 'Keine Treffer für deine Suche.'
+                        : 'Noch keine abgeschlossenen Spiele vorhanden.';
+                    list.insertBefore(p, indicator);
                 } else {
-                    const indicator = document.getElementById('historyLoadingIndicator');
                     data.items.forEach(entry => {
-                        const el = buildHistoryElement(entry);
-                        list.insertBefore(el, indicator);
+                        list.insertBefore(buildHistoryElement(entry), indicator);
                     });
                 }
 
@@ -81,14 +144,23 @@
                 historyPage++;
                 historyLoading = false;
                 if (indicator) indicator.style.display = 'none';
+
+                // Falls die Liste noch nicht scrollbar ist, direkt weiterladen
+                if (historyHasMore && list.scrollHeight <= list.clientHeight) {
+                    loadMoreHistory();
+                }
             })
             .catch(() => {
                 historyLoading = false;
                 const indicator = document.getElementById('historyLoadingIndicator');
                 if (indicator) indicator.style.display = 'none';
                 if (historyPage === 1) {
-                    document.getElementById('historyList').innerHTML =
-                        '<p class="empty-text">Fehler beim Laden der Spielhistorie.</p>';
+                    clearHistoryItems();
+                    const list = document.getElementById('historyList');
+                    const p = document.createElement('p');
+                    p.className = 'empty-text';
+                    p.textContent = 'Fehler beim Laden der Spielhistorie.';
+                    list.insertBefore(p, document.getElementById('historyLoadingIndicator'));
                 }
             });
     }

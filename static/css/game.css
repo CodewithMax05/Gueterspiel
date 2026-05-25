@@ -236,13 +236,6 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y
     margin-bottom: 20px;
 }
 
-.contribution-options {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-    gap: 10px;
-    margin: 20px 0;
-}
-
 .submit-button {
     width: 100%;
     padding: 20px;
@@ -474,10 +467,6 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y
     
     .coin {
         font-size: 30px;
-    }
-    
-    .contribution-options {
-        grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
     }
 
     .waiting-content {
