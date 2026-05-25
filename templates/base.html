@@ -331,6 +331,29 @@
                 window.location.href = `/game_room/${data.room_id}`;
             }, 300);
         });
+
+        // bfcache-Wiederherstellung: Der Browser kann Seiten aus dem Back-Forward-
+        // Cache wiederherstellen (e.persisted = true), ohne einen Server-Request zu
+        // machen. Der Socket ist dabei disconnected und der State veraltet.
+        //
+        // Strategie je nach Seite:
+        //  • Spielseiten (game_room, game, round_results): sofortiger location.reload()
+        //    → Server-Redirect greift zuverlässig (game_room→leader_dashboard, game→game).
+        //    Socket-basierte Weiterleitungen kommen nach mehreren bfcache-Zyklen
+        //    unzuverlässig – reload ist die robustere Lösung.
+        //  • Leader-Dashboard: nur hasJoinedRoomViaSocket zurücksetzen; der separate
+        //    pageshow-Handler in leader_dashboard.html übernimmt join_game_room.
+        window.addEventListener('pageshow', function(e) {
+            if (!e.persisted || !currentRoomId) return;
+            const path = window.location.pathname;
+            if (!path.startsWith('/leader_dashboard/')) {
+                // Spielseite aus bfcache: frisch laden damit Server-Redirect greift
+                window.location.reload();
+            } else {
+                // Leader-Dashboard aus bfcache: Socket-Join-Flag zurücksetzen
+                hasJoinedRoomViaSocket = false;
+            }
+        });
     </script>
     
     {% block scripts %}{% endblock %}

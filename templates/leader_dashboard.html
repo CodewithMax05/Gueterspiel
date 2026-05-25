@@ -164,7 +164,12 @@
     // Fake-Eintrag der den ersten Klick verschluckt).
     // popstate legt dann einen neuen Eintrag an, damit weitere Klicks abgefangen werden.
     window.isManuallyAborting = false;
-    history.replaceState(null, '', window.location.href);
+    // pushState legt einen Puffer-Eintrag mit gleicher URL an.
+    // popstate (ausgelöst bei Gleich-URL-Rückwärtsnavigation) legt sofort
+    // einen neuen Eintrag an → wirkt als unendlicher Puffer solange nur
+    // gleich-URL-Klicks kommen. Erreicht der Leader game_room (andere URL),
+    // greift der Server-Redirect via pageshow+reload (base.html).
+    history.pushState(null, '', window.location.href);
     window.addEventListener('popstate', function() {
         history.pushState(null, '', window.location.href);
     });
