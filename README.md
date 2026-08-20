@@ -159,7 +159,7 @@ Gueterspiel/
 ├── .env                      # Nicht einchecken!
 ├── logs/                     # Automatisch erzeugt; rotierendes Log
 ├── static/
-│   └──css/                  # Seitenspezifische Stylesheets
+│   └── css/                  # Seitenspezifische Stylesheets
 └── templates/
     ├── base.html             # Gemeinsames Layout: Socket.IO-Setup, Timer, Navigation
     ├── index.html            # Startseite
