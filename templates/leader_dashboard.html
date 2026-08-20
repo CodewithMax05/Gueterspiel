@@ -231,6 +231,11 @@
         socket.on('error', function() {
             updateButtonState();
         });
+
+        // Gruppendetails sofort laden, sobald roomId bekannt ist
+        loadGroupDetails();
+        // Fallback-Polling alle 10s (Socket-Events übernehmen die Echtzeit-Updates)
+        setInterval(loadGroupDetails, 10000);
     });
 
     function setProgress(percent) {
@@ -587,10 +592,5 @@
         updateProgress();
         loadGroupDetails(); // Details aktualisieren
     });
-
-    // Initial laden
-    loadGroupDetails();
-    // Fallback-Polling alle 10s (Socket-Events übernehmen die Echtzeit-Updates)
-    setInterval(loadGroupDetails, 10000);
 </script>
 {% endblock %}
