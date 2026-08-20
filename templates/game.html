@@ -126,7 +126,8 @@
 
 {% block scripts %}
 <script>
-    let selectedContribution = null;
+    let selectedContribution = null;   // aktueller Slider-/Eingabewert (unbestätigt)
+    let confirmedContribution = null;  // per Button bestätigter Wert; null = noch nicht bestätigt
     let serverTimeLeft = null;
     let localCountdownInterval = null;
     let hasSubmitted = false;
@@ -185,6 +186,7 @@
                 if (submitBtn) submitBtn.disabled = false;
 
                 hasSubmitted = false;
+                confirmedContribution = null; // Bestätigung zurücksetzen → Timer würde 0 einreichen
             });
         }
     });
@@ -343,13 +345,24 @@
         // Wenn schon abgegeben, nichts tun
         if (hasSubmitted) return;
 
-        // Falls der Spieler noch nichts gewählt hat, setze 0 und reiche ein
-        if (selectedContribution === null) {
-            console.log('DEBUG: Zeit abgelaufen (client side), reiche 0 Coins ein');
-            selectedContribution = 0;
-        }
-        // Kein Overlay beim automatischen Timer-Submit – nur still senden
-        submitContribution(false);
+        // Nur den per Button bestätigten Betrag einreichen.
+        // Wurde der Button nie gedrückt (confirmedContribution === null), wird 0 eingereicht –
+        // unabhängig davon, was der Slider gerade zeigt.
+        const amountToSubmit = (confirmedContribution !== null) ? confirmedContribution : 0;
+        console.log('DEBUG: Zeit abgelaufen – sende bestätigten Betrag:', amountToSubmit,
+                    '(Slider stand auf:', selectedContribution, ')');
+
+        hasSubmitted = true;
+
+        // Eingaben sperren, kein Overlay
+        const submitBtn = document.getElementById('submitBtn');
+        const slider    = document.getElementById('contributionSlider');
+        const input     = document.getElementById('contributionInput');
+        if (submitBtn) submitBtn.disabled = true;
+        if (slider)    slider.disabled    = true;
+        if (input)     input.disabled     = true;
+
+        socket.emit('submit_contribution', { contribution: amountToSubmit });
     }
 
     function submitContribution(showOverlay = true) {
@@ -362,25 +375,18 @@
             return;
         }
 
+        // Slider-Wert als bestätigt markieren
+        confirmedContribution = selectedContribution;
+
         // Markiere als abgegeben (verhindert doppelte submits)
         hasSubmitted = true;
 
-        if (showOverlay) {
-            // Manueller Submit: Overlay anzeigen
-            disableInteractionAfterSubmit();
-        } else {
-            // Automatischer Timer-Submit: nur Eingaben sperren, kein Overlay
-            const submitBtn = document.getElementById('submitBtn');
-            const slider    = document.getElementById('contributionSlider');
-            const input     = document.getElementById('contributionInput');
-            if (submitBtn) submitBtn.disabled = true;
-            if (slider)    slider.disabled    = true;
-            if (input)     input.disabled     = true;
-        }
+        // Manueller Submit: Overlay anzeigen
+        disableInteractionAfterSubmit();
 
         // Beitrag an Server senden
         socket.emit('submit_contribution', {
-            contribution: selectedContribution
+            contribution: confirmedContribution
         });
     }
 

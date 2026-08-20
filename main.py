@@ -906,7 +906,8 @@ def create_game():
             'incognito_mode': request.form.get('incognito_mode') == 'true',
             
             'room_type': request.form.get('room_type', 'public'),
-            'chat_enabled': request.form.get('chat_enabled') == 'true'
+            'chat_enabled': request.form.get('chat_enabled') == 'true',
+            'num_bots': max(0, min(int(request.form.get('num_bots', 0)), 50))
         }
         
         # Zugangscode für private Räume generieren
@@ -943,16 +944,16 @@ def create_game():
         session['room_id'] = room_id
         session['is_leader'] = True
         
-        test_names = [f"Test-Spieler {i}" for i in range(1, 40)]
-        for name in test_names:
-            test_id = str(uuid.uuid4())
-            test_player = Player(test_id, name, is_test=True)
-            test_player.room_id = room_id
-            test_player.coins = room.settings['initial_coins']
-            test_player.game_history['balances'].append(test_player.coins)
-            test_player.ready = True
-            players[test_id] = test_player
-            room.add_player(test_id)
+        num_bots = settings.get('num_bots', 0)
+        for i in range(1, num_bots + 1):
+            bot_id = str(uuid.uuid4())
+            bot = Player(bot_id, f"Bot {i}", is_test=True)
+            bot.room_id = room_id
+            bot.coins = room.settings['initial_coins']
+            bot.game_history['balances'].append(bot.coins)
+            bot.ready = True
+            players[bot_id] = bot
+            room.add_player(bot_id)
 
         socketio.emit('room_list_updated', {
             'action': 'created',
@@ -2590,16 +2591,16 @@ def handle_return_to_lobby():
             players.pop(pid, None)
             player_sids.pop(pid, None)
 
-    test_names = [f"Test-Spieler {i}" for i in range(1, 40)]
-    for name in test_names:
-        test_id = str(uuid.uuid4())
-        test_player = Player(test_id, name, is_test=True)
-        test_player.room_id = new_room_id
-        test_player.coins   = initial_coins
-        test_player.game_history['balances'].append(initial_coins)
-        test_player.ready   = True
-        players[test_id]    = test_player
-        new_room.add_player(test_id)
+    num_bots = new_room.settings.get('num_bots', 0)
+    for i in range(1, num_bots + 1):
+        bot_id = str(uuid.uuid4())
+        bot = Player(bot_id, f"Bot {i}", is_test=True)
+        bot.room_id = new_room_id
+        bot.coins   = initial_coins
+        bot.game_history['balances'].append(initial_coins)
+        bot.ready   = True
+        players[bot_id] = bot
+        new_room.add_player(bot_id)
 
     # 7) Alten Raum entfernen
     rooms.pop(room_id, None)

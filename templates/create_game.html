@@ -175,6 +175,21 @@
                 </div>
             </div>
 
+            <!-- Bots -->
+            <div class="settings-section">
+                <h3>🤖 Bots</h3>
+                <div class="form-group">
+                    <label>Anzahl Bots</label>
+                    <div class="input-with-unit">
+                        <input type="number" name="num_bots" id="numBots"
+                               min="0" max="50" step="1" value="0" required>
+                        <span class="unit-label">Bots</span>
+                    </div>
+                    <span class="field-error" id="numBots-error"></span>
+                    <small>Bots spielen automatisch mit zufälligen Beiträgen. (0 = keine Bots, max. 50)</small>
+                </div>
+            </div>
+
             <!-- Buttons -->
             <div class="button-row">
                 <button type="button" class="btn btn-create" id="createBtn" onclick="createGame()">
@@ -351,6 +366,23 @@
         return true;
     }
 
+    function validateNumBots(fixOnBlur = false) {
+        const input = document.getElementById('numBots');
+        if (fixOnBlur && input.value.trim() === '') { input.value = 0; setFieldError('numBots', ''); return true; }
+        const val = parseInt(input.value, 10);
+        if (isNaN(val)) { setFieldError('numBots', 'Muss eine ganze Zahl sein.'); return false; }
+        if (val < 0) {
+            if (fixOnBlur) { input.value = 0;  setFieldError('numBots', ''); return true; }
+            setFieldError('numBots', 'Mindestens 0 Bots.'); return false;
+        }
+        if (val > 50) {
+            if (fixOnBlur) { input.value = 50; setFieldError('numBots', ''); return true; }
+            setFieldError('numBots', 'Maximal 50 Bots.'); return false;
+        }
+        setFieldError('numBots', '');
+        return true;
+    }
+
     function validateRoundDuration(fixOnBlur = false) {
         const input = document.getElementById('roundDuration');
         if (fixOnBlur && input.value.trim() === '') { input.value = 60; setFieldError('roundDuration', ''); return true; }
@@ -521,7 +553,7 @@
         });
 
         // Ganzzahl-Felder: Punkt, Komma und andere Nicht-Ziffern blockieren
-        ['roundDuration', 'maxRounds', 'minRounds', 'maxRoundsProbability'].forEach(id => {
+        ['roundDuration', 'maxRounds', 'minRounds', 'maxRoundsProbability', 'numBots'].forEach(id => {
             const el = document.getElementById(id);
             if (el) bindIntegerFieldFilter(el);
         });
@@ -532,6 +564,7 @@
         bind('roundDuration',        () => validateRoundDuration(),        () => validateRoundDuration(true));
         bind('maxRounds',            () => validateMaxRounds(),            () => validateMaxRounds(true));
         bind('continueProbability',  () => validateContinueProbability(),  () => validateContinueProbability(true));
+        bind('numBots',              () => validateNumBots(),              () => validateNumBots(true));
 
         // Min/Max: live = nur Meldung, blur = autocorrect
         const minEl = document.getElementById('minRounds');
@@ -556,6 +589,7 @@
         const coinsOk = validateInitialCoins(true);
         const multOk  = validateMultiplier(true);
         const durOk   = validateRoundDuration(true);
+        const botsOk  = validateNumBots(true);
 
         let modeOk = true;
         if (endMode === 'fixed_rounds') {
@@ -568,7 +602,7 @@
             modeOk = probOk && mmOk;
         }
 
-        if (!nameOk || !coinsOk || !multOk || !durOk || !modeOk) {
+        if (!nameOk || !coinsOk || !multOk || !durOk || !botsOk || !modeOk) {
             const firstInvalid = document.querySelector('.invalid');
             if (firstInvalid) firstInvalid.focus();
             showNotification('Bitte korrigiere die markierten Felder.', 'error', 5000);
