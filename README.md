@@ -163,14 +163,14 @@ Gueterspiel/
 └── templates/
     ├── base.html             # Gemeinsames Layout: Socket.IO-Setup, Timer, Navigation
     ├── index.html            # Startseite
-    ├── create_game.html     # Spielerstellung
-    ├── join_game.html       # Spiel beitreten
-    ├── game_room.html       # Warteraum
-    ├── leader_dashboard.html# Spielleiter-Steuerung
-    ├── game.html            # Eingabeseite Spieler
-    ├── round_results.html   # Rundenauswertung
-    ├── evaluation.html      # Endauswertung
-    └── history.html         # Spielhistorie
+    ├── create_game.html      # Spielerstellung
+    ├── join_game.html        # Spiel beitreten
+    ├── game_room.html        # Warteraum
+    ├── leader_dashboard.html # Spielleiter-Steuerung
+    ├── game.html             # Eingabeseite Spieler
+    ├── round_results.html    # Rundenauswertung
+    ├── evaluation.html       # Endauswertung
+    └── history.html          # Spielhistorie
 ```
 
 ---
