@@ -587,8 +587,10 @@
 
     // Bei jedem contribution_submitted die Details neu laden
     socket.on('contribution_submitted', function(data) {
-        submittedCount = Number(data.submitted_count) || submittedCount;
-        totalPlayers = Number(data.total_players) || totalPlayers;
+        // Achtung: || würde 0 als falsy behandeln und den alten Wert behalten.
+        // Daher expliziter undefined-Check, damit submitted_count=0 (nach Retract) korrekt gesetzt wird.
+        if (data.submitted_count !== undefined) submittedCount = Number(data.submitted_count);
+        if (data.total_players !== undefined) totalPlayers = Number(data.total_players);
         updateProgress();
         loadGroupDetails(); // Details aktualisieren
     });
