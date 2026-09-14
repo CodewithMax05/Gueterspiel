@@ -880,6 +880,18 @@ def index():
 
 @app.route('/create_game', methods=['GET', 'POST'])
 def create_game():
+    if request.method == 'GET':
+        # Session leeren, damit currentRoomId im Template leer ist.
+        # Ohne diesen Reset würde base.html join_game_room für den alten Raum senden,
+        # der Client würde auf dessen Events subscribed bleiben, und ein room_closed-
+        # Event (z. B. durch leader_timeout) könnte den Browser mitten im POST
+        # nach / navigieren → 499.
+        session.pop('room_id', None)
+        session.pop('player_id', None)
+        session.pop('is_leader', None)
+        session.modified = True
+        return render_template('create_game.html')
+
     if request.method == 'POST':
         # Bestehende Einstellungen verarbeiten
         end_mode = request.form.get('end_mode', 'fixed_rounds')
@@ -966,8 +978,6 @@ def create_game():
                     settings['multiplier'], settings['initial_coins'])
 
         return redirect(url_for('game_room', room_id=room_id))
-    
-    return render_template('create_game.html')
 
 @app.route('/join_game')
 def join_game():
