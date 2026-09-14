@@ -609,10 +609,35 @@
             return;
         }
 
+        // fetch() statt form.submit(): Der Browser navigiert NICHT während des POST,
+        // sodass ein gleichzeitiger WebSocket-Reconnect den Request nicht abbricht (kein 499).
+        const btn = document.getElementById('createBtn');
+        btn.disabled = true;
+        btn.textContent = 'Erstellt…';
+
         const form = document.getElementById('gameSettings');
-        form.method = 'POST';
-        form.action = "{{ url_for('create_game') }}";
-        form.submit();
+        const formData = new FormData(form);
+
+        fetch("{{ url_for('create_game') }}", {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.redirected) {
+                window.location.href = response.url;
+            } else if (response.ok) {
+                window.location.href = response.url || '/';
+            } else {
+                btn.disabled = false;
+                btn.textContent = 'Spiel erstellen';
+                showNotification('Fehler beim Erstellen des Spiels (' + response.status + ')', 'error', 5000);
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.textContent = 'Spiel erstellen';
+            showNotification('Netzwerkfehler: ' + err.message, 'error', 5000);
+        });
     }
 </script>
 {% endblock %}
